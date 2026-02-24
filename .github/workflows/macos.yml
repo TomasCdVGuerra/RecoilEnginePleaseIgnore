@@ -27,4 +27,4 @@ jobs:
         run: cmake --build build
 
       - name: Smoke test
-        run: ctest --test-dir build -R smokeHeadlessInit --output-on-failure
+        run: ctest --test-dir build -R testCreg --output-on-failure

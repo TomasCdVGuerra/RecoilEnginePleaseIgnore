@@ -92,7 +92,7 @@ cmake --build build
 Run deterministic smoke test:
 
 ```bash
-ctest --test-dir build -R smokeHeadlessInit --output-on-failure
+ctest --test-dir build -R testCreg --output-on-failure
 ```
 
 Run the headless executable manually:
