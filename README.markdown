@@ -19,7 +19,80 @@ You can use a pre-compiled binary, usually, you want to use an installer or a pa
 
 ## Compiling
 
-### Preparation
+### macOS (Apple Clang / Xcode)
+
+#### Prerequisites
+
+* **Xcode Command Line Tools** (provides Apple Clang and standard system headers)
+  ```bash
+  xcode-select --install
+  ```
+* **CMake ≥ 3.27**
+* **Homebrew** package manager (<https://brew.sh>)
+
+#### Install build dependencies
+
+```bash
+brew install cmake sdl2 devil freetype zlib
+```
+
+#### Clone (including submodules)
+
+```bash
+git clone https://github.com/beyond-all-reason/RecoilEngine --recursive
+cd RecoilEngine
+```
+
+If you already cloned without `--recursive`, initialise the submodules:
+
+```bash
+git submodule update --init --recursive
+```
+
+#### Build (headless engine)
+
+The *headless* target is the recommended starting point on macOS.  It
+omits the full graphics stack and avoids dependencies on X11/XQuartz that
+are not typically installed.
+
+```bash
+cmake -S . -B build \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DBUILD_spring-legacy=OFF \
+  -DAI_TYPES=NONE \
+  -DENABLE_STREFLOP=OFF
+
+cmake --build build --target engine-headless --parallel $(sysctl -n hw.logicalcpu)
+```
+
+The resulting binary is at `build/spring-headless`.
+
+#### Run the smoke test
+
+```bash
+cmake --build build --target engine_smoketest
+ctest --test-dir build --output-on-failure -R smoketest
+```
+
+#### Full legacy (graphical) engine build
+
+The full engine additionally requires X11/XCursor (available via
+[XQuartz](https://www.xquartz.org)) and Fontconfig:
+
+```bash
+brew install fontconfig expat
+# Install XQuartz from https://www.xquartz.org, then:
+cmake -S . -B build \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DAI_TYPES=NONE \
+  -DENABLE_STREFLOP=OFF
+
+cmake --build build --target engine-legacy --parallel $(sysctl -n hw.logicalcpu)
+```
+
+---
+
+### Linux / Docker (recommended for production builds)
 
 Start with `master` as the primary branch.
 

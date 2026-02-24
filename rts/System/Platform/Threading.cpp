@@ -500,7 +500,10 @@ namespace Threading {
 	#if defined(TRACY_ENABLE)
 		tracy::SetThreadName(newname.c_str());
 	#endif
-	#ifndef _WIN32
+	#if defined(__APPLE__)
+		// macOS pthread_setname_np only operates on the calling thread
+		pthread_setname_np(newname.c_str());
+	#elif !defined(_WIN32)
 		//alternative: pthread_setname_np(pthread_self(), newname.c_str());
 		prctl(PR_SET_NAME, newname.c_str(), 0, 0, 0);
 	#else

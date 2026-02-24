@@ -1,0 +1,46 @@
+name: macOS Build
+
+on:
+  pull_request:
+    paths-ignore:
+      - 'doc/**'
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - 'doc/**'
+
+jobs:
+  build-macos:
+    name: macOS (Apple Clang, x86_64)
+    # macos-13 uses an Intel runner; avoids ARM64/SSE incompatibilities in
+    # the engine's streflop and x86-specific code paths.
+    runs-on: macos-13
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          brew install sdl2 devil freetype zlib cmake
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBUILD_spring-legacy=OFF \
+            -DAI_TYPES=NONE \
+            -DENABLE_STREFLOP=OFF
+
+      - name: Build headless engine
+        run: cmake --build build --target engine-headless --parallel $(sysctl -n hw.logicalcpu)
+
+      - name: Build smoke test
+        run: cmake --build build --target engine_smoketest --parallel $(sysctl -n hw.logicalcpu)
+
+      - name: Run smoke test
+        run: ctest --test-dir build --output-on-failure -R smoketest

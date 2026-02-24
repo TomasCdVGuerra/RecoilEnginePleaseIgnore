@@ -318,12 +318,13 @@ endif (WIN32)
 if     (WIN32)
 	set(CMAKE_SHARED_LIBRARY_PREFIX "")
 	set(CMAKE_SHARED_MODULE_PREFIX "")
+elseif (APPLE)
+	# APPLE is also UNIX; handle CoreFoundation headers before the generic
+	# UNIX block so the framework search path is set up correctly.
+	find_library(COREFOUNDATION_LIBRARY CoreFoundation REQUIRED)
+	include_directories("${COREFOUNDATION_LIBRARY}/Headers")
 elseif (UNIX)
 	# unix specifics
-else   (UNIX)
-	# mac
-	find_library(COREFOUNDATION_LIBRARY CoreFoundation)
-	include_directories("${COREFOUNDATION_LIBRARY}/Headers")
 endif  (WIN32)
 
 find_package(Valgrind)

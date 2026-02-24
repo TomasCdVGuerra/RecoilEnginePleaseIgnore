@@ -115,12 +115,18 @@ if    (USE_TCMALLOC AND TCMALLOC_LIBRARY)
 endif (USE_TCMALLOC AND TCMALLOC_LIBRARY)
 
 
-if(UNIX AND NOT (CMAKE_SYSTEM_NAME MATCHES "OpenBSD"))
+if(UNIX AND NOT APPLE AND NOT (CMAKE_SYSTEM_NAME MATCHES "OpenBSD"))
 	find_package_static(Libunwind 1.4.0 REQUIRED)
+	list(APPEND engineCommonLibraries libunwind::libunwind)
+endif()
+
+if(UNIX AND NOT (CMAKE_SYSTEM_NAME MATCHES "OpenBSD"))
 	prefer_static_libs()
 	find_library(LZMA_LIBRARY lzma)
 	unprefer_static_libs()
-	list(APPEND engineCommonLibraries libunwind::libunwind ${LZMA_LIBRARY})
+	if(LZMA_LIBRARY)
+		list(APPEND engineCommonLibraries ${LZMA_LIBRARY})
+	endif()
 endif()
 
 
