@@ -47,3 +47,80 @@ jobs:
 
       - name: Run smoke test
         run: ctest --test-dir build --output-on-failure -R smoketest
+
+  # ASan + UBSan pass: catches heap overflows, use-after-free, and
+  # undefined behaviour in the engine's platform layer and smoke tests.
+  # Uses a separate build directory so it does not disturb the main build.
+  sanitizer-asan:
+    name: macOS ASan + UBSan (smoke test)
+    runs-on: macos-13
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          brew install sdl2 devil freetype zlib cmake
+
+      - name: Configure (ASan + UBSan)
+        run: |
+          cmake -S . -B build-asan \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBUILD_spring-legacy=OFF \
+            -DAI_TYPES=NONE \
+            -DENABLE_STREFLOP=OFF \
+            -DENGINE_ENABLE_SANITIZERS=ON
+
+      - name: Build smoke test
+        run: cmake --build build-asan --target engine_smoketest --parallel $(sysctl -n hw.logicalcpu)
+
+      - name: Run smoke test under ASan + UBSan
+        # MallocNanoZone=0 suppresses a macOS-specific ASan false-positive
+        # related to the nano zone allocator interfering with interception.
+        env:
+          MallocNanoZone: "0"
+          ASAN_OPTIONS: "halt_on_error=1:detect_leaks=0"
+          UBSAN_OPTIONS: "halt_on_error=1:print_stacktrace=1"
+        run: ctest --test-dir build-asan --output-on-failure -R smoketest
+
+  # TSan pass: detects data races in the multi-threaded platform layer.
+  # TSan and ASan are mutually exclusive; this uses a dedicated build.
+  sanitizer-tsan:
+    name: macOS TSan (smoke test)
+    runs-on: macos-13
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          brew install sdl2 devil freetype zlib cmake
+
+      - name: Configure (TSan)
+        run: |
+          cmake -S . -B build-tsan \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBUILD_spring-legacy=OFF \
+            -DAI_TYPES=NONE \
+            -DENABLE_STREFLOP=OFF \
+            -DENGINE_ENABLE_TSAN=ON
+
+      - name: Build smoke test
+        run: cmake --build build-tsan --target engine_smoketest --parallel $(sysctl -n hw.logicalcpu)
+
+      - name: Run smoke test under TSan
+        env:
+          TSAN_OPTIONS: "halt_on_error=1:second_deadlock_stack=1"
+        run: ctest --test-dir build-tsan --output-on-failure -R smoketest

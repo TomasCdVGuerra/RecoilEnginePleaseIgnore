@@ -295,6 +295,36 @@ if    (USE_ASAN)
 	endif (MSVC)
 endif (USE_ASAN)
 
+# Combined AddressSanitizer + UndefinedBehaviorSanitizer pass.
+# ASan catches heap overflows, use-after-free, and stack overflows.
+# UBSan catches signed overflow, null pointer dereferences, and
+# alignment violations that are not caught by ASan alone.
+# Not compatible with TSan; use one or the other.
+# Enable via: cmake -DENGINE_ENABLE_SANITIZERS=ON
+option(ENGINE_ENABLE_SANITIZERS "Enable ASan + UBSan instrumentation for engine targets" OFF)
+if (ENGINE_ENABLE_SANITIZERS AND UNIX AND NOT MINGW AND NOT MSVC)
+	add_compile_options(
+		"-fsanitize=address,undefined"
+		"-fno-omit-frame-pointer"
+		"-fno-optimize-sibling-calls"
+	)
+	add_link_options("-fsanitize=address,undefined")
+	message(STATUS "ENGINE_ENABLE_SANITIZERS: ASan + UBSan enabled")
+endif()
+
+# ThreadSanitizer pass — detects data races in multi-threaded code.
+# Incompatible with ASan/ENGINE_ENABLE_SANITIZERS; use a separate build.
+# Enable via: cmake -DENGINE_ENABLE_TSAN=ON
+option(ENGINE_ENABLE_TSAN "Enable ThreadSanitizer instrumentation for engine targets" OFF)
+if (ENGINE_ENABLE_TSAN AND UNIX AND NOT MINGW AND NOT MSVC)
+	if (ENGINE_ENABLE_SANITIZERS OR USE_ASAN)
+		message(FATAL_ERROR "ENGINE_ENABLE_TSAN cannot be combined with ASan/ENGINE_ENABLE_SANITIZERS")
+	endif()
+	add_compile_options("-fsanitize=thread" "-fno-omit-frame-pointer")
+	add_link_options("-fsanitize=thread")
+	message(STATUS "ENGINE_ENABLE_TSAN: TSan enabled")
+endif()
+
 ### Tracy related stuff
 option(RECOIL_DETAILED_TRACY_ZONING "Enable additional detailed tracy zones (only enable this for testing/debugging)" FALSE)
 if    (RECOIL_DETAILED_TRACY_ZONING)
