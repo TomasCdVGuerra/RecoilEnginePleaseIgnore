@@ -56,6 +56,51 @@ If you are just starting out and want to get an engine binary, we recommend usin
 
 If you want to compile the engine without Docker to use a different compiler, to have a better setup with code completion in an IDE, etc., you might want to follow the [building without Docker article](https://recoilengine.org/development/building-without-docker/).
 
+### macOS (Apple Clang/Xcode) quick start
+
+Prerequisites:
+
+- Xcode Command Line Tools: `xcode-select --install`
+- CMake 3.20+ (`cmake --version`)
+- Homebrew packages used by this repository build:
+
+```bash
+brew update
+brew install cmake sdl2 devil
+```
+
+Clone (with submodules):
+
+```bash
+git clone --recursive https://github.com/TomasCdVGuerra/RecoilEnginePleaseIgnore.git
+cd RecoilEnginePleaseIgnore
+```
+
+If you already cloned without `--recursive`, run:
+
+```bash
+git submodule update --init --recursive
+```
+
+Configure and build:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+```
+
+Run deterministic smoke test:
+
+```bash
+ctest --test-dir build -R smokeHeadlessInit --output-on-failure
+```
+
+Run the headless executable manually:
+
+```bash
+./build/spring-headless --test-creg
+```
+
 ## License
 
 Our Terms are documented in the [LICENSE](LICENSE).

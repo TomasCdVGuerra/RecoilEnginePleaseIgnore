@@ -318,12 +318,11 @@ endif (WIN32)
 if     (WIN32)
 	set(CMAKE_SHARED_LIBRARY_PREFIX "")
 	set(CMAKE_SHARED_MODULE_PREFIX "")
-elseif (UNIX)
-	# unix specifics
-else   (UNIX)
-	# mac
+elseif (APPLE)
 	find_library(COREFOUNDATION_LIBRARY CoreFoundation)
 	include_directories("${COREFOUNDATION_LIBRARY}/Headers")
+elseif (UNIX)
+	# unix specifics
 endif  (WIN32)
 
 find_package(Valgrind)

@@ -331,6 +331,7 @@ endif()
 	if    (NOT NO_CREG)
 ################################################################################
 ### CREG
+		add_test(NAME smokeHeadlessInit COMMAND ${CMAKE_BINARY_DIR}/spring-headless${CMAKE_EXECUTABLE_SUFFIX} --test-creg)
 		add_test(NAME testCreg COMMAND ${CMAKE_BINARY_DIR}/spring-headless${CMAKE_EXECUTABLE_SUFFIX} --test-creg)
 
 ### CREG LoadSave
