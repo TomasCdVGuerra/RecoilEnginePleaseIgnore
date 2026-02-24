@@ -14,6 +14,9 @@
 
 namespace cpu_topology {
 
+// ProcessorMasks uses uint32_t fields, so the mask is limited to 32 logical
+// CPUs regardless of this constant.  This matches the Linux implementation's
+// MAX_CPUS 32 limit and the shared ProcessorMasks type definition.
 static constexpr int MAX_CPUS_MACOS = 32;
 
 ProcessorMasks GetProcessorMasks()

@@ -12,6 +12,8 @@ set(smoketest_src
 if (WIN32)
     list(APPEND smoketest_src "${ENGINE_SOURCE_DIR}/System/Platform/Win/Hardware.cpp")
 else ()
+    # Both Linux and macOS use the POSIX sysconf-based Hardware.cpp; there
+    # is no separate Mac/Hardware.cpp in the engine (by design).
     list(APPEND smoketest_src "${ENGINE_SOURCE_DIR}/System/Platform/Linux/Hardware.cpp")
 endif ()
 

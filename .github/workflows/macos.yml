@@ -16,6 +16,8 @@ jobs:
     # macos-13 uses an Intel runner; avoids ARM64/SSE incompatibilities in
     # the engine's streflop and x86-specific code paths.
     runs-on: macos-13
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout code

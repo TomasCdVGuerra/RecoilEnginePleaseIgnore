@@ -4,6 +4,10 @@
 // SIGUSR1-based thread suspend/resume (used on Linux) is not available via
 // public macOS APIs, so Suspend/Resume return THREADERR_MISC and the
 // watchdog falls back to the no-op path.
+//
+// Linux/ThreadSupport.h is included here because Threading.h includes it on
+// all non-Windows platforms and it declares the shared ThreadStart /
+// SetupCurrentThreadControls signatures needed by the threading layer.
 
 #include <cassert>
 #include <functional>
