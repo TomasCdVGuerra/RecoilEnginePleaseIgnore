@@ -412,6 +412,12 @@ if(NOT MSVC)
 		# This should produce a sane amount of warnings
 		set(DEBUG_WARNINGS "-Wall -Wno-sign-compare ${COMMON_WARNINGS}")
 	endif (DEBUG_MAX_WARNINGS)
+
+	# Treat warnings as errors for engine-owned targets only.
+	# This flag is added AFTER all third-party subdirectories are processed so
+	# that vendored code is not affected.  Enable via:
+	#   cmake -DRECOIL_WERROR=ON ...
+	option(RECOIL_WERROR "Treat compiler warnings as errors for engine targets (macOS CI)" OFF)
 endif(NOT MSVC)
 
 

@@ -501,8 +501,15 @@ namespace Threading {
 		tracy::SetThreadName(newname.c_str());
 	#endif
 	#if defined(__APPLE__)
-		// macOS pthread_setname_np only operates on the calling thread
-		pthread_setname_np(newname.c_str());
+		// macOS pthread_setname_np only sets the name of the calling thread.
+		// The kernel enforces a 63-character hard limit (MAXCOMLEN + 1 on XNU);
+		// silently truncate here so we never receive ERANGE from the syscall.
+		static constexpr size_t MACOS_THREAD_NAME_MAXLEN = 63;
+		if (newname.size() <= MACOS_THREAD_NAME_MAXLEN) {
+			pthread_setname_np(newname.c_str());
+		} else {
+			pthread_setname_np(newname.substr(0, MACOS_THREAD_NAME_MAXLEN).c_str());
+		}
 	#elif !defined(_WIN32)
 		//alternative: pthread_setname_np(pthread_self(), newname.c_str());
 		prctl(PR_SET_NAME, newname.c_str(), 0, 0, 0);

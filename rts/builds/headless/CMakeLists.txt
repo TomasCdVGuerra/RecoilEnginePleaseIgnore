@@ -63,6 +63,15 @@ target_link_libraries(GameHeadless PRIVATE
 add_executable(engine-headless ${engineSources} ${ENGINE_ICON})
 target_link_libraries(engine-headless no-sound ${engineHeadlessLibraries} GameHeadless no-sound)
 
+# Apply strict warning flags to the headless engine when requested.
+# This does not affect vendored library targets; it is scoped to this target
+# only so third-party code compiled into libraries remains unaffected.
+if (RECOIL_WERROR AND NOT MSVC)
+	target_compile_options(engine-headless PRIVATE
+		-Wall -Wextra -Wpedantic -Werror
+	)
+endif()
+
 if    (MINGW)
 	# To enable console output/force a console window to open
 	set_target_properties(engine-headless PROPERTIES LINK_FLAGS "-Wl,-subsystem,console")

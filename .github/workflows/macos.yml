@@ -36,7 +36,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DBUILD_spring-legacy=OFF \
             -DAI_TYPES=NONE \
-            -DENABLE_STREFLOP=OFF
+            -DENABLE_STREFLOP=OFF \
+            -DRECOIL_WERROR=ON
 
       - name: Build headless engine
         run: cmake --build build --target engine-headless --parallel $(sysctl -n hw.logicalcpu)

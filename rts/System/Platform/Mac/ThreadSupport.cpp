@@ -9,7 +9,6 @@
 // all non-Windows platforms and it declares the shared ThreadStart /
 // SetupCurrentThreadControls signatures needed by the threading layer.
 
-#include <cassert>
 #include <functional>
 #include <memory>
 #include <pthread.h>
@@ -27,7 +26,8 @@ static void SetupCurrentThreadControlsImpl(std::shared_ptr<ThreadControls>& thre
 		return;
 	}
 
-	threadCtls.reset(new Threading::ThreadControls());
+	// Prefer make_shared to avoid a separate allocation for the control block.
+	threadCtls = std::make_shared<Threading::ThreadControls>();
 	threadCtls->handle = GetCurrentThread();
 	threadCtls->running.store(true);
 }
@@ -51,7 +51,10 @@ void ThreadStart(
 		// Notify the creating thread that this thread is initialised and
 		// ready.  tempCtls->mutSuspend is already held by the creator.
 		tempCtls->mutSuspend.lock();
-		LOG_L(L_DEBUG, "[%s] new thread handle %.4lx", __func__, localThreadControls->handle);
+		// Log the handle as a pointer; avoid integer-format warnings since
+		// pthread_t is an opaque pointer on macOS.
+		LOG_L(L_DEBUG, "[%s] new thread handle %p", __func__,
+		      static_cast<void*>(localThreadControls->handle));
 		tempCtls->condInitialized.notify_all();
 		tempCtls->mutSuspend.unlock();
 	}
