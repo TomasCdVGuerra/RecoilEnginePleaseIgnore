@@ -36,10 +36,10 @@ TEST_CASE("smoke/platform-ram", "[smoke]") {
 
 TEST_CASE("smoke/platform-pagefile", "[smoke]") {
     // TotalPageFile() is allowed to return 0 on platforms that don't
-    // expose a pagefile (e.g. Linux/macOS without swap), so only check
-    // that it does not throw.
+    // expose a pagefile (e.g. Linux/macOS without swap); only verify it
+    // completes without throwing.
     (void)Platform::TotalPageFile();
-    REQUIRE(true);
+    SUCCEED();
 }
 
 // ---------------------------------------------------------------------------
@@ -78,14 +78,11 @@ TEST_CASE("smoke/vfs-path-casing", "[smoke][filesystem]") {
     }
     REQUIRE(fs::exists(lowerPath));
 
-    // On macOS the default APFS/HFS+ volume is case-insensitive but case-
-    // preserving.  Verify that a lookup using the exact lower-case name
-    // always succeeds — this confirms that the file-system layer respects
-    // the casing used when the file was created.
-    const fs::path exactPath  = workDir / "testfile.txt";
-    REQUIRE(fs::exists(exactPath));
-
     // Verify the stored name is preserved as lower-case (case-preserving).
+    // On macOS, APFS/HFS+ is case-insensitive but case-preserving by default:
+    // the exact casing used at creation time must be returned by the
+    // directory iterator, so downstream code that builds archive keys from
+    // filenames does not silently diverge from the on-disk name.
     bool foundWithCorrectCase = false;
     for (const auto& entry : fs::directory_iterator(workDir)) {
         if (entry.path().filename() == "testfile.txt") {
