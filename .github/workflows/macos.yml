@@ -28,7 +28,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew install sdl2 devil freetype zlib cmake
+          # brew's curl provides libcurl.pc needed by pr-downloader's CMakeLists;
+          # macOS ships /usr/lib/libcurl.dylib but without pkg-config metadata.
+          brew install sdl2 devil freetype zlib cmake curl
 
       - name: Configure
         run: |
@@ -100,7 +102,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew install sdl2 devil freetype zlib cmake
+          brew install sdl2 devil freetype zlib cmake curl
 
       - name: Configure (ASan + UBSan)
         run: |
@@ -146,7 +148,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew install sdl2 devil freetype zlib cmake
+          brew install sdl2 devil freetype zlib cmake curl
 
       - name: Configure (TSan)
         run: |

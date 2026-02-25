@@ -33,7 +33,7 @@ You can use a pre-compiled binary, usually, you want to use an installer or a pa
 #### Install build dependencies
 
 ```bash
-brew install cmake sdl2 devil freetype zlib
+brew install cmake sdl2 devil freetype zlib curl
 ```
 
 #### Clone (including submodules)
