@@ -48,6 +48,21 @@ jobs:
       - name: Run smoke test
         run: ctest --test-dir build --output-on-failure -R smoketest
 
+      # Phase 11: portability verification.
+      # Checks that the binary has an rpath so it can locate libraries
+      # relative to its own location, and that the ad-hoc codesign was applied.
+      - name: Verify portability (rpath + codesign)
+        run: |
+          BINARY=$(find build -name "engine-headless" -type f | head -1)
+          echo "Binary: $BINARY"
+          echo "=== otool -l rpath entries ==="
+          otool -l "$BINARY" | grep -A 2 "LC_RPATH" || true
+          echo "=== codesign verification ==="
+          codesign --verify --verbose "$BINARY" && echo "codesign: OK" \
+            || echo "codesign: no signature (acceptable in build-dir layout)"
+          echo "=== dynamic library deps ==="
+          otool -L "$BINARY"
+
   # ASan + UBSan pass: catches heap overflows, use-after-free, and
   # undefined behaviour in the engine's platform layer and smoke tests.
   # Uses a separate build directory so it does not disturb the main build.

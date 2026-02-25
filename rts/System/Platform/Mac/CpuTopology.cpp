@@ -9,11 +9,22 @@
 // efficiency core counts via hw.perflevel0.logicalcpu and
 // hw.perflevel1.logicalcpu sysctl keys.  We use these to populate the
 // performance-/efficiency-core masks so the thread pool avoids scheduling
-// work on low-power E-cores by default.
+// work on low-power E-cores by default.  Actual CPU pinning uses
+// pthread_set_qos_class_self_np (see Threading.cpp:SetAffinity) since
+// pthread_setaffinity_np is unavailable on macOS.
+//
+// SIMD / NEON note:
+//   The engine's floating-point reproducibility layer (streflop) targets
+//   x86 SSE2.  There is no sse2neon integration in this codebase, so
+//   the CI builds macOS with -DENABLE_STREFLOP=OFF.  ARM64 / Apple Silicon
+//   native builds are not yet supported; all macOS CI runs use the
+//   macos-13 Intel runner.  This is documented here so future contributors
+//   know where to add NEON/sse2neon support when that work is taken on.
 
 #include "System/Platform/CpuTopology.h"
 #include "System/Log/ILog.h"
 
+#include <cinttypes>    // PRIu64
 #include <unistd.h>
 #include <sys/sysctl.h>
 #include <bitset>
@@ -101,17 +112,39 @@ ProcessorCaches GetProcessorCache()
 	if (nCPUs > MAX_CPUS_MACOS) nCPUs = MAX_CPUS_MACOS;
 
 	// Query L3 cache size via sysctl; falls back to 0 if unavailable.
-	// Apple Silicon uses a shared "System Level Cache" rather than a
-	// traditional L3; this is exposed by hw.perflevel0.l2cachesize on some
-	// hardware but may not be present on all variants.  We try the standard
-	// hw.l3cachesize first (Intel) and fall back to hw.perflevel0.l2cachesize
-	// (Apple Silicon) so the thread-pool gets a meaningful grouping hint.
+	//
+	// Intel Mac:     hw.l3cachesize is the shared LLC in bytes.
+	//
+	// Apple Silicon: The chip uses a Unified Memory Architecture (UMA) where
+	//   all cores share a single last-level cache (called "System Level Cache"
+	//   or SLC).  It is exposed by hw.perflevel0.l2cachesize on some variants.
+	//   Unlike traditional L3s, the SLC is also the memory bandwidth bottleneck
+	//   so its size is the most relevant parameter for the cache-grouping logic.
+	//
+	//   In addition, on Apple Silicon hw.memsize gives the total DRAM capacity
+	//   (unified memory shared between CPU and GPU).  We log this for diagnostic
+	//   purposes so the thread-pool has context when deciding grouping strategies.
 	uint32_t cacheSize = 0;
 	{
 		size_t len = sizeof(cacheSize);
 		if (sysctlbyname("hw.l3cachesize", &cacheSize, &len, nullptr, 0) != 0) {
-			// Fallback: try Apple Silicon last-level cache
+			// Fallback: try Apple Silicon System Level Cache
 			sysctlbyname("hw.perflevel0.l2cachesize", &cacheSize, &len, nullptr, 0);
+		}
+	}
+
+	// Log unified memory size on Apple Silicon for operator diagnostics.
+	// hw.memsize is the total DRAM in bytes; it is not part of ProcessorCaches
+	// because the interface only models cache hierarchy, not total RAM.
+	{
+		uint64_t unifiedMemBytes = 0;
+		size_t   len             = sizeof(unifiedMemBytes);
+		if (sysctlbyname("hw.memsize", &unifiedMemBytes, &len, nullptr, 0) == 0
+		    && ReadSysctlInt("hw.perflevel0.logicalcpu") > 0)
+		{
+			// Only log on Apple Silicon (perflevel0 key exists on M-series).
+			LOG("macOS: Apple Silicon Unified Memory: %" PRIu64 " MiB",
+			    unifiedMemBytes / (1024u * 1024u));
 		}
 	}
 

@@ -18,6 +18,11 @@
 #include <numeric>
 #include <cinttypes>
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+#  include <pthread.h>
+#  if defined(__APPLE__)
+#    include <sys/qos.h>    // qos_class_t, pthread_set_qos_class_self_np
+// cpu_topology::ProcessorMasks is available transitively via CpuID.h -> CpuTopology.h
+#  endif
 #elif defined(_WIN32)
 	#include <windows.h>
 	#include "System/Platform/Win/DllLib.h"
@@ -267,8 +272,37 @@ namespace Threading {
 		if (coreMask == 0)
 			return (~0);
 
-	#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
-		// no-op
+	#if defined(__APPLE__)
+		// macOS does not expose pthread_setaffinity_np, so true CPU pinning is
+		// impossible.  Instead, use pthread_set_qos_class_self_np to communicate
+		// scheduling intent to the kernel, which honours QoS classes when
+		// deciding which physical cores (P vs E on Apple Silicon) to use.
+		//
+		// Strategy: inspect the coreMask against the topology masks populated by
+		// Mac/CpuTopology.cpp.  If any bit in coreMask overlaps the efficiency-
+		// core mask exclusively (no P-core bits), this thread is likely an IO or
+		// logging thread and belongs on E-cores.  All other threads — including
+		// simulation workers — request USER_INITIATED to favour P-cores.
+		{
+			const cpu_topology::ProcessorMasks pm =
+				springproc::CPUID::GetInstance().GetAvailableProcessorAffinityMask();
+
+			const bool wantsECoreOnly = (pm.efficiencyCoreMask != 0)
+				&& ((coreMask & pm.efficiencyCoreMask) != 0)
+				&& ((coreMask & pm.performanceCoreMask) == 0);
+
+			const qos_class_t qosClass = wantsECoreOnly
+				? QOS_CLASS_UTILITY            // E-cores: IO / logging
+				: QOS_CLASS_USER_INITIATED;    // P-cores: simulation workers
+
+			pthread_set_qos_class_self_np(qosClass, 0);
+		}
+		// Return the full coreMask to indicate "accepted" to the caller;
+		// the kernel ultimately decides the physical placement.
+		return coreMask;
+
+	#elif defined(__FreeBSD__) || defined(__OpenBSD__)
+		// no-op on other BSD systems
 		return 0;
 
 	#elif defined(_WIN32)
