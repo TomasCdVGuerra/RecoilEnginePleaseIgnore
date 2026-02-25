@@ -49,18 +49,37 @@ jobs:
         run: ctest --test-dir build --output-on-failure -R smoketest
 
       # Phase 11: portability verification.
-      # Checks that the binary has an rpath so it can locate libraries
-      # relative to its own location, and that the ad-hoc codesign was applied.
+      # Fails the job if:
+      #  - No LC_RPATH entries exist (rpath was not set in CMake)
+      #  - The ad-hoc codesign is missing (binary will not run on arm64 macOS)
+      # Also prints otool -L deps for human review.
       - name: Verify portability (rpath + codesign)
         run: |
           BINARY=$(find build -name "engine-headless" -type f | head -1)
           echo "Binary: $BINARY"
-          echo "=== otool -l rpath entries ==="
-          otool -l "$BINARY" | grep -A 2 "LC_RPATH" || true
+
+          echo "=== LC_RPATH entries ==="
+          RPATH_ENTRIES=$(otool -l "$BINARY" | grep -A 2 "LC_RPATH" || true)
+          echo "$RPATH_ENTRIES"
+          if [ -z "$RPATH_ENTRIES" ]; then
+            echo "FAIL: no LC_RPATH entries found — binary cannot relocate libraries"
+            exit 1
+          fi
+          if ! echo "$RPATH_ENTRIES" | grep -q "@"; then
+            echo "FAIL: LC_RPATH entries do not contain @loader_path or @executable_path"
+            exit 1
+          fi
+          echo "rpath: OK"
+
           echo "=== codesign verification ==="
-          codesign --verify --verbose "$BINARY" && echo "codesign: OK" \
-            || echo "codesign: no signature (acceptable in build-dir layout)"
-          echo "=== dynamic library deps ==="
+          if codesign --verify --verbose "$BINARY" 2>&1; then
+            echo "codesign: OK"
+          else
+            echo "FAIL: binary is not code-signed; ad-hoc signing step may have been skipped"
+            exit 1
+          fi
+
+          echo "=== dynamic library deps (for review) ==="
           otool -L "$BINARY"
 
   # ASan + UBSan pass: catches heap overflows, use-after-free, and
@@ -95,14 +114,20 @@ jobs:
       - name: Build smoke test
         run: cmake --build build-asan --target engine_smoketest --parallel $(sysctl -n hw.logicalcpu)
 
-      - name: Run smoke test under ASan + UBSan
+      - name: Run smoke test under ASan + UBSan (10 iterations)
         # MallocNanoZone=0 suppresses a macOS-specific ASan false-positive
         # related to the nano zone allocator interfering with interception.
+        # Run 10 iterations to increase the chance of catching intermittent
+        # heap-use-after-free or undefined behaviour.
         env:
           MallocNanoZone: "0"
           ASAN_OPTIONS: "halt_on_error=1:detect_leaks=0"
           UBSAN_OPTIONS: "halt_on_error=1:print_stacktrace=1"
-        run: ctest --test-dir build-asan --output-on-failure -R smoketest
+        run: |
+          for i in $(seq 1 10); do
+            echo "=== ASan+UBSan iteration $i/10 ==="
+            ctest --test-dir build-asan --output-on-failure -R smoketest
+          done
 
   # TSan pass: detects data races in the multi-threaded platform layer.
   # TSan and ASan are mutually exclusive; this uses a dedicated build.
@@ -135,7 +160,13 @@ jobs:
       - name: Build smoke test
         run: cmake --build build-tsan --target engine_smoketest --parallel $(sysctl -n hw.logicalcpu)
 
-      - name: Run smoke test under TSan
+      - name: Run smoke test under TSan (10 iterations)
+        # Run 10 iterations to increase exposure to data races; TSan is
+        # non-deterministic so repeated runs improve race detection coverage.
         env:
           TSAN_OPTIONS: "halt_on_error=1:second_deadlock_stack=1"
-        run: ctest --test-dir build-tsan --output-on-failure -R smoketest
+        run: |
+          for i in $(seq 1 10); do
+            echo "=== TSan iteration $i/10 ==="
+            ctest --test-dir build-tsan --output-on-failure -R smoketest
+          done
