@@ -1,0 +1,174 @@
+name: macOS Build
+
+on:
+  pull_request:
+    paths-ignore:
+      - 'doc/**'
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - 'doc/**'
+
+jobs:
+  build-macos:
+    name: macOS (Apple Clang, x86_64)
+    # macos-13 uses an Intel runner; avoids ARM64/SSE incompatibilities in
+    # the engine's streflop and x86-specific code paths.
+    runs-on: macos-13
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          # brew's curl provides libcurl.pc needed by pr-downloader's CMakeLists;
+          # macOS ships /usr/lib/libcurl.dylib but without pkg-config metadata.
+          brew install sdl2 devil freetype zlib cmake curl
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBUILD_spring-legacy=OFF \
+            -DAI_TYPES=NONE \
+            -DENABLE_STREFLOP=OFF \
+            -DRECOIL_WERROR=ON
+
+      - name: Build headless engine
+        run: cmake --build build --target engine-headless --parallel $(sysctl -n hw.logicalcpu)
+
+      - name: Build smoke test
+        run: cmake --build build --target engine_smoketest --parallel $(sysctl -n hw.logicalcpu)
+
+      - name: Run smoke test
+        run: ctest --test-dir build --output-on-failure -R smoketest
+
+      # Phase 11: portability verification.
+      # Fails the job if:
+      #  - No LC_RPATH entries exist (rpath was not set in CMake)
+      #  - The ad-hoc codesign is missing (binary will not run on arm64 macOS)
+      # Also prints otool -L deps for human review.
+      - name: Verify portability (rpath + codesign)
+        run: |
+          BINARY=$(find build -name "engine-headless" -type f | head -1)
+          echo "Binary: $BINARY"
+
+          echo "=== LC_RPATH entries ==="
+          RPATH_ENTRIES=$(otool -l "$BINARY" | grep -A 2 "LC_RPATH" || true)
+          echo "$RPATH_ENTRIES"
+          if [ -z "$RPATH_ENTRIES" ]; then
+            echo "FAIL: no LC_RPATH entries found - binary cannot relocate libraries"
+            exit 1
+          fi
+          if ! echo "$RPATH_ENTRIES" | grep -q "@"; then
+            echo "FAIL: LC_RPATH entries do not contain @loader_path or @executable_path"
+            exit 1
+          fi
+          echo "rpath: OK"
+
+          echo "=== codesign verification ==="
+          if codesign --verify --verbose "$BINARY" 2>&1; then
+            echo "codesign: OK"
+          else
+            echo "FAIL: binary is not code-signed; ad-hoc signing step may have been skipped"
+            exit 1
+          fi
+
+          echo "=== dynamic library deps (for review) ==="
+          otool -L "$BINARY"
+
+  # ASan + UBSan pass: catches heap overflows, use-after-free, and
+  # undefined behaviour in the engine's platform layer and smoke tests.
+  # Uses a separate build directory so it does not disturb the main build.
+  sanitizer-asan:
+    name: macOS ASan + UBSan (smoke test)
+    runs-on: macos-13
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          brew install sdl2 devil freetype zlib cmake curl
+
+      - name: Configure (ASan + UBSan)
+        run: |
+          cmake -S . -B build-asan \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBUILD_spring-legacy=OFF \
+            -DAI_TYPES=NONE \
+            -DENABLE_STREFLOP=OFF \
+            -DENGINE_ENABLE_SANITIZERS=ON
+
+      - name: Build smoke test
+        run: cmake --build build-asan --target engine_smoketest --parallel $(sysctl -n hw.logicalcpu)
+
+      - name: Run smoke test under ASan + UBSan (10 iterations)
+        # MallocNanoZone=0 suppresses a macOS-specific ASan false-positive
+        # related to the nano zone allocator interfering with interception.
+        # Run 10 iterations to increase the chance of catching intermittent
+        # heap-use-after-free or undefined behaviour.
+        env:
+          MallocNanoZone: "0"
+          ASAN_OPTIONS: "halt_on_error=1:detect_leaks=0"
+          UBSAN_OPTIONS: "halt_on_error=1:print_stacktrace=1"
+        run: |
+          for i in $(seq 1 10); do
+            echo "=== ASan+UBSan iteration $i/10 ==="
+            ctest --test-dir build-asan --output-on-failure -R smoketest
+          done
+
+  # TSan pass: detects data races in the multi-threaded platform layer.
+  # TSan and ASan are mutually exclusive; this uses a dedicated build.
+  sanitizer-tsan:
+    name: macOS TSan (smoke test)
+    runs-on: macos-13
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          brew install sdl2 devil freetype zlib cmake curl
+
+      - name: Configure (TSan)
+        run: |
+          cmake -S . -B build-tsan \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBUILD_spring-legacy=OFF \
+            -DAI_TYPES=NONE \
+            -DENABLE_STREFLOP=OFF \
+            -DENGINE_ENABLE_TSAN=ON
+
+      - name: Build smoke test
+        run: cmake --build build-tsan --target engine_smoketest --parallel $(sysctl -n hw.logicalcpu)
+
+      - name: Run smoke test under TSan (10 iterations)
+        # Run 10 iterations to increase exposure to data races; TSan is
+        # non-deterministic so repeated runs improve race detection coverage.
+        env:
+          TSAN_OPTIONS: "halt_on_error=1:second_deadlock_stack=1"
+        run: |
+          for i in $(seq 1 10); do
+            echo "=== TSan iteration $i/10 ==="
+            ctest --test-dir build-tsan --output-on-failure -R smoketest
+          done

@@ -15,21 +15,6 @@ set(OpenGL_GL_PREFERENCE LEGACY)
 
 find_package(OpenGL 3.0 REQUIRED)
 
-# NOTE(create_headless_target): We don't need to copy COMPILE_DEFINTIONS till the add_definitions are used.
-# We don't need to copy COMPILE_DEFINTIONS because the headless defines are defined at the folder level
-# and we don't want to inherit original ones
-function(create_headless_target_from targetName)
-	get_target_property(targetIncludes ${targetName} INCLUDE_DIRECTORIES)
-	get_target_property(targetSources ${targetName} SOURCES)
-
-	set(newTargetName "${targetName}Headless")
-	add_library(${newTargetName} STATIC)
-	if (targetIncludes)
-		target_include_directories(${newTargetName} PRIVATE ${targetIncludes})
-	endif()
-	target_sources(${newTargetName} PRIVATE ${targetSources})
-endfunction()
-
 
 # headlessstubs are our stubs that replace libGL, libGLU, libGLEW, libSDL (yes really!)
 list(APPEND engineHeadlessLibraries headlessStubs)
@@ -50,7 +35,14 @@ include_directories(${ENGINE_SRC_ROOT_DIR}/lib/asio/include)
 include_directories(${ENGINE_SRC_ROOT_DIR}/lib/slimsig/include)
 include_directories(${ENGINE_SRC_ROOT_DIR}/lib/cereal/include)
 
-create_headless_target_from(Game)
+# Build a headless game library from the shared game sources directly.
+# This keeps headless independent from the legacy build toggle, so
+# BUILD_spring-legacy=OFF remains a valid configure option.
+add_library(GameHeadless STATIC)
+target_sources(GameHeadless PRIVATE ${sources_engine_Game})
+add_dependencies(GameHeadless generateVersionFiles)
+target_include_directories(GameHeadless PRIVATE "${CMAKE_BINARY_DIR}/src-generated/engine")
+
 target_link_libraries(GameHeadless PRIVATE
 	Tracy::TracyClient
 	headlessStubs
@@ -63,10 +55,53 @@ target_link_libraries(GameHeadless PRIVATE
 add_executable(engine-headless ${engineSources} ${ENGINE_ICON})
 target_link_libraries(engine-headless no-sound ${engineHeadlessLibraries} GameHeadless no-sound)
 
+# Apply strict warning flags to the headless engine when requested.
+# This does not affect vendored library targets; it is scoped to this target
+# only so third-party code compiled into libraries remains unaffected.
+if (RECOIL_WERROR AND NOT MSVC)
+	target_compile_options(engine-headless PRIVATE
+		-Wall -Wextra -Wpedantic -Werror
+	)
+endif()
+
 if    (MINGW)
 	# To enable console output/force a console window to open
 	set_target_properties(engine-headless PROPERTIES LINK_FLAGS "-Wl,-subsystem,console")
 endif (MINGW)
+
+if (APPLE)
+	# Phase 11: macOS portability -- rpath and ad-hoc code signing.
+	#
+	# @executable_path/../Frameworks lets the binary find .dylib/.framework
+	# files placed alongside the bundle in a Frameworks/ subdirectory, which
+	# is the standard macOS app layout and what macdeployqt produces.
+	# @loader_path is the fallback for flat build-directory layouts where
+	# libraries live in the same directory as the binary.
+	#
+	# Without these entries the binary can only load the libraries it was
+	# linked against via their absolute install-time paths, which breaks on
+	# any machine that did not build the engine from source.
+	set_target_properties(engine-headless PROPERTIES
+		MACOSX_RPATH ON
+		BUILD_RPATH   "@loader_path"
+		INSTALL_RPATH "@executable_path/../Frameworks;@loader_path"
+	)
+
+	# Ad-hoc code signing is required for binaries to run on macOS 12+ when
+	# not distributed through the App Store or a notarised disk image.
+	# Using "-" as the identity creates an ad-hoc signature (no Apple
+	# Developer account required) which satisfies Gatekeeper for local use
+	# and is sufficient for CI runners.
+	find_program(CODESIGN_TOOL codesign)
+	if (CODESIGN_TOOL)
+		add_custom_command(TARGET engine-headless POST_BUILD
+			COMMAND ${CODESIGN_TOOL} --force --sign -
+			"$<TARGET_FILE:engine-headless>"
+			COMMENT "Ad-hoc signing engine-headless for macOS portability"
+			VERBATIM
+		)
+	endif()
+endif (APPLE)
 
 
 ### Install the executable

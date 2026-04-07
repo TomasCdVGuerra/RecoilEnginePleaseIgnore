@@ -3,7 +3,7 @@
 
 #ifdef _WIN32
 #include <windows.h>
-#else
+#elif !defined(__APPLE__)
 #include <sched.h>
 #endif
 
@@ -12,6 +12,9 @@ private:
 #ifdef _WIN32
 	DWORD_PTR savedAffinity;
 	HANDLE threadHandle;
+#elif defined(__APPLE__)
+	// macOS does not expose cpu_set_t or sched_{get,set}affinity via
+	// public APIs; the guard is a deliberate no-op on this platform.
 #else
 	cpu_set_t savedAffinity;
 	pid_t tid;
