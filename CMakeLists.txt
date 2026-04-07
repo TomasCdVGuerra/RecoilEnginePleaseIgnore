@@ -1,4 +1,10 @@
 cmake_minimum_required(VERSION 3.27)
+# CMake 4 removes compatibility with policy versions < 3.5. Several vendored
+# third-party subdirectories still declare older cmake_minimum_required values,
+# so set a global floor to keep configure working without patching submodules.
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.0")
+	set(CMAKE_POLICY_VERSION_MINIMUM "3.5")
+endif()
 #cmake_policy(SET CMP0060 OLD) #causes link errors on Linux otherwise
 #cmake_policy(SET CMP0065 OLD) #we need binaries compiled with -rdynamic for BARb to work (cause unknown https://github.com/beyond-all-reason/spring/issues/405)
 
