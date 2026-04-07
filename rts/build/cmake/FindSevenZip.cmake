@@ -18,12 +18,13 @@ ENDIF (SEVENZIP_BIN)
 
 # 7zr(.exe) only supports 7z archives, while 7z(.exe) and 7za(.exe)
 # additionally support many other formats (eg zip)
+# Homebrew's modern sevenzip formula may install 7zz.
 
 # cmake 3 doesn't allow () in var names, workaround it:
 set(progfilesx86 "ProgramFiles(x86)")
 
 find_program(SEVENZIP_BIN
-	NAMES 7z 7za
+	NAMES 7z 7za 7zz
 	HINTS "${MINGWDIR}" "${MINGWLIBS}/bin" "$ENV{${progfilesx86}}/7-zip" "$ENV{ProgramFiles}/7-zip" "$ENV{ProgramW6432}/7-zip"
 	PATH_SUFFIXES bin
 	DOC "7zip executable"

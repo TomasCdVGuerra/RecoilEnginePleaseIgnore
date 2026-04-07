@@ -15,21 +15,6 @@ set(OpenGL_GL_PREFERENCE LEGACY)
 
 find_package(OpenGL 3.0 REQUIRED)
 
-# NOTE(create_headless_target): We don't need to copy COMPILE_DEFINTIONS till the add_definitions are used.
-# We don't need to copy COMPILE_DEFINTIONS because the headless defines are defined at the folder level
-# and we don't want to inherit original ones
-function(create_headless_target_from targetName)
-	get_target_property(targetIncludes ${targetName} INCLUDE_DIRECTORIES)
-	get_target_property(targetSources ${targetName} SOURCES)
-
-	set(newTargetName "${targetName}Headless")
-	add_library(${newTargetName} STATIC)
-	if (targetIncludes)
-		target_include_directories(${newTargetName} PRIVATE ${targetIncludes})
-	endif()
-	target_sources(${newTargetName} PRIVATE ${targetSources})
-endfunction()
-
 
 # headlessstubs are our stubs that replace libGL, libGLU, libGLEW, libSDL (yes really!)
 list(APPEND engineHeadlessLibraries headlessStubs)
@@ -50,7 +35,14 @@ include_directories(${ENGINE_SRC_ROOT_DIR}/lib/asio/include)
 include_directories(${ENGINE_SRC_ROOT_DIR}/lib/slimsig/include)
 include_directories(${ENGINE_SRC_ROOT_DIR}/lib/cereal/include)
 
-create_headless_target_from(Game)
+# Build a headless game library from the shared game sources directly.
+# This keeps headless independent from the legacy build toggle, so
+# BUILD_spring-legacy=OFF remains a valid configure option.
+add_library(GameHeadless STATIC)
+target_sources(GameHeadless PRIVATE ${sources_engine_Game})
+add_dependencies(GameHeadless generateVersionFiles)
+target_include_directories(GameHeadless PRIVATE "${CMAKE_BINARY_DIR}/src-generated/engine")
+
 target_link_libraries(GameHeadless PRIVATE
 	Tracy::TracyClient
 	headlessStubs
