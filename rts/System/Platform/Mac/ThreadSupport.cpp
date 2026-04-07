@@ -9,7 +9,6 @@
 // all non-Windows platforms and it declares the shared ThreadStart /
 // SetupCurrentThreadControls signatures needed by the threading layer.
 
-#include <cassert>
 #include <functional>
 #include <memory>
 #include <pthread.h>
@@ -18,61 +17,67 @@
 #include "System/Platform/Threading.h"
 #include "Linux/ThreadSupport.h"
 
-namespace Threading {
-
-static void SetupCurrentThreadControlsImpl(std::shared_ptr<ThreadControls>& threadCtls)
+namespace Threading
 {
-	if (threadCtls.get() != nullptr) {
-		LOG_L(L_WARNING, "[%s] thread already has ThreadControls installed", __func__);
-		return;
-	}
 
-	threadCtls.reset(new Threading::ThreadControls());
-	threadCtls->handle = GetCurrentThread();
-	threadCtls->running.store(true);
-}
-
-void SetupCurrentThreadControls(std::shared_ptr<ThreadControls>& threadCtls)
-{
-	SetupCurrentThreadControlsImpl(threadCtls);
-}
-
-void ThreadStart(
-	std::function<void()> taskFunc,
-	std::shared_ptr<ThreadControls>* ppCtlsReturn,
-	ThreadControls* tempCtls
-) {
-	SetupCurrentThreadControlsImpl(localThreadControls);
-
-	if (ppCtlsReturn != nullptr)
-		*ppCtlsReturn = localThreadControls;
-
+	static void SetupCurrentThreadControlsImpl(std::shared_ptr<ThreadControls> &threadCtls)
 	{
-		// Notify the creating thread that this thread is initialised and
-		// ready.  tempCtls->mutSuspend is already held by the creator.
-		tempCtls->mutSuspend.lock();
-		LOG_L(L_DEBUG, "[%s] new thread handle %.4lx", __func__, localThreadControls->handle);
-		tempCtls->condInitialized.notify_all();
-		tempCtls->mutSuspend.unlock();
+		if (threadCtls.get() != nullptr)
+		{
+			LOG_L(L_WARNING, "[%s] thread already has ThreadControls installed", __func__);
+			return;
+		}
+
+		// Prefer make_shared to avoid a separate allocation for the control block.
+		threadCtls = std::make_shared<Threading::ThreadControls>();
+		threadCtls->handle = GetCurrentThread();
+		threadCtls->running.store(true);
 	}
 
-	taskFunc();
+	void SetupCurrentThreadControls(std::shared_ptr<ThreadControls> &threadCtls)
+	{
+		SetupCurrentThreadControlsImpl(threadCtls);
+	}
 
-	localThreadControls->mutSuspend.lock();
-	localThreadControls->running = false;
-	localThreadControls->mutSuspend.unlock();
-}
+	void ThreadStart(
+		std::function<void()> taskFunc,
+		std::shared_ptr<ThreadControls> *ppCtlsReturn,
+		ThreadControls *tempCtls)
+	{
+		SetupCurrentThreadControlsImpl(localThreadControls);
 
-SuspendResult ThreadControls::Suspend()
-{
-	// Thread suspend via SIGUSR1 is not available on macOS.
-	return Threading::THREADERR_MISC;
-}
+		if (ppCtlsReturn != nullptr)
+			*ppCtlsReturn = localThreadControls;
 
-SuspendResult ThreadControls::Resume()
-{
-	// Thread suspend via SIGUSR1 is not available on macOS.
-	return Threading::THREADERR_MISC;
-}
+		{
+			// Notify the creating thread that this thread is initialised and
+			// ready.  tempCtls->mutSuspend is already held by the creator.
+			tempCtls->mutSuspend.lock();
+			// Log the handle as a pointer; avoid integer-format warnings since
+			// pthread_t is an opaque pointer on macOS.
+			LOG_L(L_DEBUG, "[%s] new thread handle %p", __func__,
+				  static_cast<void *>(localThreadControls->handle));
+			tempCtls->condInitialized.notify_all();
+			tempCtls->mutSuspend.unlock();
+		}
+
+		taskFunc();
+
+		localThreadControls->mutSuspend.lock();
+		localThreadControls->running = false;
+		localThreadControls->mutSuspend.unlock();
+	}
+
+	SuspendResult ThreadControls::Suspend()
+	{
+		// Thread suspend via SIGUSR1 is not available on macOS.
+		return Threading::THREADERR_MISC;
+	}
+
+	SuspendResult ThreadControls::Resume()
+	{
+		// Thread suspend via SIGUSR1 is not available on macOS.
+		return Threading::THREADERR_MISC;
+	}
 
 } // namespace Threading

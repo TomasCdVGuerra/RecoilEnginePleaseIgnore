@@ -6,11 +6,11 @@
 #include "System/Platform/CpuID.h"
 
 #ifndef UNIT_TEST
-	#include "System/Config/ConfigHandler.h"
+#include "System/Config/ConfigHandler.h"
 #endif
 
 #ifndef DEDICATED
-	#include "System/Sync/FPUCheck.h"
+#include "System/Sync/FPUCheck.h"
 #endif
 
 #include <functional>
@@ -18,24 +18,30 @@
 #include <numeric>
 #include <cinttypes>
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+#include <pthread.h>
+#if defined(__APPLE__)
+#include <sys/qos.h> // qos_class_t, pthread_set_qos_class_self_np
+// cpu_topology::ProcessorMasks is available transitively via CpuID.h -> CpuTopology.h
+#endif
 #elif defined(_WIN32)
-	#include <windows.h>
-	#include "System/Platform/Win/DllLib.h"
+#include <windows.h>
+#include "System/Platform/Win/DllLib.h"
 #else
-	#include <unistd.h>
-	#if defined(__USE_GNU)
-		#include <sys/prctl.h>
-	#endif
-	#include <sched.h>
+#include <unistd.h>
+#if defined(__USE_GNU)
+#include <sys/prctl.h>
+#endif
+#include <sched.h>
 #endif
 
 #ifndef _WIN32
-	#include "Linux/ThreadSupport.h"
+#include "Linux/ThreadSupport.h"
 #endif
 
 #include "System/Misc/TracyDefs.h"
 
-enum ConfigPinPolicy {
+enum ConfigPinPolicy
+{
 	None,
 	SystemDefault,
 	ExclusivePerformanceCore,
@@ -54,27 +60,29 @@ CONFIG(int, ThreadPinPolicy)
 	.description("Thread to CPU Pinning Policy (0) = Off; (1) = System Default; (2) = Exclusive Performance Core; (3) = Share Performance Cores");
 #endif
 
-namespace Threading {
+namespace Threading
+{
 
-	cpu_topology::ThreadPinPolicy GetChosenThreadPinPolicy() {
+	cpu_topology::ThreadPinPolicy GetChosenThreadPinPolicy()
+	{
 #ifndef UNIT_TEST
 		int configPinPolicy = configHandler->GetInt("ThreadPinPolicy");
-		switch (configPinPolicy) {
-			case ConfigPinPolicy::None:
-				return cpu_topology::THREAD_PIN_POLICY_NONE;
-			case ConfigPinPolicy::ExclusivePerformanceCore:
-				return cpu_topology::THREAD_PIN_POLICY_PER_PERF_CORE;
-			case ConfigPinPolicy::SharedPerformanceCores:
-				return cpu_topology::THREAD_PIN_POLICY_ANY_PERF_CORE;
-			case ConfigPinPolicy::SystemDefault:
-			default:
-				return cpu_topology::GetThreadPinPolicy();
+		switch (configPinPolicy)
+		{
+		case ConfigPinPolicy::None:
+			return cpu_topology::THREAD_PIN_POLICY_NONE;
+		case ConfigPinPolicy::ExclusivePerformanceCore:
+			return cpu_topology::THREAD_PIN_POLICY_PER_PERF_CORE;
+		case ConfigPinPolicy::SharedPerformanceCores:
+			return cpu_topology::THREAD_PIN_POLICY_ANY_PERF_CORE;
+		case ConfigPinPolicy::SystemDefault:
+		default:
+			return cpu_topology::GetThreadPinPolicy();
 		};
 #else
-				return cpu_topology::THREAD_PIN_POLICY_NONE;
+		return cpu_topology::THREAD_PIN_POLICY_NONE;
 #endif
 	};
-
 
 #ifndef _WIN32
 	thread_local std::shared_ptr<ThreadControls> localThreadControls;
@@ -90,19 +98,18 @@ namespace Threading {
 	static cpu_set_t cpusSystem;
 #endif
 
-
 	void DetectCores()
 	{
-	#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
 		// no-op
 
-	#elif defined(_WIN32)
+#elif defined(_WIN32)
 		// Get the available cores
 		DWORD_PTR curMask;
 		GetProcessAffinityMask(GetCurrentProcess(), &curMask, &cpusSystem);
 
 		LOG("%s: cpu mask %" PRIx64, __func__, cpusSystem);
-	#else
+#else
 		// Get the available cores
 		CPU_ZERO(&cpusSystem);
 		sched_getaffinity(0, sizeof(cpu_set_t), &cpusSystem);
@@ -114,20 +121,20 @@ namespace Threading {
 		// 	curMask |= (static_cast<std::uint64_t>(CPU_ISSET(i, &cpusSystem)) << i);
 		// }
 		// LOG("%s: cpu mask %" PRIx64, __func__, curMask);
-	#endif
+#endif
 
 		GetPhysicalCpuCores(); // (uses a static, too)
 	}
 
-
-
-	#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
-	#elif defined(_WIN32)
-	#else
-	static std::uint32_t CalcCoreAffinityMask(const cpu_set_t* cpuSet) {
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+#elif defined(_WIN32)
+#else
+	static std::uint32_t CalcCoreAffinityMask(const cpu_set_t *cpuSet)
+	{
 		std::uint32_t coreMask = 0;
 
-		for (int n = 31; n >= 0; --n) {
+		for (int n = 31; n >= 0; --n)
+		{
 			if (CPU_ISSET(n, cpuSet))
 				coreMask |= (1 << n);
 		}
@@ -135,38 +142,39 @@ namespace Threading {
 		return coreMask;
 	}
 
-	static void SetWantedCoreAffinityMask(cpu_set_t* cpuDstSet, std::uint32_t coreMask) {
+	static void SetWantedCoreAffinityMask(cpu_set_t *cpuDstSet, std::uint32_t coreMask)
+	{
 		CPU_ZERO(cpuDstSet);
 
-		for (int n = 31; n >= 0; --n) {
+		for (int n = 31; n >= 0; --n)
+		{
 			if (((coreMask & (1 << n)) != 0) && CPU_ISSET(n, &cpusSystem))
 				CPU_SET(n, cpuDstSet);
 		}
 
 		CPU_AND(cpuDstSet, cpuDstSet, &cpusSystem);
 	}
-	#endif
-
+#endif
 
 	std::once_flag affinityMaskDetailsLogFlag;
 
-	uint32_t GetSystemAffinityMask(int forThreadCount) {
+	uint32_t GetSystemAffinityMask(int forThreadCount)
+	{
 		cpu_topology::ProcessorCaches pc = springproc::CPUID::GetInstance().GetProcessorCaches();
 		cpu_topology::ProcessorMasks pm = springproc::CPUID::GetInstance().GetAvailableProcessorAffinityMask();
 
 		// The cache groups from GetProcessorCaches() are sorted in order of largest first.
-		const uint32_t optimal_mask = std::accumulate(pc.groupCaches.begin(), pc.groupCaches.end(), 0, [&](uint32_t mask, const cpu_topology::ProcessorGroupCaches& gc){
-			return mask | ( std::popcount(mask & ~pm.hyperThreadHighMask) < forThreadCount ? gc.groupMask : 0 );
-		});
+		const uint32_t optimal_mask = std::accumulate(pc.groupCaches.begin(), pc.groupCaches.end(), 0, [&](uint32_t mask, const cpu_topology::ProcessorGroupCaches &gc)
+													  { return mask | (std::popcount(mask & ~pm.hyperThreadHighMask) < forThreadCount ? gc.groupMask : 0); });
 
-		std::call_once(affinityMaskDetailsLogFlag, [&](){
+		std::call_once(affinityMaskDetailsLogFlag, [&]()
+					   {
 			LOG("CPU Affinity Mask Details detected:");
 			LOG("-- Performance Core Mask:      0x%08x", pm.performanceCoreMask);
 			LOG("-- Efficiency  Core Mask:      0x%08x", pm.efficiencyCoreMask);
 			LOG("-- Hyper Thread/SMT Low Mask:  0x%08x", pm.hyperThreadLowMask);
 			LOG("-- Hyper Thread/SMT High Mask: 0x%08x", pm.hyperThreadHighMask);
-			LOG("-- Optimal Cache Mask:         0x%08x", optimal_mask);
-		});
+			LOG("-- Optimal Cache Mask:         0x%08x", optimal_mask); });
 
 		const cpu_topology::ThreadPinPolicy chosenPinPolicy = GetChosenThreadPinPolicy();
 
@@ -182,9 +190,9 @@ namespace Threading {
 		// This doesn't preclude systems from using separate unpinned threads, which the OS should logically try to
 		// move to under used resources, such as low-power cores for example.
 		const uint32_t smt_mask =
-			( chosenPinPolicy == cpu_topology::THREAD_PIN_POLICY_PER_PERF_CORE ) ? (~pm.hyperThreadHighMask) : (~0);
+			(chosenPinPolicy == cpu_topology::THREAD_PIN_POLICY_PER_PERF_CORE) ? (~pm.hyperThreadHighMask) : (~0);
 		const uint32_t vcpu_mask =
-			( chosenPinPolicy != cpu_topology::THREAD_PIN_POLICY_NONE ) ? (pm.performanceCoreMask) : (pm.performanceCoreMask | pm.efficiencyCoreMask);
+			(chosenPinPolicy != cpu_topology::THREAD_PIN_POLICY_NONE) ? (pm.performanceCoreMask) : (pm.performanceCoreMask | pm.efficiencyCoreMask);
 		const uint32_t policy = vcpu_mask & smt_mask & optimal_mask;
 
 		return policy;
@@ -192,31 +200,32 @@ namespace Threading {
 
 	std::once_flag preferredMaskDetailsLogFlag;
 
-	uint32_t GetPreferredMainThreadMask(uint32_t affinityMask) {
+	uint32_t GetPreferredMainThreadMask(uint32_t affinityMask)
+	{
 		cpu_topology::ProcessorCaches pc = springproc::CPUID::GetInstance().GetProcessorCaches();
 
 		// The cache groups from GetProcessorCaches() are sorted in order of largest first. Find the first group that
 		// has a logical processor that will be used to pin the main/worker threads.
-		auto preferredCache = std::ranges::find_if(pc.groupCaches
-			, [affinityMask](const auto& gc) -> bool { return !!(affinityMask & gc.groupMask); });
-		
-		std::call_once(preferredMaskDetailsLogFlag, [&](){
+		auto preferredCache = std::ranges::find_if(pc.groupCaches, [affinityMask](const auto &gc) -> bool
+												   { return !!(affinityMask & gc.groupMask); });
+
+		std::call_once(preferredMaskDetailsLogFlag, [&]()
+					   {
 			if (preferredCache != pc.groupCaches.end())
 				LOG("[Threading] Preferred performance cache mask is: 0x%08x (L3 sized: %dKB)", preferredCache->groupMask, preferredCache->cacheSizes[2]/1024);
 			else
-				LOG_L(L_WARNING, "[Threading] Failed to find a preferred performance cache mask");
-		});
+				LOG_L(L_WARNING, "[Threading] Failed to find a preferred performance cache mask"); });
 
-		const uint32_t policy = affinityMask
-			& ( (preferredCache != pc.groupCaches.end()) ? preferredCache->groupMask : 0xffffffff );
+		const uint32_t policy = affinityMask & ((preferredCache != pc.groupCaches.end()) ? preferredCache->groupMask : 0xffffffff);
 
 		// Choose last logical processor in the list.
-		return ( 0x80000000 >> std::countl_zero(policy) );
+		return (0x80000000 >> std::countl_zero(policy));
 	}
 
 	std::once_flag optimalThreadCountLogFlag;
 
-	uint32_t GetOptimalThreadCount() {
+	uint32_t GetOptimalThreadCount()
+	{
 		cpu_topology::ProcessorCaches pc = springproc::CPUID::GetInstance().GetProcessorCaches();
 		cpu_topology::ProcessorMasks pm = springproc::CPUID::GetInstance().GetAvailableProcessorAffinityMask();
 
@@ -227,39 +236,38 @@ namespace Threading {
 		constexpr uint32_t threadCountThreshold = 6;
 
 		// The cache groups from GetProcessorCaches() are sorted in order of largest first.
-		const uint32_t optimalThreadCount = std::accumulate(pc.groupCaches.begin(), pc.groupCaches.end(), 0, [&](uint32_t threadCount, const cpu_topology::ProcessorGroupCaches& gc){
-			return threadCount + ( threadCount < threadCountThreshold  ? std::popcount(gc.groupMask & (pm.performanceCoreMask) & (~pm.hyperThreadHighMask)) : 0 );
-		});
+		const uint32_t optimalThreadCount = std::accumulate(pc.groupCaches.begin(), pc.groupCaches.end(), 0, [&](uint32_t threadCount, const cpu_topology::ProcessorGroupCaches &gc)
+															{ return threadCount + (threadCount < threadCountThreshold ? std::popcount(gc.groupMask & (pm.performanceCoreMask) & (~pm.hyperThreadHighMask)) : 0); });
 		const uint32_t fallbackThreadCount = GetPerformanceCpuCores();
-		
-		std::call_once(optimalThreadCountLogFlag, [&](){
+
+		std::call_once(optimalThreadCountLogFlag, [&]()
+					   {
 			if (optimalThreadCount > 0)
 				LOG("[Threading] Optimal thread count is %d", optimalThreadCount);
 			else
-				LOG_L(L_WARNING, "[Threading] Failed to determine optimal thread count. Falling back to %d", fallbackThreadCount);
-		});
+				LOG_L(L_WARNING, "[Threading] Failed to determine optimal thread count. Falling back to %d", fallbackThreadCount); });
 
 		return (optimalThreadCount > 0) ? optimalThreadCount : fallbackThreadCount;
 	}
 
 	std::uint32_t GetAffinity()
 	{
-	#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
 		// no-op
 		return 0;
 
-	#elif defined(_WIN32)
+#elif defined(_WIN32)
 		DWORD_PTR curMask;
 		DWORD_PTR systemCpus;
 		GetProcessAffinityMask(GetCurrentProcess(), &curMask, &systemCpus);
 		return curMask;
-	#else
+#else
 		cpu_set_t curAffinity;
 		CPU_ZERO(&curAffinity);
 		sched_getaffinity(0, sizeof(cpu_set_t), &curAffinity);
 
 		return (CalcCoreAffinityMask(&curAffinity));
-	#endif
+#endif
 	}
 
 	std::uint32_t SetAffinity(std::uint32_t coreMask, bool hard)
@@ -267,11 +275,38 @@ namespace Threading {
 		if (coreMask == 0)
 			return (~0);
 
-	#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
-		// no-op
+#if defined(__APPLE__)
+		// macOS does not expose pthread_setaffinity_np, so true CPU pinning is
+		// impossible.  Instead, use pthread_set_qos_class_self_np to communicate
+		// scheduling intent to the kernel, which honours QoS classes when
+		// deciding which physical cores (P vs E on Apple Silicon) to use.
+		//
+		// Strategy: inspect the coreMask against the topology masks populated by
+		// Mac/CpuTopology.cpp.  If any bit in coreMask overlaps the efficiency-
+		// core mask exclusively (no P-core bits), this thread is likely an IO or
+		// logging thread and belongs on E-cores.  All other threads -- including
+		// simulation workers -- request USER_INITIATED to favour P-cores.
+		{
+			const cpu_topology::ProcessorMasks pm =
+				springproc::CPUID::GetInstance().GetAvailableProcessorAffinityMask();
+
+			const bool wantsECoreOnly = (pm.efficiencyCoreMask != 0) && ((coreMask & pm.efficiencyCoreMask) != 0) && ((coreMask & pm.performanceCoreMask) == 0);
+
+			const qos_class_t qosClass = wantsECoreOnly
+											 ? QOS_CLASS_UTILITY		 // E-cores: IO / logging
+											 : QOS_CLASS_USER_INITIATED; // P-cores: simulation workers
+
+			pthread_set_qos_class_self_np(qosClass, 0);
+		}
+		// Return the full coreMask to indicate "accepted" to the caller;
+		// the kernel ultimately decides the physical placement.
+		return coreMask;
+
+#elif defined(__FreeBSD__) || defined(__OpenBSD__)
+		// no-op on other BSD systems
 		return 0;
 
-	#elif defined(_WIN32)
+#elif defined(_WIN32)
 		// create mask
 		DWORD_PTR cpusWanted = (coreMask & cpusSystem);
 		DWORD_PTR result = 0;
@@ -279,15 +314,18 @@ namespace Threading {
 		HANDLE thread = GetCurrentThread();
 
 		// set the affinity
-		if (hard) {
+		if (hard)
+		{
 			result = SetThreadAffinityMask(thread, cpusWanted);
-		} else {
+		}
+		else
+		{
 			result = SetThreadIdealProcessor(thread, (DWORD)cpusWanted);
 		}
 
 		// return final mask
 		return ((static_cast<std::uint32_t>(cpusWanted)) * (result > 0));
-	#else
+#else
 		cpu_set_t cpusWanted;
 
 		// create wanted mask
@@ -298,21 +336,25 @@ namespace Threading {
 			return (CalcCoreAffinityMask(&cpusWanted));
 
 		return 0;
-	#endif
+#endif
 	}
 
-	void SetAffinityHelper(const char* threadName, std::uint32_t affinity) {
+	void SetAffinityHelper(const char *threadName, std::uint32_t affinity)
+	{
 		const std::uint32_t cpuMask = Threading::SetAffinity(affinity);
 
-		if (cpuMask == ~0u) {
+		if (cpuMask == ~0u)
+		{
 			LOG("[Threading] %s thread CPU affinity not set", threadName);
 			return;
 		}
-		if (cpuMask == 0) {
+		if (cpuMask == 0)
+		{
 			LOG_L(L_ERROR, "[Threading] %s thread CPU affinity mask failed: 0x%x", threadName, affinity);
 			return;
 		}
-		if (cpuMask != affinity) {
+		if (cpuMask != affinity)
+		{
 			LOG("[Threading] %s thread CPU affinity mask set: 0x%x (config is %x)", threadName, cpuMask, affinity);
 			return;
 		}
@@ -320,62 +362,65 @@ namespace Threading {
 		LOG("[Threading] %s thread CPU affinity mask set: 0x%x", threadName, cpuMask);
 	}
 
-
 	std::uint32_t GetAvailableCoresMask()
 	{
-	#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
 		// no-op
 		return (~0);
-	#elif defined(_WIN32)
+#elif defined(_WIN32)
 		return cpusSystem;
-	#else
+#else
 		return (CalcCoreAffinityMask(&cpusSystem));
-	#endif
+#endif
 	}
 
-
-	int GetLogicalCpuCores() {
+	int GetLogicalCpuCores()
+	{
 		// auto-detect number of system threads (including hyperthreading)
-		//return spring::thread::hardware_concurrency();
+		// return spring::thread::hardware_concurrency();
 		return springproc::CPUID::GetInstance().GetNumLogicalCores();
 	}
 
 	/** Function that returns the number of real cpu cores (not
-	    hyperthreading ones). These are the total cores in the system
-	    (across all existing processors, if more than one)*/
-	int GetPhysicalCpuCores() {
+		hyperthreading ones). These are the total cores in the system
+		(across all existing processors, if more than one)*/
+	int GetPhysicalCpuCores()
+	{
 		return springproc::CPUID::GetInstance().GetNumPhysicalCores();
 	}
 
-	int GetPerformanceCpuCores() {
+	int GetPerformanceCpuCores()
+	{
 		return springproc::CPUID::GetInstance().GetNumPerformanceCores();
 	}
 
-	bool HasHyperThreading() {
+	bool HasHyperThreading()
+	{
 		return springproc::CPUID::GetInstance().HasHyperThreading();
 	}
 
-	std::string GetCPUBrand() {
+	std::string GetCPUBrand()
+	{
 		return springproc::CPUID::GetInstance().GetCPUBrandString();
 	}
 
-
 	void SetThreadScheduler()
 	{
-	#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
 		// no-op
 
-	#elif defined(_WIN32)
-		//TODO add MMCSS (http://msdn.microsoft.com/en-us/library/ms684247.aspx)
-		//Note: only available with mingw64!!!
+#elif defined(_WIN32)
+		// TODO add MMCSS (http://msdn.microsoft.com/en-us/library/ms684247.aspx)
+		// Note: only available with mingw64!!!
 
-	#else
-		if (GetLogicalCpuCores() > 1) {
+#else
+		if (GetLogicalCpuCores() > 1)
+		{
 			// Change os scheduler for this process.
 			// This way the kernel knows that we are a CPU-intensive task
 			// and won't randomly move us across the cores and tries
 			// to maximize the runtime (_slower_ wakeups, less yields)
-			//Note:
+			// Note:
 			// It _may_ be possible that this has negative impact in case
 			// threads are waiting for mutexes (-> less yields).
 			int policy;
@@ -383,52 +428,45 @@ namespace Threading {
 			pthread_getschedparam(Threading::GetCurrentThread(), &policy, &param);
 			pthread_setschedparam(Threading::GetCurrentThread(), SCHED_BATCH, &param);
 		}
-	#endif
+#endif
 	}
-
 
 	NativeThreadHandle GetCurrentThread()
 	{
-	#ifdef _WIN32
+#ifdef _WIN32
 		// we need to use this cause GetCurrentThread() just returns a pseudo handle,
 		// which returns in all threads the current active one, so we need to translate it
 		// with DuplicateHandle to an absolute handle valid in our watchdog thread
 		NativeThreadHandle hThread;
 		::DuplicateHandle(::GetCurrentProcess(), ::GetCurrentThread(), ::GetCurrentProcess(), &hThread, 0, TRUE, DUPLICATE_SAME_ACCESS);
 		return hThread;
-	#else
+#else
 		return pthread_self();
-	#endif
+#endif
 	}
-
 
 	NativeThreadId GetCurrentThreadId()
 	{
-	#ifdef _WIN32
+#ifdef _WIN32
 		return ::GetCurrentThreadId();
-	#else
+#else
 		return pthread_self();
-	#endif
+#endif
 	}
 
-
-
-	ThreadControls::ThreadControls():
-		handle(0),
-		running(false)
+	ThreadControls::ThreadControls() : handle(0),
+									   running(false)
 	{
 #ifndef _WIN32
 		memset(&ucontext, 0, sizeof(ucontext_t));
 #endif
 	}
 
-
 #ifndef _WIN32
 	std::shared_ptr<ThreadControls> GetCurrentThreadControls() { return localThreadControls; }
 #endif
 
-
-	spring::thread CreateNewThread(std::function<void()> taskFunc, std::shared_ptr<Threading::ThreadControls>* threadCtls)
+	spring::thread CreateNewThread(std::function<void()> taskFunc, std::shared_ptr<Threading::ThreadControls> *threadCtls)
 	{
 #ifndef _WIN32
 		// only used as locking mechanism, not installed by thread
@@ -446,9 +484,8 @@ namespace Threading {
 		return localthread;
 	}
 
-
-
-	static void SetThreadID(unsigned int threadIndex) {
+	static void SetThreadID(unsigned int threadIndex)
+	{
 		// NOTE:
 		//   LOAD and SND thread ID's always have to be set unconditionally
 		//   (threads are joined and respawned when reloading, so KISS here)
@@ -456,57 +493,78 @@ namespace Threading {
 		//   caching
 		nativeThreadIDs[threadIndex] = Threading::GetCurrentThreadId();
 
-		switch (threadIndex) {
-			case THREAD_IDX_LOAD: {
-				// do nothing if Load is actually Main (LoadingMT=0 case)
-				if (IsMainThread())
-					return;
-			} break;
-			#ifndef _WIN32
-			// both heartBeatThread and soundThread make use of CreateNewThread -> ThreadStart
-			// other threads under the eye of watchdog have their control structure setup here
-			case THREAD_IDX_SND : { return; } break;
-			#endif
-			case THREAD_IDX_WDOG: { return; } break;
+		switch (threadIndex)
+		{
+		case THREAD_IDX_LOAD:
+		{
+			// do nothing if Load is actually Main (LoadingMT=0 case)
+			if (IsMainThread())
+				return;
 		}
-	#ifndef _WIN32
+		break;
+#ifndef _WIN32
+		// both heartBeatThread and soundThread make use of CreateNewThread -> ThreadStart
+		// other threads under the eye of watchdog have their control structure setup here
+		case THREAD_IDX_SND:
+		{
+			return;
+		}
+		break;
+#endif
+		case THREAD_IDX_WDOG:
+		{
+			return;
+		}
+		break;
+		}
+#ifndef _WIN32
 		SetupCurrentThreadControls(localThreadControls);
-	#endif
+#endif
 	}
 
-	void     SetMainThread() { SetThreadID(THREAD_IDX_MAIN); }
+	void SetMainThread() { SetThreadID(THREAD_IDX_MAIN); }
 	void SetGameLoadThread() { SetThreadID(THREAD_IDX_LOAD); }
-	void    SetAudioThread() { SetThreadID(THREAD_IDX_SND ); }
-	void  SetFileSysThread() { SetThreadID(THREAD_IDX_VFSI); }
+	void SetAudioThread() { SetThreadID(THREAD_IDX_SND); }
+	void SetFileSysThread() { SetThreadID(THREAD_IDX_VFSI); }
 	void SetWatchDogThread() { SetThreadID(THREAD_IDX_WDOG); }
 
 	bool IsMainThread(NativeThreadId threadID) { return NativeThreadIdsEqual(threadID, nativeThreadIDs[THREAD_IDX_MAIN]); }
-	bool IsMainThread(                       ) { return IsMainThread(Threading::GetCurrentThreadId()); }
+	bool IsMainThread() { return IsMainThread(Threading::GetCurrentThreadId()); }
 
 	bool IsGameLoadThread(NativeThreadId threadID) { return NativeThreadIdsEqual(threadID, nativeThreadIDs[THREAD_IDX_LOAD]); }
-	bool IsGameLoadThread(                       ) { return IsGameLoadThread(Threading::GetCurrentThreadId()); }
+	bool IsGameLoadThread() { return IsGameLoadThread(Threading::GetCurrentThreadId()); }
 
 	bool IsAudioThread(NativeThreadId threadID) { return NativeThreadIdsEqual(threadID, nativeThreadIDs[THREAD_IDX_SND]); }
-	bool IsAudioThread(                       ) { return IsAudioThread(Threading::GetCurrentThreadId()); }
+	bool IsAudioThread() { return IsAudioThread(Threading::GetCurrentThreadId()); }
 
 	bool IsFileSysThread(NativeThreadId threadID) { return NativeThreadIdsEqual(threadID, nativeThreadIDs[THREAD_IDX_VFSI]); }
-	bool IsFileSysThread(                       ) { return IsFileSysThread(Threading::GetCurrentThreadId()); }
+	bool IsFileSysThread() { return IsFileSysThread(Threading::GetCurrentThreadId()); }
 
 	bool IsWatchDogThread(NativeThreadId threadID) { return NativeThreadIdsEqual(threadID, nativeThreadIDs[THREAD_IDX_WDOG]); }
-	bool IsWatchDogThread(                       ) { return IsWatchDogThread(Threading::GetCurrentThreadId()); }
+	bool IsWatchDogThread() { return IsWatchDogThread(Threading::GetCurrentThreadId()); }
 
-	void SetThreadName(const std::string& newname)
+	void SetThreadName(const std::string &newname)
 	{
-	#if defined(TRACY_ENABLE)
+#if defined(TRACY_ENABLE)
 		tracy::SetThreadName(newname.c_str());
-	#endif
-	#if defined(__APPLE__)
-		// macOS pthread_setname_np only operates on the calling thread
-		pthread_setname_np(newname.c_str());
-	#elif !defined(_WIN32)
-		//alternative: pthread_setname_np(pthread_self(), newname.c_str());
+#endif
+#if defined(__APPLE__)
+		// macOS pthread_setname_np only sets the name of the calling thread.
+		// The kernel enforces a 63-character hard limit (MAXCOMLEN + 1 on XNU);
+		// silently truncate here so we never receive ERANGE from the syscall.
+		static constexpr size_t MACOS_THREAD_NAME_MAXLEN = 63;
+		if (newname.size() <= MACOS_THREAD_NAME_MAXLEN)
+		{
+			pthread_setname_np(newname.c_str());
+		}
+		else
+		{
+			pthread_setname_np(newname.substr(0, MACOS_THREAD_NAME_MAXLEN).c_str());
+		}
+#elif !defined(_WIN32)
+		// alternative: pthread_setname_np(pthread_self(), newname.c_str());
 		prctl(PR_SET_NAME, newname.c_str(), 0, 0, 0);
-	#else
+#else
 		// adapted from SDL2 code
 		DllLib k32Lib("kernel32.dll");
 		DllLib kbaseLib("KernelBase.dll");
@@ -514,20 +572,20 @@ namespace Threading {
 		using GetCurrentThreadFuncT = HANDLE WINAPI(VOID);
 		using SetThreadDescriptionFuncT = HRESULT WINAPI(HANDLE, PCWSTR);
 
-		auto GetCurrentThreadFunc = k32Lib.FindAddressTyped<GetCurrentThreadFuncT*>("GetCurrentThread");
-		auto SetThreadDescriptionFunc = k32Lib.FindAddressTyped<SetThreadDescriptionFuncT*>("SetThreadDescription");
+		auto GetCurrentThreadFunc = k32Lib.FindAddressTyped<GetCurrentThreadFuncT *>("GetCurrentThread");
+		auto SetThreadDescriptionFunc = k32Lib.FindAddressTyped<SetThreadDescriptionFuncT *>("SetThreadDescription");
 		if (!SetThreadDescriptionFunc)
-			SetThreadDescriptionFunc = kbaseLib.FindAddressTyped<SetThreadDescriptionFuncT*>("SetThreadDescription");
+			SetThreadDescriptionFunc = kbaseLib.FindAddressTyped<SetThreadDescriptionFuncT *>("SetThreadDescription");
 
-		if (GetCurrentThreadFunc && SetThreadDescriptionFunc) {
+		if (GetCurrentThreadFunc && SetThreadDescriptionFunc)
+		{
 			std::wstring newnameW(newname.begin(), newname.end());
 			SetThreadDescriptionFunc(GetCurrentThreadFunc(), newnameW.c_str());
 		}
-	#endif
+#endif
 	}
 
 	// NB: no protection against two threads posting at the same time
-	const Error* GetThreadErrorC() { return &threadError; }
-	      Error* GetThreadErrorM() { return &threadError; }
+	const Error *GetThreadErrorC() { return &threadError; }
+	Error *GetThreadErrorM() { return &threadError; }
 }
-

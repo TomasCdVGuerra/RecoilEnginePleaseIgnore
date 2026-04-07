@@ -63,10 +63,53 @@ target_link_libraries(GameHeadless PRIVATE
 add_executable(engine-headless ${engineSources} ${ENGINE_ICON})
 target_link_libraries(engine-headless no-sound ${engineHeadlessLibraries} GameHeadless no-sound)
 
+# Apply strict warning flags to the headless engine when requested.
+# This does not affect vendored library targets; it is scoped to this target
+# only so third-party code compiled into libraries remains unaffected.
+if (RECOIL_WERROR AND NOT MSVC)
+	target_compile_options(engine-headless PRIVATE
+		-Wall -Wextra -Wpedantic -Werror
+	)
+endif()
+
 if    (MINGW)
 	# To enable console output/force a console window to open
 	set_target_properties(engine-headless PROPERTIES LINK_FLAGS "-Wl,-subsystem,console")
 endif (MINGW)
+
+if (APPLE)
+	# Phase 11: macOS portability -- rpath and ad-hoc code signing.
+	#
+	# @executable_path/../Frameworks lets the binary find .dylib/.framework
+	# files placed alongside the bundle in a Frameworks/ subdirectory, which
+	# is the standard macOS app layout and what macdeployqt produces.
+	# @loader_path is the fallback for flat build-directory layouts where
+	# libraries live in the same directory as the binary.
+	#
+	# Without these entries the binary can only load the libraries it was
+	# linked against via their absolute install-time paths, which breaks on
+	# any machine that did not build the engine from source.
+	set_target_properties(engine-headless PROPERTIES
+		MACOSX_RPATH ON
+		BUILD_RPATH   "@loader_path"
+		INSTALL_RPATH "@executable_path/../Frameworks;@loader_path"
+	)
+
+	# Ad-hoc code signing is required for binaries to run on macOS 12+ when
+	# not distributed through the App Store or a notarised disk image.
+	# Using "-" as the identity creates an ad-hoc signature (no Apple
+	# Developer account required) which satisfies Gatekeeper for local use
+	# and is sufficient for CI runners.
+	find_program(CODESIGN_TOOL codesign)
+	if (CODESIGN_TOOL)
+		add_custom_command(TARGET engine-headless POST_BUILD
+			COMMAND ${CODESIGN_TOOL} --force --sign -
+			"$<TARGET_FILE:engine-headless>"
+			COMMENT "Ad-hoc signing engine-headless for macOS portability"
+			VERBATIM
+		)
+	endif()
+endif (APPLE)
 
 
 ### Install the executable

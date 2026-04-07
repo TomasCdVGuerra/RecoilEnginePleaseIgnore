@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.27)
-cmake_policy(SET CMP0060 OLD) #causes link errors on Linux otherwise
-cmake_policy(SET CMP0065 OLD) #we need binaries compiled with -rdynamic for BARb to work (cause unknown https://github.com/beyond-all-reason/spring/issues/405)
+#cmake_policy(SET CMP0060 OLD) #causes link errors on Linux otherwise
+#cmake_policy(SET CMP0065 OLD) #we need binaries compiled with -rdynamic for BARb to work (cause unknown https://github.com/beyond-all-reason/spring/issues/405)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -295,6 +295,36 @@ if    (USE_ASAN)
 	endif (MSVC)
 endif (USE_ASAN)
 
+# Combined AddressSanitizer + UndefinedBehaviorSanitizer pass.
+# ASan catches heap overflows, use-after-free, and stack overflows.
+# UBSan catches signed overflow, null pointer dereferences, and
+# alignment violations that are not caught by ASan alone.
+# Not compatible with TSan; use one or the other.
+# Enable via: cmake -DENGINE_ENABLE_SANITIZERS=ON
+option(ENGINE_ENABLE_SANITIZERS "Enable ASan + UBSan instrumentation for engine targets" OFF)
+if (ENGINE_ENABLE_SANITIZERS AND UNIX AND NOT MINGW AND NOT MSVC)
+	add_compile_options(
+	"-fsanitize=address,undefined"
+	"-fno-omit-frame-pointer"
+	"-fno-optimize-sibling-calls"
+	)
+	add_link_options("-fsanitize=address,undefined")
+	message(STATUS "ENGINE_ENABLE_SANITIZERS: ASan + UBSan enabled")
+endif()
+
+# ThreadSanitizer pass -- detects data races in multi-threaded code.
+# Incompatible with ASan/ENGINE_ENABLE_SANITIZERS; use a separate build.
+# Enable via: cmake -DENGINE_ENABLE_TSAN=ON
+option(ENGINE_ENABLE_TSAN "Enable ThreadSanitizer instrumentation for engine targets" OFF)
+if (ENGINE_ENABLE_TSAN AND UNIX AND NOT MINGW AND NOT MSVC)
+	if (ENGINE_ENABLE_SANITIZERS OR USE_ASAN)
+		message(FATAL_ERROR "ENGINE_ENABLE_TSAN cannot be combined with ASan/ENGINE_ENABLE_SANITIZERS")
+	endif()
+	add_compile_options("-fsanitize=thread" "-fno-omit-frame-pointer")
+	add_link_options("-fsanitize=thread")
+	message(STATUS "ENGINE_ENABLE_TSAN: TSan enabled")
+endif()
+
 ### Tracy related stuff
 option(RECOIL_DETAILED_TRACY_ZONING "Enable additional detailed tracy zones (only enable this for testing/debugging)" FALSE)
 if    (RECOIL_DETAILED_TRACY_ZONING)
@@ -412,6 +442,12 @@ if(NOT MSVC)
 		# This should produce a sane amount of warnings
 		set(DEBUG_WARNINGS "-Wall -Wno-sign-compare ${COMMON_WARNINGS}")
 	endif (DEBUG_MAX_WARNINGS)
+
+	# Treat warnings as errors for engine-owned targets only.
+	# This flag is added AFTER all third-party subdirectories are processed so
+	# that vendored code is not affected.  Enable via:
+	#   cmake -DRECOIL_WERROR=ON ...
+	option(RECOIL_WERROR "Treat compiler warnings as errors for engine targets (macOS CI)" OFF)
 endif(NOT MSVC)
 
 

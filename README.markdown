@@ -27,13 +27,13 @@ You can use a pre-compiled binary, usually, you want to use an installer or a pa
   ```bash
   xcode-select --install
   ```
-* **CMake ≥ 3.27**
+* **CMake >= 3.27**
 * **Homebrew** package manager (<https://brew.sh>)
 
 #### Install build dependencies
 
 ```bash
-brew install cmake sdl2 devil freetype zlib
+brew install cmake sdl2 devil freetype zlib curl
 ```
 
 #### Clone (including submodules)
