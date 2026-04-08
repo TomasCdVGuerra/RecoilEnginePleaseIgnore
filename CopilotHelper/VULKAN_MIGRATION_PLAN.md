@@ -311,6 +311,32 @@ Phase 4.2 implication summary:
 1. Texture creation can migrate to `graphicsBackend->CreateTexture(...)`, but incremental atlas updates require a region/offset-aware upload API extension beyond current `ITexture::Upload(...)` semantics.
 2. Font draw submission will require backend API support for textured indexed geometry (and texture binding/state control) to remove residual GL calls from font renderer implementations.
 
+#### [IN PROGRESS] Phase 4.3: UI Backend Scouting
+Target files:
+1. `rts/Rml/Backends/RmlUi_Renderer_GL3_Recoil.h`
+2. `rts/Rml/Backends/RmlUi_Renderer_GL3_Recoil.cpp`
+
+Geometry buffering findings (`CompileGeometry`, `RenderGeometry`, `ReleaseGeometry`):
+1. `CompileGeometry(...)` allocates per-handle GL resources (`VAO`, `VBO` array buffer, `VBO` element buffer), uploads static data with `GL_STATIC_DRAW`, and configures vertex attributes with `glEnableVertexAttribArray` and `glVertexAttribPointer`.
+2. `RenderGeometry(...)` binds shader program variants (`ProgramId::Texture` / `ProgramId::Color`), binds texture via raw `GLuint` cast from `Rml::TextureHandle`, binds VAO, and submits `glDrawElements(GL_TRIANGLES, ..., GL_UNSIGNED_INT, nullptr)`.
+3. `ReleaseGeometry(...)` explicitly destroys the VAO/VBO/IBO wrappers and frees the compiled handle.
+
+Texture management findings (`LoadTexture`, `GenerateTexture`, `ReleaseTexture`):
+1. `LoadTexture(...)` delegates to `CBitmap::Load` and `CBitmap::CreateTexture`, returning raw OpenGL texture ids through `Rml::TextureHandle`.
+2. `GenerateTexture(...)` directly uses `glGenTextures`, `glBindTexture`, `glTexImage2D`, `glTexParameteri`, and returns the generated `GLuint` as `Rml::TextureHandle`.
+3. `ReleaseTexture(...)` directly destroys texture ids with `glDeleteTextures`; `SaveLayerAsTexture()` and postprocess paths also manipulate raw texture ids via `glCopyTexSubImage2D` and framebuffer color attachments.
+
+Shader and state management findings:
+1. Shader programs are GL-coupled: `CreateShaders(...)` compiles/links GLSL via `ShaderHandler`, and `UseProgram(...)` toggles program enable/disable plus uniform submission (`SubmitTransformUniform(...)`).
+2. Frame begin/end explicitly backup and restore broad GL state (`glIsEnabled`, `glGetIntegerv`, blend/stencil/scissor/depth state), and resolve MSAA using `glBlitFramebuffer`.
+3. Clip/scissor behavior is directly GL-driven via `glScissor`, `glEnable(GL_SCISSOR_TEST)`, `glStencilFunc`, and `glStencilOp`; postprocess filters and layers rely on GL framebuffer/texture binding transitions.
+
+Phase 4.3 implication summary:
+1. UI textures require handle indirection: map `Rml::TextureHandle` to backend-owned texture records rather than passing raw `GLuint` ids.
+2. Compiled geometry maps naturally to backend buffers (vertex + index), with `Rml::Vertex` layout translated into `TexturedVertexLayout` and index type `UInt32`.
+3. Short-lived fullscreen/filter quads should use a shared dynamic streaming path (or cached reusable geometry) to avoid frequent create/free churn of static GPU resources.
+4. Full removal of GL from this backend also requires framebuffer/render-target abstractions beyond current scope; those dependencies should be staged with Phase 5/6 interfaces.
+
 ### [PENDING] Phase 5: Mid-Level Systems Migration
 Goal: Migrate complex geometry, texture streaming, and particle systems.
 
