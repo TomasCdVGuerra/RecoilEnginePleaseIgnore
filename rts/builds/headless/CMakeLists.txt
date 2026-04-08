@@ -48,9 +48,12 @@ target_link_libraries(GameHeadless PRIVATE
 	headlessStubs
 	RmlUi::Core
 	prd::jsoncpp
-	streflop
 	nowide::nowide
 )
+
+if (TARGET streflop)
+	target_link_libraries(GameHeadless PRIVATE streflop)
+endif()
 ### Build the executable
 add_executable(engine-headless ${engineSources} ${ENGINE_ICON})
 target_link_libraries(engine-headless no-sound ${engineHeadlessLibraries} GameHeadless no-sound)

@@ -33,7 +33,10 @@
 #include <vector>
 
 #ifndef _WIN32
+#include <stdlib.h>
 #include <sys/resource.h>
+
+extern "C" char *mkdtemp(char *);
 #endif
 
 // ---------------------------------------------------------------------------

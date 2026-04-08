@@ -15,7 +15,7 @@
 
 #include "System/Log/ILog.h"
 #include "System/Platform/Threading.h"
-#include "Linux/ThreadSupport.h"
+#include "System/Platform/Linux/ThreadSupport.h"
 
 namespace Threading
 {

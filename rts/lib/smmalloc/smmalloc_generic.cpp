@@ -20,11 +20,12 @@
 // 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // 	THE SOFTWARE.
 #include "smmalloc.h"
+#include <cstdlib>
 #include <stdlib.h>
 
 struct Header
 {
-    void* p;
+    void *p;
     size_t size;
 };
 
@@ -40,44 +41,44 @@ sm::GenericAllocator::TInstance sm::GenericAllocator::Create() { return nullptr;
 
 void sm::GenericAllocator::Destroy(sm::GenericAllocator::TInstance instance) { SMMALLOC_UNUSED(instance); }
 
-void* sm::GenericAllocator::Alloc(sm::GenericAllocator::TInstance instance, size_t bytesCount, size_t alignment)
+void *sm::GenericAllocator::Alloc(sm::GenericAllocator::TInstance instance, size_t bytesCount, size_t alignment)
 {
     SMMALLOC_UNUSED(instance);
     if (alignment < sm::Allocator::kMinValidAlignment)
     {
         alignment = sm::Allocator::kMinValidAlignment;
     }
-    void* p;
-    void** p2;
+    void *p;
+    void **p2;
     size_t offset = alignment - 1 + sizeof(Header);
-    if ((p = (void*)std::malloc(bytesCount + offset)) == NULL)
+    if ((p = (void *)std::malloc(bytesCount + offset)) == NULL)
     {
         return NULL;
     }
-    p2 = (void**)(((size_t)(p) + offset) & ~(alignment - 1));
+    p2 = (void **)(((size_t)(p) + offset) & ~(alignment - 1));
 
-    Header* h = reinterpret_cast<Header*>(reinterpret_cast<char*>(p2) - sizeof(Header));
+    Header *h = reinterpret_cast<Header *>(reinterpret_cast<char *>(p2) - sizeof(Header));
     h->p = p;
     h->size = bytesCount;
     return p2;
 }
 
-void sm::GenericAllocator::Free(sm::GenericAllocator::TInstance instance, void* p)
+void sm::GenericAllocator::Free(sm::GenericAllocator::TInstance instance, void *p)
 {
     SMMALLOC_UNUSED(instance);
     if (!p)
     {
         return;
     }
-    Header* h = reinterpret_cast<Header*>(reinterpret_cast<char*>(p) - sizeof(Header));
+    Header *h = reinterpret_cast<Header *>(reinterpret_cast<char *>(p) - sizeof(Header));
     std::free(h->p);
 }
 
-void* sm::GenericAllocator::Realloc(sm::GenericAllocator::TInstance instance, void* p, size_t bytesCount, size_t alignment)
+void *sm::GenericAllocator::Realloc(sm::GenericAllocator::TInstance instance, void *p, size_t bytesCount, size_t alignment)
 {
     SMMALLOC_UNUSED(instance);
 
-    void* p2 = Alloc(instance, bytesCount, alignment);
+    void *p2 = Alloc(instance, bytesCount, alignment);
     if (!p2)
     {
         // https://en.cppreference.com/w/c/memory/realloc
@@ -95,7 +96,7 @@ void* sm::GenericAllocator::Realloc(sm::GenericAllocator::TInstance instance, vo
     return p2;
 }
 
-size_t sm::GenericAllocator::GetUsableSpace(sm::GenericAllocator::TInstance instance, void* p)
+size_t sm::GenericAllocator::GetUsableSpace(sm::GenericAllocator::TInstance instance, void *p)
 {
     SMMALLOC_UNUSED(instance);
 
@@ -104,6 +105,6 @@ size_t sm::GenericAllocator::GetUsableSpace(sm::GenericAllocator::TInstance inst
         return 0;
     }
 
-    Header* h = reinterpret_cast<Header*>(reinterpret_cast<char*>(p) - sizeof(Header));
+    Header *h = reinterpret_cast<Header *>(reinterpret_cast<char *>(p) - sizeof(Header));
     return h->size;
 }

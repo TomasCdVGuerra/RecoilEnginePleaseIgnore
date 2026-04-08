@@ -50,6 +50,13 @@ endif ()
 
 target_include_directories(lua PUBLIC include)
 
+if (NOT MSVC)
+	target_compile_options(lua PRIVATE
+		-Wno-sign-conversion
+		-Wno-float-conversion
+	)
+endif ()
+
 if (UNIX)
 	SET_TARGET_PROPERTIES(lua PROPERTIES COMPILE_FLAGS "-DLUA_USE_MKSTEMP ${PIC_FLAG}")
 else (UNIX)

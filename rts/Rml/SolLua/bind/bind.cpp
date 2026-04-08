@@ -33,13 +33,13 @@
 
 #include <functional>
 
-
 namespace Rml::SolLua
 {
 
-	sol::object makeObjectFromVariant(const Rml::Variant* variant, sol::state_view s)
+	sol::object makeObjectFromVariant(const Rml::Variant *variant, sol::state_view s)
 	{
-		if (!variant) return sol::make_object(s, sol::nil);
+		if (!variant)
+			return sol::make_object(s, sol::lua_nil);
 
 		switch (variant->GetType())
 		{
@@ -67,12 +67,12 @@ namespace Rml::SolLua
 		case Rml::Variant::VECTOR2:
 			return sol::make_object_userdata<Rml::Vector2f>(s, variant->Get<Rml::Vector2f>());
 		case Rml::Variant::VOIDPTR:
-			return sol::make_object(s, variant->Get<void*>());
+			return sol::make_object(s, variant->Get<void *>());
 		default:
-			return sol::make_object(s, sol::nil);
+			return sol::make_object(s, sol::lua_nil);
 		}
 
-		return sol::make_object(s, sol::nil);
+		return sol::make_object(s, sol::lua_nil);
 	}
 
 } // end namespace Rml::SolLua

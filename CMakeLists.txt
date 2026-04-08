@@ -454,6 +454,15 @@ if(NOT MSVC)
 	# that vendored code is not affected.  Enable via:
 	#   cmake -DRECOIL_WERROR=ON ...
 	option(RECOIL_WERROR "Treat compiler warnings as errors for engine targets (macOS CI)" OFF)
+
+	if (NOT RECOIL_WERROR)
+		# Keep OFF mode authoritative by disabling third-party subproject Werror
+		# toggles that otherwise produce fatal warning builds on Apple Clang.
+		set(ASSIMP_WERROR OFF CACHE BOOL "Treat assimp warnings as errors" FORCE)
+		set(WITH_WERROR OFF CACHE BOOL "Compile cereal with -Werror" FORCE)
+		set(NOWIDE_WERROR OFF CACHE BOOL "Treat nowide warnings as errors" FORCE)
+		message(STATUS "RECOIL_WERROR=OFF: forcing ASSIMP_WERROR/WITH_WERROR/NOWIDE_WERROR to OFF")
+	endif()
 endif(NOT MSVC)
 
 
