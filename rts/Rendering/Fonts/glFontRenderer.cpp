@@ -1,10 +1,16 @@
 #include "glFontRenderer.h"
 
 #include "glFont.h"
+#include "Rendering/Gfx/GL/GLTexture.h"
+#include "Rendering/Gfx/IGraphicsBackend.h"
+#include "Rendering/Gfx/IVertexBuffer.h"
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/Shaders/Shader.h"
 #include "System/Log/ILog.h"
 #include "System/SafeUtil.h"
+
+#include <cstddef>
+#include <span>
 
 #include "System/Misc/TracyDefs.h"
 
@@ -228,7 +234,12 @@ void CglShaderFontRenderer::PushGLState(const CglFont& fnt)
 	if (!userDefinedBlending)
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	glBindTexture(GL_TEXTURE_2D, fnt.GetTexture());
+	if (auto* texture = dynamic_cast<gfx::GLTexture*>(fnt.GetBackendTexture()); texture != nullptr) {
+		glBindTexture(texture->GetTarget(), texture->GetTextureId());
+	} else {
+		LOG_L(L_WARNING, "[CglShaderFontRenderer::%s] invalid font texture backend object", __func__);
+		glBindTexture(GL_TEXTURE_2D, 0);
+	}
 
 	glGetIntegerv(GL_CURRENT_PROGRAM, &currProgID);
 
@@ -250,7 +261,10 @@ void CglShaderFontRenderer::PopGLState(const CglFont& fnt)
 	if (currProgID > 0)
 		glUseProgram(currProgID);
 
-	glBindTexture(GL_TEXTURE_2D, 0);
+	if (auto* texture = dynamic_cast<gfx::GLTexture*>(fnt.GetBackendTexture()); texture != nullptr)
+		glBindTexture(texture->GetTarget(), 0);
+	else
+		glBindTexture(GL_TEXTURE_2D, 0);
 
 	glPopAttrib();
 }
@@ -327,17 +341,96 @@ void CglNoShaderFontRenderer::AddQuadTrianglesOB(VA_TYPE_TC&& tl, VA_TYPE_TC&& t
 void CglNoShaderFontRenderer::DrawTraingleElements()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	static constexpr GLsizei stride = sizeof(VA_TYPE_TC);
+	auto* backend = (globalRendering != nullptr) ? globalRendering->graphicsBackend.get() : nullptr;
+	if (backend == nullptr || activeTexture == nullptr) {
+		if (backend == nullptr)
+			LOG_L(L_WARNING, "[CglNoShaderFontRenderer::%s] graphicsBackend is null", __func__);
 
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+		for (auto& v : verts)
+			v.clear();
+		for (auto& i : indcs)
+			i.clear();
+		return;
+	}
+
+	if (textVertexBuffer == nullptr) {
+		gfx::BufferCreateInfo ci;
+		ci.sizeBytes = 1;
+		ci.usage = gfx::BufferUsage::Dynamic;
+		ci.memoryAccess = gfx::MemoryAccess::CpuToGpu;
+		ci.debugName = "FontNoShaderVertices";
+		textVertexBuffer = backend->CreateVertexBuffer(ci);
+	}
+
+	if (textIndexBuffer == nullptr) {
+		gfx::BufferCreateInfo ci;
+		ci.sizeBytes = 1;
+		ci.usage = gfx::BufferUsage::Dynamic;
+		ci.memoryAccess = gfx::MemoryAccess::CpuToGpu;
+		ci.debugName = "FontNoShaderIndices";
+		textIndexBuffer = backend->CreateVertexBuffer(ci);
+	}
+
+	if (textVertexBuffer == nullptr || textIndexBuffer == nullptr) {
+		LOG_L(L_WARNING, "[CglNoShaderFontRenderer::%s] failed to create dynamic draw buffers", __func__);
+
+		for (auto& v : verts)
+			v.clear();
+		for (auto& i : indcs)
+			i.clear();
+		return;
+	}
+
+	gfx::TexturedVertexLayout vertexLayout;
+	vertexLayout.strideBytes = sizeof(VA_TYPE_TC);
+	vertexLayout.positionOffsetBytes = offsetof(VA_TYPE_TC, pos);
+	vertexLayout.texCoordOffsetBytes = offsetof(VA_TYPE_TC, s);
+	vertexLayout.colorOffsetBytes = offsetof(VA_TYPE_TC, c);
+
+	gfx::TexturedBatchState state;
+	state.depthTest = false;
+	state.blend = true;
+	state.premultipliedAlpha = false;
+	state.useDefaultBlendFunc = !userDefinedBlending;
 
 	for (size_t idx = 0; idx < 2; ++idx) {
-		glVertexPointer(3, GL_FLOAT, stride, &verts[idx].data()->pos);
-		glTexCoordPointer(2, GL_FLOAT, stride, &verts[idx].data()->s);
-		glColorPointer(4, GL_UNSIGNED_BYTE, stride, &verts[idx].data()->c.r);
-		glDrawRangeElements(GL_TRIANGLES, 0, verts[idx].size() - 1, indcs[idx].size(), GL_UNSIGNED_SHORT, indcs[idx].data());
-	};
+		if (verts[idx].empty() || indcs[idx].empty())
+			continue;
+
+		const std::size_t vertexSizeBytes = verts[idx].size() * sizeof(VA_TYPE_TC);
+		const std::size_t indexSizeBytes = indcs[idx].size() * sizeof(uint16_t);
+
+		if (textVertexBuffer->SizeBytes() < vertexSizeBytes)
+			textVertexBuffer->Resize(vertexSizeBytes, false);
+		if (textIndexBuffer->SizeBytes() < indexSizeBytes)
+			textIndexBuffer->Resize(indexSizeBytes, false);
+
+		const auto vertexData = std::span<const std::byte>(
+			reinterpret_cast<const std::byte*>(verts[idx].data()),
+			vertexSizeBytes
+		);
+		const auto indexData = std::span<const std::byte>(
+			reinterpret_cast<const std::byte*>(indcs[idx].data()),
+			indexSizeBytes
+		);
+
+		textVertexBuffer->Update(vertexData);
+		textIndexBuffer->Update(indexData);
+
+		gfx::TexturedIndexedBatchDesc batch;
+		batch.firstIndex = 0;
+		batch.indexCount = static_cast<std::uint32_t>(indcs[idx].size());
+
+		backend->DrawTexturedIndexedBatches(
+			*textVertexBuffer,
+			*textIndexBuffer,
+			*activeTexture,
+			std::span<const gfx::TexturedIndexedBatchDesc>(&batch, 1),
+			vertexLayout,
+			gfx::IndexElementType::UInt16,
+			state
+		);
+	}
 
 	for (auto& v : verts)
 		v.clear();
@@ -375,31 +468,23 @@ void CglNoShaderFontRenderer::PushGLState(const CglFont& fnt)
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable(GL_TEXTURE_2D);
 
+	activeTexture = fnt.GetBackendTexture();
+
 	glMatrixMode(GL_TEXTURE);
 	glPushMatrix();
 	glCallList(textureSpaceMatrix);
-
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glEnableClientState(GL_COLOR_ARRAY);
-
-	glBindTexture(GL_TEXTURE_2D, fnt.GetTexture());
 }
 
-void CglNoShaderFontRenderer::PopGLState(const CglFont& fnt)
+void CglNoShaderFontRenderer::PopGLState(const CglFont&)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	glBindTexture(GL_TEXTURE_2D, 0);
-
-	glDisableClientState(GL_VERTEX_ARRAY);
-	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-	glDisableClientState(GL_COLOR_ARRAY);
-
 	glPopMatrix();
 	glMatrixMode(GL_MODELVIEW);
 
 	glDisable(GL_TEXTURE_2D);
 	glPopAttrib();
+
+	activeTexture = nullptr;
 }
 
 void CglNoShaderFontRenderer::GetStats(std::array<size_t, 8>& stats) const

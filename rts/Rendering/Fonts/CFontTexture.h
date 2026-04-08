@@ -14,6 +14,10 @@
 #include "System/UnorderedSet.hpp"
 #include "System/Threading/WrappedSync.h"
 
+namespace gfx {
+	class ITexture;
+}
+
 
 struct FT_FaceRec_;
 typedef struct FT_FaceRec_* FT_Face;
@@ -131,7 +135,8 @@ public:
 	float GetOutlineWeight() const { return outlineWeight; }
 	float GetLineHeight() const { return lineHeight; }
 	float GetDescender() const { return fontDescender; }
-	int GetTexture() const { return glyphAtlasTextureID; }
+	int GetTexture() const;
+	gfx::ITexture* GetBackendTexture() const { return glyphAtlasTexture.get(); }
 
 	const std::string& GetFamily() const { return fontFamily; }
 	const std::string& GetStyle() const { return fontStyle; }
@@ -181,7 +186,7 @@ protected:
 	bool needsColor;
 	bool isColor;
 
-	unsigned int glyphAtlasTextureID = 0;
+	std::unique_ptr<gfx::ITexture> glyphAtlasTexture;
 
 	inline static bool needThreadSafety = true;
 

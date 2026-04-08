@@ -287,7 +287,7 @@ Migration acceptance criteria for this step:
 2. `LineDrawer` owns only `gfx` abstractions and CPU staging vectors.
 3. Visual parity remains for both normal and stippled command lines.
 
-#### [IN PROGRESS] Phase 4.2: Font Rendering Migration
+#### [COMPLETE] Phase 4.2: Font Rendering Migration
 Target files:
 1. `rts/Rendering/Fonts/CFontTexture.cpp`
 2. `rts/Rendering/Fonts/glFontRenderer.cpp`

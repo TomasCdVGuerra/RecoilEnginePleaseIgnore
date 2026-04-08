@@ -4,10 +4,16 @@
 #include "glFontRenderer.h"
 #include "FontLogSection.h"
 
+#include "Rendering/Gfx/GL/GLTexture.h"
+#include "Rendering/Gfx/IGraphicsBackend.h"
+#include "Rendering/Gfx/ITexture.h"
+
 #include <cstring> // for memset, memcpy
+#include <cstddef>
 #include <string>
 #include <vector>
 #include <sstream>
+#include <span>
 
 #ifndef HEADLESS
 	#include <ft2build.h>
@@ -18,7 +24,6 @@
 	#endif
 #endif // HEADLESS
 
-#include "Rendering/GL/myGL.h"
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/Textures/Bitmap.h"
 #include "System/Config/ConfigHandler.h"
@@ -764,10 +769,7 @@ CFontTexture::~CFontTexture()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	CglFontRenderer::DeleteInstance(fontRenderer);
-#ifndef HEADLESS
-	glDeleteTextures(1, &glyphAtlasTextureID);
-	glyphAtlasTextureID = 0;
-#endif
+	glyphAtlasTexture.reset();
 }
 
 /***
@@ -1007,6 +1009,16 @@ const GlyphInfo& CFontTexture::GetGlyph(char32_t ch)
 #endif
 
 	return dummyGlyph;
+}
+
+int CFontTexture::GetTexture() const
+{
+#ifndef HEADLESS
+	if (auto* texture = dynamic_cast<gfx::GLTexture*>(glyphAtlasTexture.get()); texture != nullptr)
+		return static_cast<int>(texture->GetTextureId());
+#endif
+
+	return 0;
 }
 
 
@@ -1311,52 +1323,28 @@ void CFontTexture::CreateTexture(const int width, const int height, const bool i
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 #ifndef HEADLESS
-	if (init)
-		glGenTextures(1, &glyphAtlasTextureID);
-	glBindTexture(GL_TEXTURE_2D, glyphAtlasTextureID);
+	auto* backend = (globalRendering != nullptr) ? globalRendering->graphicsBackend.get() : nullptr;
+	if (backend == nullptr) {
+		LOG_L(L_WARNING, "[CFontTexture::%s] graphicsBackend is null", __func__);
+		return;
+	}
 
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	// glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	// glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	gfx::TextureCreateInfo textureCI;
+	textureCI.dimension = gfx::TextureDimension::Tex2D;
+	textureCI.format = needsColor ? gfx::PixelFormat::BGRA8_UNorm : gfx::PixelFormat::R8_UNorm;
+	textureCI.extent.width = std::max(width, 1);
+	textureCI.extent.height = std::max(height, 1);
+	textureCI.extent.depth = 1;
+	textureCI.mipLevels = 1;
+	textureCI.arrayLayers = 1;
+	textureCI.usage = gfx::TextureUsage::Sampled | gfx::TextureUsage::TransferDst;
+	textureCI.debugName = "FontGlyphAtlas";
 
-	// no border to prevent artefacts in outlined text
-	constexpr GLfloat borderColor[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-
-	// NB:
-	// The modern and core formats like GL_R8 and GL_RED are intentionally replaced with
-	// deprecated GL_ALPHA, such that AMD-HACK users could enjoy no-shader fallback
-	// But why fallback? See: https://github.com/beyond-all-reason/spring/issues/383
-	// Remove the code under `#ifdef SUPPORT_AMD_HACKS_HERE` blocks throughout this file
-	// when all potatoes die.
-
-#ifdef SUPPORT_AMD_HACKS_HERE
-	constexpr GLint swizzleMaskF[] = { GL_ALPHA, GL_ALPHA, GL_ALPHA, GL_ALPHA };
-	constexpr GLint swizzleMaskD[] = { GL_RED, GL_GREEN, GL_BLUE, GL_ALPHA };
-	if (needsColor)
-		glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMaskD);
-	else
-		glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMaskF);
-#endif
-	glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
-
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-
-	if (needsColor)
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_BGRA, GL_UNSIGNED_BYTE, nullptr);
-	else
-#ifdef SUPPORT_AMD_HACKS_HERE
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, 1, 1, 0, GL_ALPHA, GL_UNSIGNED_BYTE, nullptr);
-#else
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, 1, 1, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
-#endif
-
-	glBindTexture(GL_TEXTURE_2D, 0);
-#ifdef SUPPORT_AMD_HACKS_HERE
-	if (!needsColor)
-		glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMaskD);
-#endif
+	glyphAtlasTexture = backend->CreateTexture(textureCI);
+	if (glyphAtlasTexture == nullptr) {
+		LOG_L(L_WARNING, "[CFontTexture::%s] failed to create glyph atlas texture", __func__);
+		return;
+	}
 
 	if (init) {
 		atlasUpdate = {};
@@ -1531,22 +1519,44 @@ void CFontTexture::UploadGlyphAtlasTextureImpl()
 	if (!GlyphAtlasTextureNeedsUpload())
 		return;
 	if (needsColor && !isColor) {
-		CreateTexture(32, 32, false);
+		CreateTexture(std::max(texWidth, 1), std::max(texHeight, 1), false);
 		isColor = true;
 		needsTextureUpload = true;
 	}
 
-	// update texture atlas
-	glBindTexture(GL_TEXTURE_2D, glyphAtlasTextureID);
-	if (needsColor)
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, texWidth, texHeight, 0, GL_BGRA,  GL_UNSIGNED_BYTE, atlasUpdate.GetRawMem());
-	else
-	#ifdef SUPPORT_AMD_HACKS_HERE
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, texWidth, texHeight, 0, GL_ALPHA, GL_UNSIGNED_BYTE, atlasUpdate.GetRawMem());
-	#else
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, texWidth, texHeight, 0, GL_RED, GL_UNSIGNED_BYTE, atlasUpdate.GetRawMem());
-	#endif
-	glBindTexture(GL_TEXTURE_2D, 0);
+	const int uploadWidth = std::max(texWidth, 1);
+	const int uploadHeight = std::max(texHeight, 1);
+	const gfx::PixelFormat expectedFormat = needsColor ? gfx::PixelFormat::BGRA8_UNorm : gfx::PixelFormat::R8_UNorm;
+
+	if (glyphAtlasTexture == nullptr || glyphAtlasTexture->Format() != expectedFormat) {
+		CreateTexture(uploadWidth, uploadHeight, false);
+	}
+
+	if (glyphAtlasTexture != nullptr) {
+		const gfx::Extent3D extent = glyphAtlasTexture->GetExtent();
+		if ((extent.width != static_cast<std::uint32_t>(uploadWidth)) || (extent.height != static_cast<std::uint32_t>(uploadHeight)))
+			CreateTexture(uploadWidth, uploadHeight, false);
+	}
+
+	if (glyphAtlasTexture == nullptr || atlasUpdate.Empty())
+		return;
+
+	const std::size_t rowPitchBytes = static_cast<std::size_t>(uploadWidth) * static_cast<std::size_t>(needsColor ? 4 : 1);
+	const auto pixels = std::span<const std::byte>(
+		reinterpret_cast<const std::byte*>(atlasUpdate.GetRawMem()),
+		atlasUpdate.GetMemSize()
+	);
+
+	glyphAtlasTexture->UploadSubRegion(
+		0,
+		0,
+		0,
+		0,
+		static_cast<std::uint32_t>(uploadWidth),
+		static_cast<std::uint32_t>(uploadHeight),
+		pixels,
+		rowPitchBytes
+	);
 
 	needsTextureUpload = false;
 #endif

@@ -7,6 +7,12 @@
 
 class CglFont;
 class CFontTexture;
+
+namespace gfx {
+	class ITexture;
+	class IVertexBuffer;
+}
+
 class CglFontRenderer {
 public:
 	virtual ~CglFontRenderer() = default;
@@ -86,6 +92,10 @@ private:
 	std::array<std::vector<uint16_t  >, 2> indcs; // OL, PM
 
 	uint32_t textureSpaceMatrix = 0u;
+
+	std::unique_ptr<gfx::IVertexBuffer> textVertexBuffer;
+	std::unique_ptr<gfx::IVertexBuffer> textIndexBuffer;
+	gfx::ITexture* activeTexture = nullptr;
 };
 
 class CglNullFontRenderer final : public CglFontRenderer {

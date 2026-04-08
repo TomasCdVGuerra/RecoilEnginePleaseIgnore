@@ -69,6 +69,7 @@ namespace gfx
         bool depthTest = false;
         bool blend = true;
         bool premultipliedAlpha = false;
+        bool useDefaultBlendFunc = true;
     };
 
     class ITexture;

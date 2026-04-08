@@ -228,10 +228,13 @@ namespace gfx
         {
             glEnable(GL_BLEND);
 
-            if (state.premultipliedAlpha)
-                glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-            else
-                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            if (state.useDefaultBlendFunc)
+            {
+                if (state.premultipliedAlpha)
+                    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+                else
+                    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            }
         }
         else
         {
