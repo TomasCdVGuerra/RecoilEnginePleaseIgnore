@@ -350,6 +350,33 @@ Incremental adoption path:
 2. Refactor `Texture.cpp` toward manager-style ownership returning `gfx::ITexture` instances instead of raw GL handles.
 3. Validate particle streaming throughput and frame pacing using `gfx::IVertexBuffer::MapWrite` across stress scenarios.
 
+#### [IN PROGRESS] Phase 5.1: Texture Management Scouting
+Target files:
+1. `rts/Rendering/Textures/Texture.hpp` (header counterpart to requested `Texture.h`)
+2. `rts/Rendering/Textures/Texture.cpp`
+3. `rts/Rendering/Textures/Bitmap.cpp`
+
+OpenGL coupling findings (`Texture.cpp`, `Texture.hpp`):
+1. Texture object lifecycle is GL-id based: `glGenTextures` during initialization and `glDeleteTextures` in `TextureBase` destruction/move ownership paths.
+2. Binding model is explicit GL state mutation (`glActiveTexture`, `glBindTexture`) in `ScopedBind`, `Bind`, and `Unbind` methods.
+3. Allocation/upload path is direct GL: `glTexImage2D` and `glTexImage3D` (fallback path) or `glTexStorage2D`/`glTexStorage3D` when available; sub-updates use `glTexSubImage2D`/`glTexSubImage3D`.
+4. Mipmap generation is explicit `glGenerateMipmap` with AMD workaround toggles.
+5. Sampler parameters are directly applied with `glTexParameteri`, `glTexParameterf`, and `glTexParameterfv` (wrap, min/mag filters, border color, lod bias, anisotropy).
+
+OpenGL coupling findings (`Bitmap.cpp`):
+1. `CBitmap::CreateTexture(...)` creates/binds raw texture ids, applies wrap/filter/lod/anisotropy with `glTexParameteri`/`glTexParameterf`, and uploads through `RecoilBuildMipmaps(...)`.
+2. `RecoilBuildMipmaps(...)` (in `myGL.cpp`) uploads base and mip levels via `glTexImage2D`, sets base/max level via `glTexParameteri`, then calls `glGenerateMipmap`.
+3. DDS upload path (`CreateDDSTexture`) binds target-specific texture objects and applies per-target lod bias/anisotropy plus optional mipmap generation.
+
+PBO usage assessment:
+1. No direct `GL_PIXEL_UNPACK_BUFFER` usage appears in `Texture.cpp`, `Texture.hpp`, or `Bitmap.cpp`.
+2. Current upload paths are CPU pointer uploads (`glTexImage*` / `glTexSubImage*`) and helper wrappers; async unpack-buffer staging is not currently wired in these target files.
+
+Phase 5.1 implication summary:
+1. Texture abstractions still embed binding-state behavior and sampler configuration in GL-specific classes, requiring decomposition into backend resource + sampler state descriptors.
+2. A complete migration will need backend-neutral texture parameter application (filtering/wrap/lod/aniso) in addition to upload/mipmap APIs.
+3. Optional async upload optimization can be introduced later through backend staging mechanisms rather than preserving direct PBO dependencies.
+
 ### [PENDING] Phase 6: Core Rendering Systems Migration
 Goal: Abstract the most tightly coupled OpenGL systems: framebuffers, shaders, and map rendering.
 
