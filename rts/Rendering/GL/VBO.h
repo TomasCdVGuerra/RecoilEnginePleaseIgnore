@@ -32,6 +32,7 @@ public:
 	}
 	void Generate() const;
 	void Delete();
+	void AttachExternal(GLuint externalBufferId, GLsizeiptr externalBufferSize, GLenum externalTarget, GLenum externalUsage = GL_STATIC_DRAW);
 
 	/**
 	 * @param target can be either GL_ARRAY_BUFFER, GL_ELEMENT_ARRAY_BUFFER, GL_PIXEL_PACK_BUFFER, GL_PIXEL_UNPACK_BUFFER or GL_UNIFORM_BUFFER_EXT
@@ -152,6 +153,7 @@ public:
 	bool mapped = false;
 private:
 	mutable GLuint vboId = 0;
+	bool ownsBuffer = true;
 
 	size_t bufSize = 0; // can be smaller than memSize
 	size_t memSize = 0; // actual length of <data>; only set when !isSupported

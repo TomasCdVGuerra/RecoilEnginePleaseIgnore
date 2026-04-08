@@ -1,12 +1,17 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <unordered_map>
+#include <vector>
 
+#include "Rendering/Gfx/IVertexArray.h"
+#include "Rendering/Gfx/IVertexBuffer.h"
 #include "Rendering/Models/VertexData.hpp"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/GL/VBO.h"
-#include "Rendering/GL/VAO.h"
 
 struct S3DModel;
 struct S3DModelPiece;
@@ -15,8 +20,6 @@ struct SInstanceData;
 class CUnit;
 class CFeature;
 struct UnitDef;
-
-struct SDrawElementsIndirectCommand;
 
 struct SIndexAndCount {
 	SIndexAndCount() = default;
@@ -78,10 +81,10 @@ public:
 	bool SubmitImmediately(const CFeature* feature, GLenum mode = GL_TRIANGLES, bool bindUnbind = false);
 	bool SubmitImmediately(const UnitDef* unitDef, int teamID, GLenum mode = GL_TRIANGLES, bool bindUnbind = false);
 
-	const VBO* GetVertVBO() const { return &vertVBO; }
-	      VBO* GetVertVBO()       { return &vertVBO; }
-	const VBO* GetIndxVBO() const { return &indxVBO; }
-	      VBO* GetIndxVBO()       { return &indxVBO; }
+	const VBO* GetVertVBO() const { return &legacyVertVBO; }
+	      VBO* GetVertVBO()       { return &legacyVertVBO; }
+	const VBO* GetIndxVBO() const { return &legacyIndxVBO; }
+	      VBO* GetIndxVBO()       { return &legacyIndxVBO; }
 
 	auto GetVertElemCount() const { return vertUploadSize; }
 	auto GetIndxElemCount() const { return indxUploadSize; }
@@ -104,12 +107,12 @@ private:
 		uint8_t teamID,
 		uint8_t drawFlags
 	);
-	void EnableAttribs(bool inst) const;
-	void DisableAttribs() const;
+	void RefreshLegacyVBOViews();
 private:
 	static std::unique_ptr<S3DModelVAO> instance;
 private:
 	bool safeToDeleteVectors = false;
+	mutable bool legacyAttribsBound = false;
 
 	uint32_t batchedBaseInstance   = 0;
 	uint32_t immediateBaseInstance = 0; //note relative index
@@ -122,11 +125,13 @@ private:
 	std::vector<SVertexData> vertData;
 	std::vector<uint32_t   > indxData;
 
-	VBO vertVBO;
-	VBO indxVBO;
+	std::unique_ptr<gfx::IVertexArray> backendVAO;
+	std::unique_ptr<gfx::IVertexBuffer> backendVerts;
+	std::unique_ptr<gfx::IVertexBuffer> backendIndx;
+	std::unique_ptr<gfx::IVertexBuffer> backendInst;
 
-	VBO instVBO;
-	VAO vao;
+	VBO legacyVertVBO;
+	VBO legacyIndxVBO;
 
 	std::unordered_map<SIndexAndCount, std::vector<SInstanceData>, SIndexAndCount> modelDataToInstance;
 };

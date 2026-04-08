@@ -9,9 +9,9 @@
 
 #include "lib/sol2/forward.hpp"
 #include "Rendering/GL/myGL.h"
+#include "Rendering/GL/VAO.h"
 #include "Rendering/Models/3DModelVAO.hpp"
 
-class VAO;
 class VBO;
 class LuaVBOImpl;
 

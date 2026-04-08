@@ -6,6 +6,7 @@
  */
 
 #include <cassert>
+#include <algorithm>
 #include <vector>
 #include <stdint.h>
 
@@ -108,6 +109,7 @@ VBO& VBO::operator=(VBO&& other) noexcept
 	std::swap(curBoundTarget, other.curBoundTarget);
 	std::swap(usage, other.usage);
 	std::swap(mapUnsyncedBit, other.mapUnsyncedBit);
+	std::swap(ownsBuffer, other.ownsBuffer);
 
 	std::swap(isSupported, other.isSupported);
 	std::swap(immutableStorage, other.immutableStorage);
@@ -127,13 +129,35 @@ void VBO::Delete() {
 	}
 	bbrItems.clear();
 
-	if (GLAD_GL_ARB_vertex_buffer_object)
+	if (ownsBuffer && GLAD_GL_ARB_vertex_buffer_object && (vboId != 0u))
 		glDeleteBuffers(1, &vboId);
 
 	vboId = 0;
+	ownsBuffer = true;
 
 	delete[] data;
 	data = nullptr;
+}
+
+void VBO::AttachExternal(GLuint externalBufferId, GLsizeiptr externalBufferSize, GLenum externalTarget, GLenum externalUsage)
+{
+	RECOIL_DETAILED_TRACY_ZONE;
+
+	if (mapped)
+		UnmapIf();
+
+	if (bound)
+		Unbind();
+
+	Delete();
+
+	curBoundTarget = externalTarget;
+	usage = externalUsage;
+	vboId = externalBufferId;
+	bufSize = static_cast<size_t>(std::max<GLsizeiptr>(externalBufferSize, 0));
+	memSize = 0;
+	ownsBuffer = false;
+	isSupported = true;
 }
 
 void VBO::Bind(GLenum target) const

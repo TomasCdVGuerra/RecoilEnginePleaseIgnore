@@ -3,69 +3,110 @@
 #include "3DModelVAO.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
+#include <span>
 #include <iterator>
 
 #include "3DModel.hpp"
 #include "3DModelPiece.hpp"
 #include "IModelParser.h"
+#include "Rendering/GlobalRendering.h"
+#include "Rendering/Gfx/GL/GLVertexBuffer.h"
 #include "Rendering/ModelsDataUploader.h"
 #include "Sim/Units/Unit.h"
 #include "Sim/Units/UnitDef.h"
 #include "Sim/Features/Feature.h"
 
+#include "System/Log/ILog.h"
 #include "System/Misc/TracyDefs.h"
 
 
-void S3DModelVAO::EnableAttribs(bool inst) const
+namespace
 {
-	RECOIL_DETAILED_TRACY_ZONE;
-	if (!inst) {
-		for (int i = 0; i <= 5; ++i) {
-			glEnableVertexAttribArray(i);
-			glVertexAttribDivisor(i, 0);
+
+	gfx::PrimitiveTopology ToPrimitiveTopology(GLenum prim)
+	{
+		switch (prim) {
+			case GL_TRIANGLES: return gfx::PrimitiveTopology::Triangles;
+			case GL_LINES:     return gfx::PrimitiveTopology::Lines;
+			case GL_LINE_STRIP:return gfx::PrimitiveTopology::LineStrip;
+			default: {
+				LOG_L(L_WARNING, "[S3DModelVAO::ToPrimitiveTopology] Unsupported primitive %u, defaulting to triangles", prim);
+				return gfx::PrimitiveTopology::Triangles;
+			}
 		}
-
-		glVertexAttribPointer (0, 3, GL_FLOAT       , false, sizeof(SVertexData), (const void*)offsetof(SVertexData, pos         ));
-		glVertexAttribPointer (1, 3, GL_FLOAT       , false, sizeof(SVertexData), (const void*)offsetof(SVertexData, normal      ));
-		glVertexAttribPointer (2, 3, GL_FLOAT       , false, sizeof(SVertexData), (const void*)offsetof(SVertexData, sTangent    ));
-		glVertexAttribPointer (3, 3, GL_FLOAT       , false, sizeof(SVertexData), (const void*)offsetof(SVertexData, tTangent    ));
-		glVertexAttribPointer (4, 4, GL_FLOAT       , false, sizeof(SVertexData), (const void*)offsetof(SVertexData, texCoords[0]));
-		glVertexAttribIPointer(5, 3, GL_UNSIGNED_INT,        sizeof(SVertexData), (const void*)offsetof(SVertexData, boneIDsLow  ));
 	}
-	else {
-		for (int i = 6; i <= 6; ++i) {
-			glEnableVertexAttribArray(i);
-			glVertexAttribDivisor(i, 1);
-		}
 
-		// covers all 4 uints of SInstanceData
-		glVertexAttribIPointer(6, 4, GL_UNSIGNED_INT, sizeof(SInstanceData), (const void*)offsetof(SInstanceData, matOffset));
+	GLuint GetGLBufferId(const std::unique_ptr<gfx::IVertexBuffer>& buffer)
+	{
+		auto* glBuffer = dynamic_cast<gfx::GLVertexBuffer*>(buffer.get());
+		return (glBuffer != nullptr) ? glBuffer->GetBufferId() : 0u;
 	}
-}
 
-void S3DModelVAO::DisableAttribs() const
-{
-	RECOIL_DETAILED_TRACY_ZONE;
-	for (int i = 0; i <= 6; ++i) {
-		glDisableVertexAttribArray(i);
-		glVertexAttribDivisor(i, 0);
+	gfx::VertexLayoutDesc BuildVertexLayoutDesc()
+	{
+		gfx::VertexLayoutDesc layout;
+		layout.bindings = {
+			{0u, static_cast<std::uint32_t>(sizeof(SVertexData)), 0u, gfx::VertexInputRate::PerVertex},
+			{1u, static_cast<std::uint32_t>(sizeof(SInstanceData)), 0u, gfx::VertexInputRate::PerInstance},
+		};
+
+		layout.attributes = {
+			{0u, 0u, gfx::VertexFormat::Float3, static_cast<std::uint32_t>(offsetof(SVertexData, pos))},
+			{1u, 0u, gfx::VertexFormat::Float3, static_cast<std::uint32_t>(offsetof(SVertexData, normal))},
+			{2u, 0u, gfx::VertexFormat::Float3, static_cast<std::uint32_t>(offsetof(SVertexData, sTangent))},
+			{3u, 0u, gfx::VertexFormat::Float3, static_cast<std::uint32_t>(offsetof(SVertexData, tTangent))},
+			{4u, 0u, gfx::VertexFormat::Float4, static_cast<std::uint32_t>(offsetof(SVertexData, texCoords[0]))},
+			{5u, 0u, gfx::VertexFormat::UInt3, static_cast<std::uint32_t>(offsetof(SVertexData, boneIDsLow))},
+			{6u, 1u, gfx::VertexFormat::UInt4, static_cast<std::uint32_t>(offsetof(SInstanceData, matOffset))},
+		};
+
+		return layout;
 	}
-}
+
+} // namespace
+
 
 S3DModelVAO::S3DModelVAO()
+	: legacyVertVBO{GL_ARRAY_BUFFER, false}
+	, legacyIndxVBO{GL_ELEMENT_ARRAY_BUFFER, false}
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	vertData.reserve(VERT_SIZE0);
 	indxData.reserve(INDX_SIZE0);
 
-	vertVBO = VBO{ GL_ARRAY_BUFFER        , false };
-	indxVBO = VBO{ GL_ELEMENT_ARRAY_BUFFER, false };
-	instVBO = VBO{ GL_ARRAY_BUFFER        , false };
+	auto* backend = (globalRendering != nullptr) ? globalRendering->graphicsBackend.get() : nullptr;
+	assert(backend != nullptr);
 
-	//no better place to init it
-	instVBO.Bind();
-	instVBO.New(S3DModelVAO::INSTANCE_BUFFER_NUM_ELEMS * sizeof(SInstanceData), GL_STREAM_DRAW);
-	instVBO.Unbind();
+	if (backend == nullptr)
+		return;
+
+	backendVerts = backend->CreateVertexBuffer(gfx::BufferCreateInfo{
+		.sizeBytes = 0,
+		.usage = gfx::BufferUsage::Static,
+		.memoryAccess = gfx::MemoryAccess::CpuToGpu,
+		.readable = false,
+		.debugName = "S3DModelVAO::backendVerts",
+	});
+
+	backendIndx = backend->CreateVertexBuffer(gfx::BufferCreateInfo{
+		.sizeBytes = 0,
+		.usage = gfx::BufferUsage::Static,
+		.memoryAccess = gfx::MemoryAccess::CpuToGpu,
+		.readable = false,
+		.debugName = "S3DModelVAO::backendIndx",
+	});
+
+	backendInst = backend->CreateVertexBuffer(gfx::BufferCreateInfo{
+		.sizeBytes = INSTANCE_BUFFER_NUM_ELEMS * sizeof(SInstanceData),
+		.usage = gfx::BufferUsage::Stream,
+		.memoryAccess = gfx::MemoryAccess::CpuToGpu,
+		.readable = false,
+		.debugName = "S3DModelVAO::backendInst",
+	});
+
+	CreateVAO();
 }
 
 std::unique_ptr<S3DModelVAO> S3DModelVAO::instance = nullptr;
@@ -141,56 +182,69 @@ void S3DModelVAO::ProcessIndicies(S3DModel* model)
 void S3DModelVAO::CreateVAO()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	vao = VAO{};
-	vao.Bind();
+	auto* backend = (globalRendering != nullptr) ? globalRendering->graphicsBackend.get() : nullptr;
+	assert(backend != nullptr);
 
-	vertVBO.Bind();
-	indxVBO.Bind();
-	EnableAttribs(false); // vertex attribs
-	vertVBO.Unbind();
+	if ((backend == nullptr) || (backendVerts == nullptr) || (backendIndx == nullptr) || (backendInst == nullptr))
+		return;
 
-	instVBO.Bind();
-	EnableAttribs(true); // instance attribs
+	const std::array<gfx::VertexArrayBufferBinding, 2> vertexBuffers = {{
+		{0u, backendVerts.get()},
+		{1u, backendInst.get()},
+	}};
 
-	vao.Unbind();
-	DisableAttribs();
+	backendVAO = backend->CreateVertexArray(BuildVertexLayoutDesc(), vertexBuffers, backendIndx.get());
+	assert(backendVAO != nullptr);
 
-	indxVBO.Unbind();
-	instVBO.Unbind();
+	RefreshLegacyVBOViews();
 }
 
 void S3DModelVAO::UploadVBOs()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	static constexpr size_t MEM_STEP = 8 * 1024 * 1024;
-	bool reinitVAO = (vao.GetIdRaw() == 0);
+	bool reinitVAO = (backendVAO == nullptr);
+	bool refreshLegacyViews = false;
+
+	if ((backendVerts == nullptr) || (backendIndx == nullptr))
+		return;
 
 	if (vertData.size() > vertUploadIndex) {
 		assert(!safeToDeleteVectors);
-		vertVBO.Bind();
 		const size_t reqSize = AlignUp(std::max(vertData.size(), S3DModelVAO::VERT_SIZE0) * sizeof(SVertexData), MEM_STEP);
-		reinitVAO |= (reqSize > vertVBO.GetSize());
-		vertVBO.Resize(reqSize, GL_STATIC_DRAW); //noop if size hasn't changed, will copy data if changed
-		vertVBO.SetBufferSubData(vertUploadIndex * sizeof(SVertexData), (vertData.size() - vertUploadIndex) * sizeof(SVertexData), vertData.data() + vertUploadIndex);
-		vertVBO.Unbind();
+		reinitVAO |= (reqSize > backendVerts->SizeBytes());
+		backendVerts->Resize(reqSize, true);
+
+		const std::span<const SVertexData> uploadData(
+			vertData.data() + vertUploadIndex,
+			vertData.size() - vertUploadIndex);
+		backendVerts->Update(std::as_bytes(uploadData), vertUploadIndex * sizeof(SVertexData));
+
+		refreshLegacyViews = true;
 		vertUploadIndex = vertData.size();
 		vertUploadSize = vertUploadIndex;
 	}
 
 	if (indxData.size() > indxUploadIndex) {
 		assert(!safeToDeleteVectors);
-		indxVBO.Bind();
 		const size_t reqSize = AlignUp(std::max(indxData.size(), S3DModelVAO::INDX_SIZE0) * sizeof(   uint32_t), MEM_STEP);
-		reinitVAO |= (reqSize > indxVBO.GetSize());
-		indxVBO.Resize(reqSize, GL_STATIC_DRAW); //noop if size hasn't changed, will copy data if changed
-		indxVBO.SetBufferSubData(indxUploadIndex * sizeof(   uint32_t), (indxData.size() - indxUploadIndex) * sizeof(   uint32_t), indxData.data() + indxUploadIndex);
-		indxVBO.Unbind();
+		reinitVAO |= (reqSize > backendIndx->SizeBytes());
+		backendIndx->Resize(reqSize, true);
+
+		const std::span<const uint32_t> uploadData(
+			indxData.data() + indxUploadIndex,
+			indxData.size() - indxUploadIndex);
+		backendIndx->Update(std::as_bytes(uploadData), indxUploadIndex * sizeof(uint32_t));
+
+		refreshLegacyViews = true;
 		indxUploadIndex = indxData.size();
 		indxUploadSize = indxUploadIndex;
 	}
 
 	if (reinitVAO)
 		CreateVAO();
+	else if (refreshLegacyViews)
+		RefreshLegacyVBOViews();
 
 	if (safeToDeleteVectors && !vertData.empty()) {
 		// all models have been uploaded in the calls above
@@ -215,52 +269,73 @@ void S3DModelVAO::Kill()
 	instance = nullptr;
 }
 
+void S3DModelVAO::RefreshLegacyVBOViews()
+{
+	RECOIL_DETAILED_TRACY_ZONE;
+
+	const GLsizeiptr vertSize = (backendVerts != nullptr) ? static_cast<GLsizeiptr>(backendVerts->SizeBytes()) : 0;
+	const GLsizeiptr indxSize = (backendIndx != nullptr) ? static_cast<GLsizeiptr>(backendIndx->SizeBytes()) : 0;
+
+	legacyVertVBO.AttachExternal(GetGLBufferId(backendVerts), vertSize, GL_ARRAY_BUFFER, GL_STATIC_DRAW);
+	legacyIndxVBO.AttachExternal(GetGLBufferId(backendIndx), indxSize, GL_ELEMENT_ARRAY_BUFFER, GL_STATIC_DRAW);
+}
+
 void S3DModelVAO::Bind() const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	assert(vao.GetIdRaw() > 0);
-	vao.Bind();
+	assert(backendVAO != nullptr);
+
+	if (backendVAO != nullptr)
+		backendVAO->Bind();
 }
 
 void S3DModelVAO::Unbind() const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	assert(vao.GetIdRaw() > 0);
-	vao.Unbind();
+	assert(backendVAO != nullptr);
+
+	if (backendVAO != nullptr)
+		backendVAO->Unbind();
 }
 
 void S3DModelVAO::BindLegacyVertexAttribsAndVBOs() const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	vertVBO.Bind();
-	indxVBO.Bind();
+	assert(legacyVertVBO.GetIdRaw() != 0u);
+	assert(legacyIndxVBO.GetIdRaw() != 0u);
+
+	legacyVertVBO.Bind();
+	legacyIndxVBO.Bind();
+	legacyAttribsBound = true;
 
 	glEnableClientState(GL_VERTEX_ARRAY);
-	glVertexPointer(3, GL_FLOAT, sizeof(SVertexData), vertVBO.GetPtr(offsetof(SVertexData, pos)));
+	glVertexPointer(3, GL_FLOAT, sizeof(SVertexData), legacyVertVBO.GetPtr(offsetof(SVertexData, pos)));
 
 	glEnableClientState(GL_NORMAL_ARRAY);
-	glNormalPointer(GL_FLOAT, sizeof(SVertexData), vertVBO.GetPtr(offsetof(SVertexData, normal)));
+	glNormalPointer(GL_FLOAT, sizeof(SVertexData), legacyVertVBO.GetPtr(offsetof(SVertexData, normal)));
 
 	glClientActiveTexture(GL_TEXTURE0);
 	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glTexCoordPointer(2, GL_FLOAT, sizeof(SVertexData), vertVBO.GetPtr(offsetof(SVertexData, texCoords[0])));
+	glTexCoordPointer(2, GL_FLOAT, sizeof(SVertexData), legacyVertVBO.GetPtr(offsetof(SVertexData, texCoords[0])));
 
 	glClientActiveTexture(GL_TEXTURE1);
 	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glTexCoordPointer(2, GL_FLOAT, sizeof(SVertexData), vertVBO.GetPtr(offsetof(SVertexData, texCoords[1])));
+	glTexCoordPointer(2, GL_FLOAT, sizeof(SVertexData), legacyVertVBO.GetPtr(offsetof(SVertexData, texCoords[1])));
 
 	glClientActiveTexture(GL_TEXTURE5);
 	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glTexCoordPointer(3, GL_FLOAT, sizeof(SVertexData), vertVBO.GetPtr(offsetof(SVertexData, sTangent)));
+	glTexCoordPointer(3, GL_FLOAT, sizeof(SVertexData), legacyVertVBO.GetPtr(offsetof(SVertexData, sTangent)));
 
 	glClientActiveTexture(GL_TEXTURE6);
 	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glTexCoordPointer(3, GL_FLOAT, sizeof(SVertexData), vertVBO.GetPtr(offsetof(SVertexData, tTangent)));
+	glTexCoordPointer(3, GL_FLOAT, sizeof(SVertexData), legacyVertVBO.GetPtr(offsetof(SVertexData, tTangent)));
 }
 
 void S3DModelVAO::UnbindLegacyVertexAttribsAndVBOs() const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	legacyAttribsBound = false;
+
 	glClientActiveTexture(GL_TEXTURE6);
 	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 
@@ -276,14 +351,30 @@ void S3DModelVAO::UnbindLegacyVertexAttribsAndVBOs() const
 	glDisableClientState(GL_VERTEX_ARRAY);
 	glDisableClientState(GL_NORMAL_ARRAY);
 
-	indxVBO.Unbind();
-	vertVBO.Unbind();
+	if (legacyIndxVBO.bound)
+		legacyIndxVBO.Unbind();
+
+	if (legacyVertVBO.bound)
+		legacyVertVBO.Unbind();
 }
 
 void S3DModelVAO::DrawElements(GLenum prim, uint32_t vboIndxStart, uint32_t vboIndxCount) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	glDrawElements(prim, vboIndxCount, GL_UNSIGNED_INT, indxVBO.GetPtr(vboIndxStart * sizeof(uint32_t)));
+	if (legacyAttribsBound) {
+		glDrawElements(prim, vboIndxCount, GL_UNSIGNED_INT, legacyIndxVBO.GetPtr(vboIndxStart * sizeof(uint32_t)));
+		return;
+	}
+
+	auto* backend = (globalRendering != nullptr) ? globalRendering->graphicsBackend.get() : nullptr;
+	if ((backend == nullptr) || (backendVAO == nullptr))
+		return;
+
+	backend->DrawIndexed(
+		*backendVAO,
+		ToPrimitiveTopology(prim),
+		gfx::IndexedDrawDesc{vboIndxCount, vboIndxStart, 0},
+		gfx::IndexElementType::UInt32);
 }
 
 template<typename TObj>
@@ -368,7 +459,11 @@ bool S3DModelVAO::AddToSubmission(const UnitDef* unitDef, uint8_t teamID)
 void S3DModelVAO::Submit(GLenum mode, bool bindUnbind)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	static std::vector<SDrawElementsIndirectCommand> submitCmds;
+	auto* backend = (globalRendering != nullptr) ? globalRendering->graphicsBackend.get() : nullptr;
+	if ((backend == nullptr) || (backendVAO == nullptr) || (backendInst == nullptr))
+		return;
+
+	static std::vector<gfx::IndexedIndirectDrawCommand> submitCmds;
 	submitCmds.clear();
 
 	batchedBaseInstance = 0u;
@@ -381,15 +476,13 @@ void S3DModelVAO::Submit(GLenum mode, bool bindUnbind)
 		if (allRenderModelData.size() + renderModelData.size() >= INSTANCE_BUFFER_NUM_BATCHED)
 			continue;
 
-		SDrawElementsIndirectCommand scmd{
-			indxCount.count,
-			static_cast<uint32_t>(renderModelData.size()),
-			indxCount.index,
-			0u,
-			batchedBaseInstance
-		};
-
-		submitCmds.emplace_back(scmd);
+		submitCmds.emplace_back(gfx::IndexedIndirectDrawCommand{
+			.indexCount = indxCount.count,
+			.instanceCount = static_cast<uint32_t>(renderModelData.size()),
+			.firstIndex = indxCount.index,
+			.baseVertex = 0,
+			.firstInstance = batchedBaseInstance,
+		});
 
 		allRenderModelData.insert(allRenderModelData.end(), renderModelData.cbegin(), renderModelData.cend());
 		batchedBaseInstance += renderModelData.size();
@@ -398,14 +491,12 @@ void S3DModelVAO::Submit(GLenum mode, bool bindUnbind)
 	if (submitCmds.empty())
 		return;
 
-	instVBO.Bind();
-	instVBO.SetBufferSubData(allRenderModelData);
-	instVBO.Unbind();
+	backendInst->Update(std::as_bytes(std::span<const SInstanceData>(allRenderModelData)), 0u);
 
 	if (bindUnbind)
 		Bind();
 
-	glMultiDrawElementsIndirect(mode, GL_UNSIGNED_INT, submitCmds.data(), submitCmds.size(), sizeof(SDrawElementsIndirectCommand));
+	backend->MultiDrawIndexedIndirect(*backendVAO, ToPrimitiveTopology(mode), submitCmds, gfx::IndexElementType::UInt32);
 
 	if (bindUnbind)
 		Unbind();
@@ -417,6 +508,10 @@ template<typename TObj>
 bool S3DModelVAO::SubmitImmediatelyImpl(const TObj* obj, uint32_t indexStart, uint32_t indexCount, uint8_t teamID, uint8_t drawFlags, GLenum mode, bool bindUnbind)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	auto* backend = (globalRendering != nullptr) ? globalRendering->graphicsBackend.get() : nullptr;
+	if ((backend == nullptr) || (backendVAO == nullptr) || (backendInst == nullptr))
+		return false;
+
 	std::size_t traIndex = transformsUploader.GetElemOffset(obj);
 	if (traIndex == TransformsMemStorage::INVALID_INDEX)
 		return false;
@@ -437,31 +532,44 @@ bool S3DModelVAO::SubmitImmediatelyImpl(const TObj* obj, uint32_t indexStart, ui
 	SInstanceData instanceData(static_cast<uint32_t>(traIndex), teamID, drawFlags, numPieces, uniIndex, bposeIndex);
 	const uint32_t immediateBaseInstanceAbs = INSTANCE_BUFFER_NUM_BATCHED + immediateBaseInstance;
 
-	static SDrawElementsIndirectCommand scmd;
-	scmd = {
-		indexCount,
-		1,
-		indexStart,
-		0u,
-		immediateBaseInstanceAbs
-	};
-
-	instVBO.Bind();
-	instVBO.SetBufferSubData(immediateBaseInstanceAbs * sizeof(SInstanceData), sizeof(SInstanceData), &instanceData);
-	instVBO.Unbind();
+	backendInst->Update(
+		std::as_bytes(std::span<const SInstanceData>(&instanceData, 1)),
+		immediateBaseInstanceAbs * sizeof(SInstanceData));
 
 	immediateBaseInstance = (immediateBaseInstance + 1) % INSTANCE_BUFFER_NUM_IMMEDIATE;
 
 	if (bindUnbind)
 		Bind();
 
-	// As of 01.05.2023 AMD Windows drivers do not support baseInstance field of SDrawElementsIndirectCommand
-	// therefore can't use glDrawElementsIndirect
-	// At the same time AMD Windows drivers sometimes crash on glDrawElementsInstancedBaseInstance
-	// can't use it either
-	// Revert to glMultiDrawElementsIndirect as it works reliably
+	if (backend->Type() == gfx::BackendType::OpenGL) {
+		// As of 01.05.2023 AMD Windows drivers do not support baseInstance field of SDrawElementsIndirectCommand.
+		// At the same time AMD Windows drivers sometimes crash on glDrawElementsInstancedBaseInstance.
+		// Revert to multi-draw indirect as it works reliably.
+		const std::array<gfx::IndexedIndirectDrawCommand, 1> submitCmds = {{
+			gfx::IndexedIndirectDrawCommand{
+				.indexCount = indexCount,
+				.instanceCount = 1,
+				.firstIndex = indexStart,
+				.baseVertex = 0,
+				.firstInstance = immediateBaseInstanceAbs,
+			}
+		}};
 
-	glMultiDrawElementsIndirect(mode, GL_UNSIGNED_INT, &scmd, 1u, sizeof(SDrawElementsIndirectCommand));
+		backend->MultiDrawIndexedIndirect(*backendVAO, ToPrimitiveTopology(mode), submitCmds, gfx::IndexElementType::UInt32);
+	}
+	else {
+		backend->DrawIndexedInstanced(
+			*backendVAO,
+			ToPrimitiveTopology(mode),
+			gfx::IndexedInstancedDrawDesc{
+				.indexCount = indexCount,
+				.firstIndex = indexStart,
+				.baseVertex = 0,
+				.instanceCount = 1,
+				.firstInstance = immediateBaseInstanceAbs,
+			},
+			gfx::IndexElementType::UInt32);
+	}
 
 	if (bindUnbind)
 		Unbind();
