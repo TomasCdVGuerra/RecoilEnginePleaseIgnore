@@ -964,11 +964,14 @@ static auto SplitResourcePackIntoPositiveNegative (const SResourcePack &pack)
 {
 	SResourcePack positive {0.0f}, negative {0.0f};
 
-	for (auto [resourceID, value] : std::views::enumerate (pack)) {
+	size_t resourceID = 0;
+	for (const float value: pack) {
 		if (value < 0.0f)
 			negative[resourceID] = -value;
 		else
 			positive[resourceID] = value;
+
+		++resourceID;
 	}
 
 	return std::make_pair (positive, negative);

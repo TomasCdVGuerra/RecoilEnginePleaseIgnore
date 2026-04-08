@@ -20,6 +20,8 @@
 
 #include "System/Misc/TracyDefs.h"
 
+#include <cmath>
+
 CR_BIND_DERIVED(CMissileLauncher, CWeapon, )
 CR_REG_METADATA(CMissileLauncher, )
 
@@ -127,7 +129,7 @@ bool CMissileLauncher::HaveFreeLineOfFire(const float3& srcPos, const float3& tg
 	const float rt = (tgtPos - srcPos).Length2D();
 	const float yt = (tgtPos.y - srcPos.y);
 	const float eH = (dist * weaponDef->trajectoryHeight);
-	const float eHT = math::truncf(dist / maxSpeed);
+	const float eHT = std::truncf(dist / maxSpeed);
 	const float hstep = eHT / 8.0f;
 
 	// For close targets, impact within 8 frames, just use a TestTrajectoryCone check
