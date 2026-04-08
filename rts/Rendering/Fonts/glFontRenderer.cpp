@@ -14,10 +14,9 @@
 
 #include "System/Misc/TracyDefs.h"
 
-
 ////////////////////////////////////////
-//can't be put in VFS due to initialization order
-static constexpr const char* vsFont330 = R"(
+// can't be put in VFS due to initialization order
+static constexpr const char *vsFont330 = R"(
 #version 150 compatibility
 #extension GL_ARB_explicit_attrib_location : enable
 
@@ -37,7 +36,7 @@ void main() {
 }
 )";
 
-static constexpr const char* fsFont330 = R"(
+static constexpr const char *fsFont330 = R"(
 #version 150
 
 uniform sampler2D tex;
@@ -57,7 +56,7 @@ void main() {
 }
 )";
 
-static constexpr const char* fsFontColor330 = R"(
+static constexpr const char *fsFontColor330 = R"(
 #version 150
 
 uniform sampler2D tex;
@@ -77,10 +76,9 @@ void main() {
 }
 )";
 
-
 ////////////////////////////////////////////
 
-static constexpr const char* vsFont130 = R"(
+static constexpr const char *vsFont130 = R"(
 #version 130
 
 in vec3 pos;
@@ -97,7 +95,7 @@ void main() {
 }
 )";
 
-static constexpr const char* fsFont130 = R"(
+static constexpr const char *fsFont130 = R"(
 #version 130
 
 uniform sampler2D tex;
@@ -112,7 +110,7 @@ void main() {
 	gl_FragColor = vec4(vCol.r, vCol.g, vCol.b, vCol.a * alpha);
 }
 )";
-static constexpr const char* fsFontColor130 = R"(
+static constexpr const char *fsFontColor130 = R"(
 #version 130
 
 uniform sampler2D tex;
@@ -147,24 +145,25 @@ CglShaderFontRenderer::CglShaderFontRenderer()
 	fontShaderColor = std::make_unique<Shader::GLSLProgramObject>("[GL-Font]");
 
 	LOG("[CglFont::%s] Creating Font shaders: GLAD_GL_ARB_explicit_attrib_location = %s", __func__, globalRendering->supportExplicitAttribLoc ? "true" : "false");
-	if (globalRendering->supportExplicitAttribLoc) {
-		fontShader->AttachShaderObject(new Shader::GLSLShaderObject(GL_VERTEX_SHADER  , vsFont330));
+	if (globalRendering->supportExplicitAttribLoc)
+	{
+		fontShader->AttachShaderObject(new Shader::GLSLShaderObject(GL_VERTEX_SHADER, vsFont330));
 		fontShader->AttachShaderObject(new Shader::GLSLShaderObject(GL_FRAGMENT_SHADER, fsFont330));
-		fontShaderColor->AttachShaderObject(new Shader::GLSLShaderObject(GL_VERTEX_SHADER  , vsFont330));
+		fontShaderColor->AttachShaderObject(new Shader::GLSLShaderObject(GL_VERTEX_SHADER, vsFont330));
 		fontShaderColor->AttachShaderObject(new Shader::GLSLShaderObject(GL_FRAGMENT_SHADER, fsFontColor330));
 	}
-	else {
-		fontShader->AttachShaderObject(new Shader::GLSLShaderObject(GL_VERTEX_SHADER  , vsFont130));
+	else
+	{
+		fontShader->AttachShaderObject(new Shader::GLSLShaderObject(GL_VERTEX_SHADER, vsFont130));
 		fontShader->AttachShaderObject(new Shader::GLSLShaderObject(GL_FRAGMENT_SHADER, fsFont130));
 		fontShader->BindAttribLocation("pos", 0);
-		fontShader->BindAttribLocation("uv" , 1);
+		fontShader->BindAttribLocation("uv", 1);
 		fontShader->BindAttribLocation("col", 2);
-		fontShaderColor->AttachShaderObject(new Shader::GLSLShaderObject(GL_VERTEX_SHADER  , vsFont130));
+		fontShaderColor->AttachShaderObject(new Shader::GLSLShaderObject(GL_VERTEX_SHADER, vsFont130));
 		fontShaderColor->AttachShaderObject(new Shader::GLSLShaderObject(GL_FRAGMENT_SHADER, fsFontColor130));
 		fontShaderColor->BindAttribLocation("pos", 0);
-		fontShaderColor->BindAttribLocation("uv" , 1);
+		fontShaderColor->BindAttribLocation("uv", 1);
 		fontShaderColor->BindAttribLocation("col", 2);
-
 	}
 	fontShader->Link();
 	fontShader->Enable();
@@ -188,17 +187,17 @@ CglShaderFontRenderer::~CglShaderFontRenderer()
 	if (fontShaderRefs > 0)
 		return;
 
-	fontShader = nullptr; // fontShader->Release() is called implicitly
+	fontShader = nullptr;	   // fontShader->Release() is called implicitly
 	fontShaderColor = nullptr; // fontShader->Release() is called implicitly
 }
 
-void CglShaderFontRenderer::AddQuadTrianglesPB(VA_TYPE_TC&& tl, VA_TYPE_TC&& tr, VA_TYPE_TC&& br, VA_TYPE_TC&& bl)
+void CglShaderFontRenderer::AddQuadTrianglesPB(VA_TYPE_TC &&tl, VA_TYPE_TC &&tr, VA_TYPE_TC &&br, VA_TYPE_TC &&bl)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	primaryBufferTC.AddQuadTriangles(std::move(tl), std::move(tr), std::move(br), std::move(bl));
 }
 
-void CglShaderFontRenderer::AddQuadTrianglesOB(VA_TYPE_TC&& tl, VA_TYPE_TC&& tr, VA_TYPE_TC&& br, VA_TYPE_TC&& bl)
+void CglShaderFontRenderer::AddQuadTrianglesOB(VA_TYPE_TC &&tl, VA_TYPE_TC &&tr, VA_TYPE_TC &&br, VA_TYPE_TC &&bl)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	outlineBufferTC.AddQuadTriangles(std::move(tl), std::move(tr), std::move(br), std::move(bl));
@@ -211,7 +210,7 @@ void CglShaderFontRenderer::DrawTraingleElements()
 	primaryBufferTC.DrawElements(GL_TRIANGLES);
 }
 
-void CglShaderFontRenderer::HandleTextureUpdate(CFontTexture& fnt, bool onlyUpload)
+void CglShaderFontRenderer::HandleTextureUpdate(CFontTexture &fnt, bool onlyUpload)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	if (!onlyUpload)
@@ -219,38 +218,43 @@ void CglShaderFontRenderer::HandleTextureUpdate(CFontTexture& fnt, bool onlyUplo
 
 	GLint dl = 0;
 	glGetIntegerv(GL_LIST_INDEX, &dl);
-	if (dl == 0) {
+	if (dl == 0)
+	{
 		fnt.UploadGlyphAtlasTextureImpl();
 	}
 }
 
-void CglShaderFontRenderer::PushGLState(const CglFont& fnt)
+void CglShaderFontRenderer::PushGLState(const CglFont &fnt)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	glPushAttrib(GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT);
 	glDisable(GL_DEPTH_TEST);
-	glDisable(GL_ALPHA_TEST); //just in case
+	glDisable(GL_ALPHA_TEST); // just in case
 	glEnable(GL_BLEND);
 	if (!userDefinedBlending)
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	if (auto* texture = dynamic_cast<gfx::GLTexture*>(fnt.GetBackendTexture()); texture != nullptr) {
+	if (auto *texture = dynamic_cast<gfx::GLTexture *>(fnt.GetBackendTexture()); texture != nullptr)
+	{
 		glBindTexture(texture->GetTarget(), texture->GetTextureId());
-	} else {
+	}
+	else
+	{
 		LOG_L(L_WARNING, "[CglShaderFontRenderer::%s] invalid font texture backend object", __func__);
 		glBindTexture(GL_TEXTURE_2D, 0);
 	}
 
 	glGetIntegerv(GL_CURRENT_PROGRAM, &currProgID);
 
-	if (fnt.HasColor()) {
+	if (fnt.HasColor())
+	{
 		fontShaderColor->Enable();
 	}
 	else
 		fontShader->Enable();
 }
 
-void CglShaderFontRenderer::PopGLState(const CglFont& fnt)
+void CglShaderFontRenderer::PopGLState(const CglFont &fnt)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	if (fnt.HasColor())
@@ -261,7 +265,7 @@ void CglShaderFontRenderer::PopGLState(const CglFont& fnt)
 	if (currProgID > 0)
 		glUseProgram(currProgID);
 
-	if (auto* texture = dynamic_cast<gfx::GLTexture*>(fnt.GetBackendTexture()); texture != nullptr)
+	if (auto *texture = dynamic_cast<gfx::GLTexture *>(fnt.GetBackendTexture()); texture != nullptr)
 		glBindTexture(texture->GetTarget(), 0);
 	else
 		glBindTexture(GL_TEXTURE_2D, 0);
@@ -269,7 +273,7 @@ void CglShaderFontRenderer::PopGLState(const CglFont& fnt)
 	glPopAttrib();
 }
 
-void CglShaderFontRenderer::GetStats(std::array<size_t, 8>& stats) const
+void CglShaderFontRenderer::GetStats(std::array<size_t, 8> &stats) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	stats[0 + 0] = primaryBufferTC.SumElems();
@@ -286,9 +290,9 @@ void CglShaderFontRenderer::GetStats(std::array<size_t, 8>& stats) const
 CglNoShaderFontRenderer::CglNoShaderFontRenderer()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	for (auto& v : verts)
+	for (auto &v : verts)
 		v.reserve(NUM_TRI_BUFFER_VERTS);
-	for (auto& i : indcs)
+	for (auto &i : indcs)
 		i.reserve(NUM_TRI_BUFFER_ELEMS);
 
 	textureSpaceMatrix = glGenLists(1);
@@ -302,37 +306,37 @@ CglNoShaderFontRenderer::~CglNoShaderFontRenderer()
 	glDeleteLists(textureSpaceMatrix, 1);
 }
 
-void CglNoShaderFontRenderer::AddQuadTrianglesImpl(bool primary, VA_TYPE_TC&& tl, VA_TYPE_TC&& tr, VA_TYPE_TC&& br, VA_TYPE_TC&& bl)
+void CglNoShaderFontRenderer::AddQuadTrianglesImpl(bool primary, VA_TYPE_TC &&tl, VA_TYPE_TC &&tr, VA_TYPE_TC &&br, VA_TYPE_TC &&bl)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	auto& v = verts[primary];
-	auto& i = indcs[primary];
+	auto &v = verts[primary];
+	auto &i = indcs[primary];
 
 	const uint16_t baseIndex = static_cast<uint16_t>(v.size());
 
-	v.emplace_back(std::move(tl)); //0
-	v.emplace_back(std::move(tr)); //1
-	v.emplace_back(std::move(br)); //2
-	v.emplace_back(std::move(bl)); //3
+	v.emplace_back(std::move(tl)); // 0
+	v.emplace_back(std::move(tr)); // 1
+	v.emplace_back(std::move(br)); // 2
+	v.emplace_back(std::move(bl)); // 3
 
-	//triangle 1 {tl, tr, bl}
+	// triangle 1 {tl, tr, bl}
 	i.emplace_back(baseIndex + 3);
 	i.emplace_back(baseIndex + 0);
 	i.emplace_back(baseIndex + 1);
 
-	//triangle 2 {bl, tr, br}
+	// triangle 2 {bl, tr, br}
 	i.emplace_back(baseIndex + 3);
 	i.emplace_back(baseIndex + 1);
 	i.emplace_back(baseIndex + 2);
 }
 
-void CglNoShaderFontRenderer::AddQuadTrianglesPB(VA_TYPE_TC&& tl, VA_TYPE_TC&& tr, VA_TYPE_TC&& br, VA_TYPE_TC&& bl)
+void CglNoShaderFontRenderer::AddQuadTrianglesPB(VA_TYPE_TC &&tl, VA_TYPE_TC &&tr, VA_TYPE_TC &&br, VA_TYPE_TC &&bl)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	AddQuadTrianglesImpl(true , std::move(tl), std::move(tr), std::move(br), std::move(bl));
+	AddQuadTrianglesImpl(true, std::move(tl), std::move(tr), std::move(br), std::move(bl));
 }
 
-void CglNoShaderFontRenderer::AddQuadTrianglesOB(VA_TYPE_TC&& tl, VA_TYPE_TC&& tr, VA_TYPE_TC&& br, VA_TYPE_TC&& bl)
+void CglNoShaderFontRenderer::AddQuadTrianglesOB(VA_TYPE_TC &&tl, VA_TYPE_TC &&tr, VA_TYPE_TC &&br, VA_TYPE_TC &&bl)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	AddQuadTrianglesImpl(false, std::move(tl), std::move(tr), std::move(br), std::move(bl));
@@ -341,19 +345,21 @@ void CglNoShaderFontRenderer::AddQuadTrianglesOB(VA_TYPE_TC&& tl, VA_TYPE_TC&& t
 void CglNoShaderFontRenderer::DrawTraingleElements()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	auto* backend = (globalRendering != nullptr) ? globalRendering->graphicsBackend.get() : nullptr;
-	if (backend == nullptr || activeTexture == nullptr) {
+	auto *backend = (globalRendering != nullptr) ? globalRendering->graphicsBackend.get() : nullptr;
+	if (backend == nullptr || activeTexture == nullptr)
+	{
 		if (backend == nullptr)
 			LOG_L(L_WARNING, "[CglNoShaderFontRenderer::%s] graphicsBackend is null", __func__);
 
-		for (auto& v : verts)
+		for (auto &v : verts)
 			v.clear();
-		for (auto& i : indcs)
+		for (auto &i : indcs)
 			i.clear();
 		return;
 	}
 
-	if (textVertexBuffer == nullptr) {
+	if (textVertexBuffer == nullptr)
+	{
 		gfx::BufferCreateInfo ci;
 		ci.sizeBytes = 1;
 		ci.usage = gfx::BufferUsage::Dynamic;
@@ -362,7 +368,8 @@ void CglNoShaderFontRenderer::DrawTraingleElements()
 		textVertexBuffer = backend->CreateVertexBuffer(ci);
 	}
 
-	if (textIndexBuffer == nullptr) {
+	if (textIndexBuffer == nullptr)
+	{
 		gfx::BufferCreateInfo ci;
 		ci.sizeBytes = 1;
 		ci.usage = gfx::BufferUsage::Dynamic;
@@ -371,12 +378,13 @@ void CglNoShaderFontRenderer::DrawTraingleElements()
 		textIndexBuffer = backend->CreateVertexBuffer(ci);
 	}
 
-	if (textVertexBuffer == nullptr || textIndexBuffer == nullptr) {
+	if (textVertexBuffer == nullptr || textIndexBuffer == nullptr)
+	{
 		LOG_L(L_WARNING, "[CglNoShaderFontRenderer::%s] failed to create dynamic draw buffers", __func__);
 
-		for (auto& v : verts)
+		for (auto &v : verts)
 			v.clear();
-		for (auto& i : indcs)
+		for (auto &i : indcs)
 			i.clear();
 		return;
 	}
@@ -393,7 +401,8 @@ void CglNoShaderFontRenderer::DrawTraingleElements()
 	state.premultipliedAlpha = false;
 	state.useDefaultBlendFunc = !userDefinedBlending;
 
-	for (size_t idx = 0; idx < 2; ++idx) {
+	for (size_t idx = 0; idx < 2; ++idx)
+	{
 		if (verts[idx].empty() || indcs[idx].empty())
 			continue;
 
@@ -406,13 +415,11 @@ void CglNoShaderFontRenderer::DrawTraingleElements()
 			textIndexBuffer->Resize(indexSizeBytes, false);
 
 		const auto vertexData = std::span<const std::byte>(
-			reinterpret_cast<const std::byte*>(verts[idx].data()),
-			vertexSizeBytes
-		);
+			reinterpret_cast<const std::byte *>(verts[idx].data()),
+			vertexSizeBytes);
 		const auto indexData = std::span<const std::byte>(
-			reinterpret_cast<const std::byte*>(indcs[idx].data()),
-			indexSizeBytes
-		);
+			reinterpret_cast<const std::byte *>(indcs[idx].data()),
+			indexSizeBytes);
 
 		textVertexBuffer->Update(vertexData);
 		textIndexBuffer->Update(indexData);
@@ -428,17 +435,16 @@ void CglNoShaderFontRenderer::DrawTraingleElements()
 			std::span<const gfx::TexturedIndexedBatchDesc>(&batch, 1),
 			vertexLayout,
 			gfx::IndexElementType::UInt16,
-			state
-		);
+			state);
 	}
 
-	for (auto& v : verts)
+	for (auto &v : verts)
 		v.clear();
-	for (auto& i : indcs)
+	for (auto &i : indcs)
 		i.clear();
 }
 
-void CglNoShaderFontRenderer::HandleTextureUpdate(CFontTexture& fnt, bool onlyUpload)
+void CglNoShaderFontRenderer::HandleTextureUpdate(CFontTexture &fnt, bool onlyUpload)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	if (!onlyUpload)
@@ -446,7 +452,8 @@ void CglNoShaderFontRenderer::HandleTextureUpdate(CFontTexture& fnt, bool onlyUp
 
 	GLint dl = 0;
 	glGetIntegerv(GL_LIST_INDEX, &dl);
-	if (dl == 0) {
+	if (dl == 0)
+	{
 		fnt.UploadGlyphAtlasTextureImpl();
 
 		// update texture space dlist (this affects already compiled dlists too!)
@@ -456,7 +463,7 @@ void CglNoShaderFontRenderer::HandleTextureUpdate(CFontTexture& fnt, bool onlyUp
 	}
 }
 
-void CglNoShaderFontRenderer::PushGLState(const CglFont& fnt)
+void CglNoShaderFontRenderer::PushGLState(const CglFont &fnt)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	glPushAttrib(GL_ENABLE_BIT | GL_CURRENT_BIT);
@@ -475,7 +482,7 @@ void CglNoShaderFontRenderer::PushGLState(const CglFont& fnt)
 	glCallList(textureSpaceMatrix);
 }
 
-void CglNoShaderFontRenderer::PopGLState(const CglFont&)
+void CglNoShaderFontRenderer::PopGLState(const CglFont &)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	glPopMatrix();
@@ -487,19 +494,18 @@ void CglNoShaderFontRenderer::PopGLState(const CglFont&)
 	activeTexture = nullptr;
 }
 
-void CglNoShaderFontRenderer::GetStats(std::array<size_t, 8>& stats) const
+void CglNoShaderFontRenderer::GetStats(std::array<size_t, 8> &stats) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	/// placeholder
 	std::fill(stats.begin(), stats.end(), 0);
 }
 
-
 std::unique_ptr<CglFontRenderer> CglFontRenderer::CreateInstance()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 #ifndef HEADLESS
-	//return std::make_unique<CglNoShaderFontRenderer>();
+	// return std::make_unique<CglNoShaderFontRenderer>();
 	if (globalRendering->amdHacks)
 		return std::make_unique<CglNoShaderFontRenderer>();
 
@@ -514,13 +520,13 @@ std::unique_ptr<CglFontRenderer> CglFontRenderer::CreateInstance()
 #endif
 }
 
-void CglFontRenderer::DeleteInstance(std::unique_ptr<CglFontRenderer>& instance)
+void CglFontRenderer::DeleteInstance(std::unique_ptr<CglFontRenderer> &instance)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	instance = nullptr;
 }
 
-void CglNullFontRenderer::GetStats(std::array<size_t, 8>& stats) const
+void CglNullFontRenderer::GetStats(std::array<size_t, 8> &stats) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	std::fill(stats.begin(), stats.end(), 0u);
