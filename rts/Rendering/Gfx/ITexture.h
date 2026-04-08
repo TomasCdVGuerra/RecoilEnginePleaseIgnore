@@ -27,6 +27,16 @@ namespace gfx
             std::size_t rowPitchBytes = 0,
             std::size_t slicePitchBytes = 0) = 0;
 
+        virtual void UploadSubRegion(
+            std::uint32_t mipLevel,
+            std::uint32_t arrayLayer,
+            std::uint32_t xOffset,
+            std::uint32_t yOffset,
+            std::uint32_t width,
+            std::uint32_t height,
+            std::span<const std::byte> pixels,
+            std::size_t rowPitchBytes = 0) = 0;
+
         virtual void GenerateMipmaps() = 0;
     };
 

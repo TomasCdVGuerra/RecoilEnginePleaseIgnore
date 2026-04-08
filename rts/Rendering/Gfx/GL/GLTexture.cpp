@@ -414,6 +414,127 @@ namespace gfx
         glBindTexture(target, 0);
     }
 
+    void GLTexture::UploadSubRegion(
+        std::uint32_t mipLevel,
+        std::uint32_t arrayLayer,
+        std::uint32_t xOffset,
+        std::uint32_t yOffset,
+        std::uint32_t width,
+        std::uint32_t height,
+        std::span<const std::byte> pixels,
+        std::size_t rowPitchBytes)
+    {
+        if (textureId == 0 || pixels.empty())
+            return;
+
+        if (mipLevel >= mipLevels)
+        {
+            LOG_L(L_WARNING, "[GLTexture::UploadSubRegion] Invalid mip level %u (max=%u)", mipLevel, (mipLevels - 1));
+            return;
+        }
+
+        if ((width == 0u) || (height == 0u))
+            return;
+
+        const Extent3D mipExtent = CalcMipExtent(extent, mipLevel);
+        if ((xOffset >= mipExtent.width) ||
+            (yOffset >= mipExtent.height) ||
+            (width > (mipExtent.width - xOffset)) ||
+            (height > (mipExtent.height - yOffset)))
+        {
+            LOG_L(
+                L_WARNING,
+                "[GLTexture::UploadSubRegion] Invalid region (%u,%u %ux%u) for mip extent (%u,%u)",
+                xOffset,
+                yOffset,
+                width,
+                height,
+                mipExtent.width,
+                mipExtent.height);
+            return;
+        }
+
+        glBindTexture(target, textureId);
+
+        GLint prevUnpackAlignment = 4;
+        GLint prevUnpackRowLength = 0;
+        bool unpackRowLengthChanged = false;
+
+        glGetIntegerv(GL_UNPACK_ALIGNMENT, &prevUnpackAlignment);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+        if (rowPitchBytes != 0)
+        {
+            if ((rowPitchBytes % bytesPerPixel) == 0)
+            {
+                glGetIntegerv(GL_UNPACK_ROW_LENGTH, &prevUnpackRowLength);
+                glPixelStorei(GL_UNPACK_ROW_LENGTH, ToGLInt(rowPitchBytes / bytesPerPixel));
+                unpackRowLengthChanged = true;
+            }
+            else
+            {
+                LOG_L(L_WARNING, "[GLTexture::UploadSubRegion] rowPitchBytes (%zu) is not aligned to bytesPerPixel (%u)", rowPitchBytes, bytesPerPixel);
+            }
+        }
+
+        switch (dimension)
+        {
+        case TextureDimension::Tex2D:
+        {
+            if (arrayLayer != 0)
+            {
+                LOG_L(L_WARNING, "[GLTexture::UploadSubRegion] arrayLayer ignored for Tex2D (value=%u)", arrayLayer);
+            }
+
+            glTexSubImage2D(
+                GL_TEXTURE_2D,
+                static_cast<GLint>(mipLevel),
+                ToGLInt(static_cast<std::size_t>(xOffset)),
+                ToGLInt(static_cast<std::size_t>(yOffset)),
+                ToGLSizei(width),
+                ToGLSizei(height),
+                uploadFormat,
+                uploadType,
+                pixels.data());
+        }
+        break;
+
+        case TextureDimension::Cube:
+        {
+            if (arrayLayer >= 6u)
+            {
+                LOG_L(L_WARNING, "[GLTexture::UploadSubRegion] Invalid cube face index %u (expected 0..5)", arrayLayer);
+                break;
+            }
+
+            glTexSubImage2D(
+                (GL_TEXTURE_CUBE_MAP_POSITIVE_X + arrayLayer),
+                static_cast<GLint>(mipLevel),
+                ToGLInt(static_cast<std::size_t>(xOffset)),
+                ToGLInt(static_cast<std::size_t>(yOffset)),
+                ToGLSizei(width),
+                ToGLSizei(height),
+                uploadFormat,
+                uploadType,
+                pixels.data());
+        }
+        break;
+
+        case TextureDimension::Tex2DArray:
+        case TextureDimension::Tex3D:
+        {
+            LOG_L(L_WARNING, "[GLTexture::UploadSubRegion] Sub-region upload via glTexSubImage2D is only supported for Tex2D and Cube textures");
+        }
+        break;
+        }
+
+        if (unpackRowLengthChanged)
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, prevUnpackRowLength);
+
+        glPixelStorei(GL_UNPACK_ALIGNMENT, prevUnpackAlignment);
+        glBindTexture(target, 0);
+    }
+
     void GLTexture::MoveFrom(GLTexture &&other) noexcept
     {
         textureId = other.textureId;

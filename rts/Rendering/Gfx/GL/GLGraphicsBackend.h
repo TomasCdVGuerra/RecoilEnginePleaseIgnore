@@ -24,6 +24,15 @@ namespace gfx
             std::span<const LineBatchDesc> batches,
             const LineStippleState &stippleState) override;
 
+        void DrawTexturedIndexedBatches(
+            IVertexBuffer &vertexBuffer,
+            IVertexBuffer &indexBuffer,
+            ITexture &texture,
+            std::span<const TexturedIndexedBatchDesc> batches,
+            const TexturedVertexLayout &vertexLayout,
+            IndexElementType indexType,
+            const TexturedBatchState &state) override;
+
         void BeginFrame() override;
         void EndFrame() override;
         void DeviceWaitIdle() override;

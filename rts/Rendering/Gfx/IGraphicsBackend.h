@@ -44,6 +44,33 @@ namespace gfx
         std::uint16_t pattern = 0xFFFF;
     };
 
+    enum class IndexElementType : std::uint8_t
+    {
+        UInt16,
+        UInt32,
+    };
+
+    struct TexturedVertexLayout
+    {
+        std::uint32_t strideBytes = 0;
+        std::uint32_t positionOffsetBytes = 0;
+        std::uint32_t texCoordOffsetBytes = 0;
+        std::uint32_t colorOffsetBytes = 0;
+    };
+
+    struct TexturedIndexedBatchDesc
+    {
+        std::uint32_t firstIndex = 0;
+        std::uint32_t indexCount = 0;
+    };
+
+    struct TexturedBatchState
+    {
+        bool depthTest = false;
+        bool blend = true;
+        bool premultipliedAlpha = false;
+    };
+
     class ITexture;
     class IVertexBuffer;
 
@@ -63,6 +90,15 @@ namespace gfx
             IVertexBuffer &vertexBuffer,
             std::span<const LineBatchDesc> batches,
             const LineStippleState &stippleState) = 0;
+
+        virtual void DrawTexturedIndexedBatches(
+            IVertexBuffer &vertexBuffer,
+            IVertexBuffer &indexBuffer,
+            ITexture &texture,
+            std::span<const TexturedIndexedBatchDesc> batches,
+            const TexturedVertexLayout &vertexLayout,
+            IndexElementType indexType,
+            const TexturedBatchState &state) = 0;
 
         virtual void BeginFrame() = 0;
         virtual void EndFrame() = 0;
