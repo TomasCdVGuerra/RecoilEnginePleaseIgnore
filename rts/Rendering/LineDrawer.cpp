@@ -16,10 +16,11 @@
 namespace
 {
 
-	std::uint32_t ToUint32(std::size_t value, const char* context)
+	std::uint32_t ToUint32(std::size_t value, const char *context)
 	{
 		constexpr std::size_t maxValue = static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max());
-		if (value > maxValue) {
+		if (value > maxValue)
+		{
 			LOG_L(L_WARNING, "[CLineDrawer::%s] value (%zu) exceeds uint32 max (%zu), clamping", context, value, maxValue);
 			return std::numeric_limits<std::uint32_t>::max();
 		}
@@ -31,16 +32,8 @@ namespace
 
 CLineDrawer lineDrawer;
 
-
 CLineDrawer::CLineDrawer()
-	: lineStipple(false)
-	, useColorRestarts(false)
-	, useRestartColor(false)
-	, restartAlpha(0.0f)
-	, restartColor(nullptr)
-	, lastPos(ZeroVector)
-	, lastColor(nullptr)
-	, stippleTimer(0.0f)
+	: lineStipple(false), useColorRestarts(false), useRestartColor(false), restartAlpha(0.0f), restartColor(nullptr), lastPos(ZeroVector), lastColor(nullptr), stippleTimer(0.0f)
 {
 	lines.reserve(32);
 	stippled.reserve(32);
@@ -50,20 +43,21 @@ CLineDrawer::CLineDrawer()
 	stippledBatches.reserve(32);
 }
 
-
 void CLineDrawer::UpdateLineStipple()
 {
 	stippleTimer += (globalRendering->lastFrameTime * 0.001f * cmdColors.StippleSpeed());
 	stippleTimer = std::fmod(stippleTimer, (16.0f / 20.0f));
 }
 
-
 void CLineDrawer::SetupLineStipple()
 {
 	const unsigned int stipPat = (0xffff & cmdColors.StipplePattern());
-	if ((stipPat != 0x0000) && (stipPat != 0xffff)) {
+	if ((stipPat != 0x0000) && (stipPat != 0xffff))
+	{
 		lineStipple = true;
-	} else {
+	}
+	else
+	{
 		lineStipple = false;
 		stippleState.enabled = false;
 		return;
@@ -77,25 +71,27 @@ void CLineDrawer::SetupLineStipple()
 	stippleState.pattern = static_cast<std::uint16_t>(fullPat >> shiftBits);
 }
 
-
 void CLineDrawer::DrawAll()
 {
 	if (lines.empty() && stippled.empty())
 		return;
 
-	auto* backend = (globalRendering != nullptr) ? globalRendering->graphicsBackend.get() : nullptr;
-	if (backend == nullptr) {
+	auto *backend = (globalRendering != nullptr) ? globalRendering->graphicsBackend.get() : nullptr;
+	if (backend == nullptr)
+	{
 		LOG_L(L_WARNING, "[CLineDrawer::%s] graphicsBackend is null, dropping queued lines", __func__);
 		lines.clear();
 		stippled.clear();
 		return;
 	}
 
-	auto buildUploadData = [](const std::vector<LinePair>& linePairs, std::vector<gfx::LineVertexPC>& vertices, std::vector<gfx::LineBatchDesc>& batches) {
+	auto buildUploadData = [](const std::vector<LinePair> &linePairs, std::vector<gfx::LineVertexPC> &vertices, std::vector<gfx::LineBatchDesc> &batches)
+	{
 		vertices.clear();
 		batches.clear();
 
-		for (const LinePair& pair : linePairs) {
+		for (const LinePair &pair : linePairs)
+		{
 			const std::size_t vertsCount = pair.verts.size() / 3u;
 			const std::size_t colorsCount = pair.colors.size() / 4u;
 			const std::size_t numVertices = std::min(vertsCount, colorsCount);
@@ -106,8 +102,9 @@ void CLineDrawer::DrawAll()
 			const std::size_t firstVertex = vertices.size();
 			vertices.resize(firstVertex + numVertices);
 
-			for (std::size_t i = 0; i < numVertices; ++i) {
-				auto& dst = vertices[firstVertex + i];
+			for (std::size_t i = 0; i < numVertices; ++i)
+			{
+				auto &dst = vertices[firstVertex + i];
 
 				const std::size_t vi = i * 3u;
 				const std::size_t ci = i * 4u;
@@ -134,13 +131,15 @@ void CLineDrawer::DrawAll()
 	buildUploadData(lines, lineVertices, lineBatches);
 	buildUploadData(stippled, stippledVertices, stippledBatches);
 
-	auto uploadVertices = [backend](std::unique_ptr<gfx::IVertexBuffer>& vertexBuffer, const std::vector<gfx::LineVertexPC>& vertices, const char* debugName) -> bool {
+	auto uploadVertices = [backend](std::unique_ptr<gfx::IVertexBuffer> &vertexBuffer, const std::vector<gfx::LineVertexPC> &vertices, const char *debugName) -> bool
+	{
 		if (vertices.empty())
 			return false;
 
 		const std::size_t sizeBytes = vertices.size() * sizeof(gfx::LineVertexPC);
 
-		if (!vertexBuffer) {
+		if (!vertexBuffer)
+		{
 			gfx::BufferCreateInfo ci;
 			ci.sizeBytes = sizeBytes;
 			ci.usage = gfx::BufferUsage::Dynamic;
@@ -149,25 +148,29 @@ void CLineDrawer::DrawAll()
 			ci.debugName = debugName;
 
 			vertexBuffer = backend->CreateVertexBuffer(ci);
-			if (!vertexBuffer) {
+			if (!vertexBuffer)
+			{
 				LOG_L(L_WARNING, "[CLineDrawer::%s] Failed to create vertex buffer (%s)", __func__, debugName);
 				return false;
 			}
 		}
 
-		if (vertexBuffer->SizeBytes() < sizeBytes) {
+		if (vertexBuffer->SizeBytes() < sizeBytes)
+		{
 			vertexBuffer->Resize(sizeBytes, false);
 		}
 
-		const std::byte* rawPtr = reinterpret_cast<const std::byte*>(vertices.data());
+		const std::byte *rawPtr = reinterpret_cast<const std::byte *>(vertices.data());
 		std::span<const std::byte> uploadData(rawPtr, sizeBytes);
 
 		bool uploaded = false;
 
-		if (vertexBuffer->IsMappable()) {
+		if (vertexBuffer->IsMappable())
+		{
 			auto mappedData = vertexBuffer->MapWrite(0u, sizeBytes);
 
-			if (mappedData.size() >= sizeBytes) {
+			if (mappedData.size() >= sizeBytes)
+			{
 				std::memcpy(mappedData.data(), rawPtr, sizeBytes);
 				uploaded = true;
 			}
@@ -175,7 +178,8 @@ void CLineDrawer::DrawAll()
 			vertexBuffer->UnmapWrite();
 		}
 
-		if (!uploaded) {
+		if (!uploaded)
+		{
 			vertexBuffer->Update(uploadData, 0u);
 		}
 
@@ -184,11 +188,13 @@ void CLineDrawer::DrawAll()
 
 	const gfx::LineStippleState noStipple = {};
 
-	if (!lineBatches.empty() && uploadVertices(lineVertexBuffer, lineVertices, "LineDrawer::SolidLines")) {
+	if (!lineBatches.empty() && uploadVertices(lineVertexBuffer, lineVertices, "LineDrawer::SolidLines"))
+	{
 		backend->DrawLineBatches(*lineVertexBuffer, std::span<const gfx::LineBatchDesc>(lineBatches.data(), lineBatches.size()), noStipple);
 	}
 
-	if (!stippledBatches.empty() && uploadVertices(stippledVertexBuffer, stippledVertices, "LineDrawer::StippledLines")) {
+	if (!stippledBatches.empty() && uploadVertices(stippledVertexBuffer, stippledVertices, "LineDrawer::StippledLines"))
+	{
 		backend->DrawLineBatches(*stippledVertexBuffer, std::span<const gfx::LineBatchDesc>(stippledBatches.data(), stippledBatches.size()), stippleState);
 	}
 

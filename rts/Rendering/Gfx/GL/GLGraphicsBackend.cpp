@@ -112,8 +112,7 @@ namespace gfx
             glEnable(GL_LINE_STIPPLE);
             glLineStipple(
                 ToGLInt(stippleState.factor, "DrawLineBatches::factor"),
-                static_cast<GLushort>(stippleState.pattern)
-            );
+                static_cast<GLushort>(stippleState.pattern));
         }
         else
         {
@@ -134,8 +133,7 @@ namespace gfx
             glDrawArrays(
                 TranslateLinePrimitive(batch.primitive),
                 ToGLInt(batch.firstVertex, "DrawLineBatches::firstVertex"),
-                ToGLSizei(batch.vertexCount, "DrawLineBatches::vertexCount")
-            );
+                ToGLSizei(batch.vertexCount, "DrawLineBatches::vertexCount"));
         }
 
         glBindBuffer(GL_ARRAY_BUFFER, 0);
