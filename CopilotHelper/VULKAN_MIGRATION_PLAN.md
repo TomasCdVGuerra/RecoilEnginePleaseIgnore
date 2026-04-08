@@ -377,6 +377,49 @@ Phase 5.1 implication summary:
 2. A complete migration will need backend-neutral texture parameter application (filtering/wrap/lod/aniso) in addition to upload/mipmap APIs.
 3. Optional async upload optimization can be introduced later through backend staging mechanisms rather than preserving direct PBO dependencies.
 
+#### [IN PROGRESS] Phase 5.2: 3D Model Scouting
+Target files:
+1. `rts/Rendering/Models/3DModel.hpp` (header counterpart to requested `3DModel.h`)
+2. `rts/Rendering/Models/3DModel.cpp`
+3. `rts/Rendering/Models/LocalModel.hpp` (header counterpart to requested `LocalModel.h`)
+4. `rts/Rendering/Models/LocalModel.cpp`
+
+Container-level coupling findings (`3DModel.cpp`, `LocalModel.cpp`):
+1. `S3DModel::DrawStatic()` is still legacy-path coupled via `S3DModelHelpers::BindLegacyAttrVBOs()` / `UnbindLegacyAttrVBOs()` and per-piece legacy draws (`DrawStaticLegacy`).
+2. `LocalModel.cpp` itself contains no direct VAO/VBO setup calls; draw fanout goes through `LocalModelPiece::Draw()` / `DrawLOD()`.
+3. Actual OpenGL submission and vertex-state setup for these models is delegated to model-subsystem helpers (`3DModelPiece.cpp`, `LocalModelPiece.cpp`, `3DModelVAO.cpp`) rather than in the two container files directly.
+
+VAO/VBO lifecycle and binding findings (model subsystem path):
+1. `S3DModelVAO` owns persistent model buffers (`vertVBO`, `indxVBO`, `instVBO`) and a `VAO`; constructor preallocates instance-buffer storage with `VBO::New(..., GL_STREAM_DRAW)`.
+2. `S3DModelVAO::CreateVAO()` binds VAO + VBO/IBO, programs attribute state, then unbinds and disables attrib arrays.
+3. Raw object creation/binding is wrapped but still OpenGL-bound: `VAO::Generate()` -> `glGenVertexArrays`, `VAO::Bind()` -> `glBindVertexArray`; `VBO::Generate()` -> `glGenBuffers`, `VBO::Bind()` -> `glBindBuffer`.
+
+Vertex attribute layout findings (`3DModelVAO::EnableAttribs`):
+1. Vertex stream (`SVertexData`, divisor 0):
+	- location 0: `float3` position (`pos`)
+	- location 1: `float3` normal (`normal`)
+	- location 2: `float3` tangent (`sTangent`)
+	- location 3: `float3` bitangent (`tTangent`)
+	- location 4: `float4` packed UV channels (`texCoords[0].xy` + `texCoords[1].xy`)
+	- location 5: integer packed bone block (`uvec3` via `glVertexAttribIPointer`, sourced at `boneIDsLow` offset)
+2. Instance stream (`SInstanceData`, divisor 1):
+	- location 6: integer `uvec4` payload (`matOffset`, `uniOffset`, packed info bytes, `bposeMatOffset`)
+
+Draw submission findings:
+1. Piece draw path resolves to `S3DModelVAO::DrawElements()` -> `glDrawElements(prim, count, GL_UNSIGNED_INT, ...)`.
+2. Batched model submission uses `glMultiDrawElementsIndirect(..., GL_UNSIGNED_INT, ...)` for both batched and immediate paths.
+3. `LocalModelPiece::DrawLOD()` still supports display-list fallback (`glCallList`) when an LOD list exists; otherwise it uses the same indexed path.
+4. No `glDrawArrays` usage was found in this model geometry path.
+
+Texture and shader binding findings:
+1. No direct `glBindTexture` or shader program bind/use calls are present in `3DModel.cpp`, `3DModel.hpp`, `LocalModel.cpp`, or `LocalModel.hpp`.
+2. Model classes are primarily geometry/transform containers; texture and shader binding responsibility remains in higher-level rendering state/drawer systems.
+
+Phase 5.2 implication summary:
+1. The critical GL lock-in for model migration is VAO attribute-state declaration and indirect indexed submission APIs.
+2. Existing `S3DModelVAO` already centralizes geometry ownership, making it a practical pivot point for introducing backend-neutral vertex-layout and draw-command abstractions.
+3. Legacy fixed-function helpers (`BindLegacyAttrVBOs`, matrix stack usage in piece draw calls, display-list LOD fallback) must be staged behind backend-compatible compatibility paths during migration.
+
 ### [PENDING] Phase 6: Core Rendering Systems Migration
 Goal: Abstract the most tightly coupled OpenGL systems: framebuffers, shaders, and map rendering.
 
