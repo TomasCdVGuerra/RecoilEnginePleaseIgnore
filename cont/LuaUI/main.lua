@@ -68,6 +68,8 @@ forceLayout = true
 
 
 function Update(dt)
+  dt = dt or Spring.GetLastUpdateSeconds()
+
   local currentPage = Spring.GetActivePage()
   if (forceLayout or (currentPage ~= activePage)) then
     Spring.ForceLayoutUpdate()  --  for the page number indicator
@@ -107,6 +109,18 @@ end
 
 function CameraPositionChanged(posx, posy, posz)
   return widgetHandler:CameraPositionChanged(posx, posy, posz)
+end
+
+function MiniMapRotationChanged(newRot, oldRot)
+  return widgetHandler:MiniMapRotationChanged(newRot, oldRot)
+end
+
+function MiniMapStateChanged(isMinimized, isMaximized, isSlaved)
+  return widgetHandler:MiniMapStateChanged(isMinimized, isMaximized, isSlaved)
+end
+
+function MiniMapGeometryChanged(newPosX, newPosY, newDimX, newDimY, oldPosX, oldPosY, oldDimX, oldDimY)
+  return widgetHandler:MiniMapGeometryChanged(newPosX, newPosY, newDimX, newDimY, oldPosX, oldPosY, oldDimX, oldDimY)
 end
 
 function CommandNotify(id, params, options)
