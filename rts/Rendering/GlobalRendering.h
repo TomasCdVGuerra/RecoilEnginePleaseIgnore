@@ -18,7 +18,7 @@ class SharedLib;
 struct SDL_version;
 struct SDL_Rect;
 struct SDL_Window;
-typedef void* SDL_GLContext;
+typedef void *SDL_GLContext;
 
 /**
  * @brief Globally accessible unsynced, rendering related data
@@ -26,7 +26,8 @@ typedef void* SDL_GLContext;
  * Contains globally accessible rendering related data
  * that does not remain synced.
  */
-class CGlobalRendering {
+class CGlobalRendering
+{
 	CR_DECLARE_STRUCT(CGlobalRendering)
 
 public:
@@ -43,10 +44,10 @@ public:
 	 *
 	 * Sets SDL video mode options/settings
 	 */
-	bool CreateWindowAndContext(const char* title);
-	SDL_Window* CreateSDLWindow(const char* title) const;
-	SDL_GLContext CreateGLContext(const int2& minCtx);
-	SDL_Window* GetWindow() { return sdlWindow; }
+	bool CreateWindowAndContext(const char *title);
+	SDL_Window *CreateSDLWindow(const char *title) const;
+	SDL_GLContext CreateGLContext(const int2 &minCtx);
+	SDL_Window *GetWindow() { return sdlWindow; }
 	SDL_GLContext GetContext() { return glContext; }
 
 	void DestroyWindowAndContext();
@@ -64,19 +65,19 @@ public:
 	void SetGLSupportFlags();
 	void QueryVersionInfo(char (&sdlVersionStr)[64], char (&glVidMemStr)[64]);
 	void QueryGLMaxVals();
-	void LogVersionInfo(const char* sdlVersionStr, const char* glVidMemStr) const;
-	void LogDisplayMode(SDL_Window* window) const;
+	void LogVersionInfo(const char *sdlVersionStr, const char *glVidMemStr) const;
+	void LogDisplayMode(SDL_Window *window) const;
 
-	void GetAllDisplayBounds(SDL_Rect& r) const;
+	void GetAllDisplayBounds(SDL_Rect &r) const;
 
-	void GetWindowPosSizeBounded(int& x, int& y, int& w, int& h) const;
+	void GetWindowPosSizeBounded(int &x, int &y, int &w, int &h) const;
 
-	void SetWindowTitle(const std::string& title);
-	void SetWindowAttributes(SDL_Window* window);
+	void SetWindowTitle(const std::string &title);
+	void SetWindowAttributes(SDL_Window *window);
 	void UpdateWindow();
 	void UpdateTimer();
 
-	void ConfigNotify(const std::string& key, const std::string& value);
+	void ConfigNotify(const std::string &key, const std::string &value);
 
 	bool GetWindowInputGrabbing();
 	bool SetWindowInputGrabbing(bool enable);
@@ -84,7 +85,7 @@ public:
 
 	bool SetWindowPosHelper(int displayIdx, int winRPosX, int winRPosY, int winSizeX_, int winSizeY_, bool fs, bool bl) const;
 
-	bool SetWindowMaximized() const { return SetWindowMinMaximized(true ); };
+	bool SetWindowMaximized() const { return SetWindowMinMaximized(true); };
 	bool SetWindowMinimized() const { return SetWindowMinMaximized(false); };
 
 	void SetFullScreen(bool cliWindowed, bool cliFullScreen);
@@ -100,27 +101,29 @@ public:
 	void LoadViewport();
 	void LoadDualViewport();
 
-	void UpdateWindowBorders(SDL_Window* window) const;
+	void UpdateWindowBorders(SDL_Window *window) const;
 
 	int2 GetMaxWinRes() const;
 	int2 GetCfgWinRes() const;
 
 	int GetCurrentDisplayIndex() const;
-	void GetDisplayBounds(SDL_Rect& r, const int* di = nullptr) const;
-	void GetUsableDisplayBounds(SDL_Rect& r, const int* di = nullptr) const;
+	void GetDisplayBounds(SDL_Rect &r, const int *di = nullptr) const;
+	void GetUsableDisplayBounds(SDL_Rect &r, const int *di = nullptr) const;
 
-	bool IsExtensionSupported(const char* ext) const;
+	bool IsExtensionSupported(const char *ext) const;
 
 	bool CheckGLMultiSampling() const;
-	bool CheckGLContextVersion(const int2& minCtx) const;
+	bool CheckGLContextVersion(const int2 &minCtx) const;
 	bool ToggleGLDebugOutput(unsigned int msgSrceIdx, unsigned int msgTypeIdx, unsigned int msgSevrIdx) const;
 	void InitGLState();
 	void ToggleMultisampling() const;
 
 	bool CheckShaderGL4() const;
+
 public:
-	//helper function
+	// helper function
 	static int DepthBitsToFormat(int bits);
+
 public:
 	/**
 	 * @brief time offset
@@ -241,7 +244,6 @@ public:
 
 	float maxTexAnisoLvl;
 
-
 	bool drawSky;
 	bool drawWater;
 	bool drawGround;
@@ -271,7 +273,6 @@ public:
 	 */
 	bool teamNanospray;
 
-
 	/**
 	 * @brief active video
 	 *
@@ -283,7 +284,7 @@ public:
 	 * @brief compressTextures
 	 *
 	 * If set, many (not all) textures will compressed on run-time.
-	*/
+	 */
 	bool compressTextures;
 
 	/**
@@ -297,7 +298,6 @@ public:
 	bool haveIntel;
 	bool haveNvidia;
 
-
 	/**
 	 * @brief collection of some ATI bugfixes
 	 *
@@ -306,10 +306,10 @@ public:
 	bool amdHacks;
 
 	/**
-	* @brief whether the GPU supports persistent buffer mapping
-	*
-	* ARB_buffer_storage or OpenGL 4.4
-	*/
+	 * @brief whether the GPU supports persistent buffer mapping
+	 *
+	 * ARB_buffer_storage or OpenGL 4.4
+	 */
 	bool supportPersistentMapping;
 
 	// GLAD_GL_ARB_explicit_attrib_location
@@ -370,61 +370,63 @@ public:
 	bool borderless;
 
 	bool underExternalDebug;
-	
-	/** 
+
+	/**
 	 * @brief Forces Window's desktop compositing before(1)/after(2) each glSwapWindow
-	*/
+	 */
 	int forceDWMFlush;
 
-	#ifdef _WIN32
-		std::unique_ptr<SharedLib> dwmApiLib;
-		void* DwmGetWindowAttribute = nullptr;
-		void* DwmFlush = nullptr;
-	#endif
+#ifdef _WIN32
+	std::unique_ptr<SharedLib> dwmApiLib;
+	void *DwmGetWindowAttribute = nullptr;
+	void *DwmFlush = nullptr;
+#endif
 public:
-	SDL_Window* sdlWindow;
+	SDL_Window *sdlWindow;
 	SDL_GLContext glContext;
 	std::unique_ptr<gfx::IGraphicsBackend> graphicsBackend;
+
 public:
 	/**
-	* @brief maximum texture unit number
-	*/
+	 * @brief maximum texture unit number
+	 */
 	static constexpr int MAX_TEXTURE_UNITS = 32;
 	/**
-	* @brief max view range in elmos
-	*/
+	 * @brief max view range in elmos
+	 */
 	static constexpr float MAX_VIEW_RANGE = 65536.0f;
 
 	/**
-	* @brief near z-plane distance in elmos
-	*/
+	 * @brief near z-plane distance in elmos
+	 */
 	static constexpr float MIN_ZNEAR_DIST = 0.5f;
-
 
 	/// magic constant to reduce overblending on SMF maps
 	/// (scales the MapInfo::light_t::ground*Color values;
 	/// roughly equal to 210.0f / 255.0f)
 	static constexpr float SMF_INTENSITY_MULT = (210.0f / 256.0f) + (1.0f / 256.0f) - (1.0f / 2048.0f) - (1.0f / 4096.0f);
 
-	//minimum window resolution in non-fullscreen mode
-	static constexpr int2 minRes = { 400, 400 };
+	// minimum window resolution in non-fullscreen mode
+	static constexpr int2 minRes = {400, 400};
 
 	static constexpr uint32_t NUM_OPENGL_TIMER_QUERIES = 8;
 	static constexpr uint32_t FRAME_REF_TIME_QUERY_IDX = 0;
 	static constexpr uint32_t FRAME_END_TIME_QUERY_IDX = NUM_OPENGL_TIMER_QUERIES - 1;
+
 private:
 	void SetMinSampleShadingRate();
 	bool SetWindowMinMaximized(bool maximize) const;
+
 private:
 	spring::unordered_set<std::string> glExtensions;
 	// double-buffered; results from frame N become available on frame N+1
 	std::array<uint32_t, NUM_OPENGL_TIMER_QUERIES * 2> glTimerQueries;
+
 private:
-	static constexpr inline const char* xsKeys[2] = { "XResolutionWindowed", "XResolution" };
-	static constexpr inline const char* ysKeys[2] = { "YResolutionWindowed", "YResolution" };
+	static constexpr inline const char *xsKeys[2] = {"XResolutionWindowed", "XResolution"};
+	static constexpr inline const char *ysKeys[2] = {"YResolutionWindowed", "YResolution"};
 };
 
-extern CGlobalRendering* globalRendering;
+extern CGlobalRendering *globalRendering;
 
 #endif /* _GLOBAL_RENDERING_H */
-
