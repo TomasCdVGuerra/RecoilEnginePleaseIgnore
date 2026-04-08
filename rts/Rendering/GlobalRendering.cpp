@@ -8,6 +8,7 @@
 
 #include "GlobalRendering.h"
 #include "GlobalRenderingInfo.h"
+#include "Rendering/Gfx/GL/GLGraphicsBackend.h"
 #include "Rendering/VerticalSync.h"
 #include "Rendering/GL/StreamBuffer.h"
 #include "Rendering/GL/RenderBuffers.h"
@@ -388,6 +389,8 @@ CGlobalRendering::~CGlobalRendering()
 
 void CGlobalRendering::PreKill()
 {
+	graphicsBackend.reset();
+
 	UniformConstants::GetInstance().Kill(); //unsafe to kill in ~CGlobalRendering()
 	RenderBuffer::KillStatic();
 	GL::shapes.Kill();
@@ -603,6 +606,8 @@ bool CGlobalRendering::CreateWindowAndContext(const char* title)
 		return false;
 	}
 
+	globalRendering->graphicsBackend = std::make_unique<gfx::GLGraphicsBackend>();
+
 	MakeCurrentContext(false);
 	SDL_DisableScreenSaver();
 	return true;
@@ -615,6 +620,8 @@ void CGlobalRendering::MakeCurrentContext(bool clear) const {
 
 
 void CGlobalRendering::DestroyWindowAndContext() {
+	graphicsBackend.reset();
+
 	if (!sdlWindow)
 		return;
 

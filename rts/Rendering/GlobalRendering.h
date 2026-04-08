@@ -12,6 +12,7 @@
 #include "System/Misc/SpringTime.h"
 #include "System/UnorderedSet.hpp"
 #include "System/type2.h"
+#include "Rendering/Gfx/IGraphicsBackend.h"
 
 class SharedLib;
 struct SDL_version;
@@ -383,6 +384,7 @@ public:
 public:
 	SDL_Window* sdlWindow;
 	SDL_GLContext glContext;
+	std::unique_ptr<gfx::IGraphicsBackend> graphicsBackend;
 public:
 	/**
 	* @brief maximum texture unit number
