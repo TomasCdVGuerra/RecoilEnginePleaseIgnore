@@ -240,7 +240,7 @@ namespace Threading
 		// multiple CCDs there as well.
 		constexpr uint32_t threadCountThreshold = 4;
 #else
-		#error "Unsupported architecture"
+#error "Unsupported architecture"
 #endif
 
 		// The cache groups from GetProcessorCaches() are sorted in order of largest first.

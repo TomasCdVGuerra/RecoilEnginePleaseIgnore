@@ -25,13 +25,13 @@
 CR_BIND_DERIVED(CMissileLauncher, CWeapon, )
 CR_REG_METADATA(CMissileLauncher, )
 
-
 void CMissileLauncher::UpdateWantedDir()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	CWeapon::UpdateWantedDir();
 
-	if (weaponDef->trajectoryHeight > 0.0f) {
+	if (weaponDef->trajectoryHeight > 0.0f)
+	{
 		wantedDir.y += weaponDef->trajectoryHeight;
 		wantedDir.Normalize();
 	}
@@ -43,11 +43,16 @@ void CMissileLauncher::FireImpl(const bool scriptCall)
 	float3 targetVec = currentTargetPos - weaponMuzzlePos;
 	const float targetDist = targetVec.LengthNormalize();
 
-	if (onlyForward) {
+	if (onlyForward)
+	{
 		targetVec = owner->frontdir;
-	} else if (weaponDef->fixedLauncher) {
+	}
+	else if (weaponDef->fixedLauncher)
+	{
 		targetVec = weaponDir;
-	} else if (weaponDef->trajectoryHeight > 0.0f) {
+	}
+	else if (weaponDef->trajectoryHeight > 0.0f)
+	{
 		targetVec = (targetVec + UpVector * weaponDef->trajectoryHeight).Normalize();
 	}
 
@@ -70,7 +75,7 @@ void CMissileLauncher::FireImpl(const bool scriptCall)
 	WeaponProjectileFactory::LoadProjectile(params);
 }
 
-bool CMissileLauncher::HaveFreeLineOfFire(const float3& srcPos, const float3& tgtPos, const SWeaponTarget& trg) const
+bool CMissileLauncher::HaveFreeLineOfFire(const float3 &srcPos, const float3 &tgtPos, const SWeaponTarget &trg) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	// high-trajectory missiles use curved path rather than linear ground intersection
@@ -96,7 +101,7 @@ bool CMissileLauncher::HaveFreeLineOfFire(const float3& srcPos, const float3& tg
 	//
 	// Following (2D) solution assumes nonzero turnrate
 	// because a zero turnrate will fail to hit the target
-	// 
+	//
 	// extraHeight = eH = (dist * trajectoryHeight)
 	// extraHeightTime = eHT = dist / maxSpeed
 	// dr/dt = r'(t,r,y) = (V0 + a * t) * (rt - r)/distance
@@ -107,13 +112,13 @@ bool CMissileLauncher::HaveFreeLineOfFire(const float3& srcPos, const float3& tg
 	// ~y_n+1 = y_n + h*y'(t,r,y)
 	// r_n+1 = r_n + (h/2)*( r'(t,r,y) + r'(t+h,~r_n+1,~y_n+1)
 	// y_n+1 = y_n + (h/2)*( y'(t,r,y) + y'(t+h,~r_n+1,~y_n+1)
-	// 
+	//
 	// for Heun's method, we choose h so that we only need to calculate 7 points
 	// on the curved trajectoryheight controlled portion
 	// so the final curve can be approximated by 8 straight line segments
 
-	std::array<float, 9> mdist = {}; //distance radially the missile has travelled
-	std::array<float, 9> mheight = {}; //distance vertically the missile has travelled
+	std::array<float, 9> mdist = {};   // distance radially the missile has travelled
+	std::array<float, 9> mheight = {}; // distance vertically the missile has travelled
 	// put the startpoint and endpoints in the arrays
 	mdist[0] = 0;
 	mheight[0] = 0;
@@ -145,34 +150,37 @@ bool CMissileLauncher::HaveFreeLineOfFire(const float3& srcPos, const float3& tg
 
 	float t = 0.0f;
 	// perform the Heun's method
-	for (uint32_t i = 1; i < 8; i++) {
+	for (uint32_t i = 1; i < 8; i++)
+	{
 		// due to maxSpeed boundary, and parameters of the pursuit curve, dist cannot be zero
 		// but if a divide by zero error does somehow occur here, a zero check can be added
 		dist = math::sqrt(math::pow((rt - mdist[i - 1]), 2) + math::pow((yt + eH * (1 - t / eHT) - mheight[i - 1]), 2));
 		curspeed = std::min((pSpeed + pAcc * t), maxSpeed);
-		drdt = curspeed * (rt - mdist[i-1]) / dist;
-		dydt = curspeed * (yt + eH * (1 - t / eHT) - mheight[i-1]) / dist;
-		rt_est = mdist[i-1] + hstep * drdt;
-		yt_est = mheight[i-1] + hstep * dydt;
+		drdt = curspeed * (rt - mdist[i - 1]) / dist;
+		dydt = curspeed * (yt + eH * (1 - t / eHT) - mheight[i - 1]) / dist;
+		rt_est = mdist[i - 1] + hstep * drdt;
+		yt_est = mheight[i - 1] + hstep * dydt;
 		t = t + hstep;
 		dist = math::sqrt(math::pow((rt - rt_est), 2) + math::pow((yt + eH * (1 - t / eHT) - yt_est), 2));
 		curspeed = std::min((pSpeed + pAcc * t), maxSpeed);
 		drdt_est = curspeed * (rt - rt_est) / dist;
 		dydt_est = curspeed * (yt + eH * (1 - t / eHT) - yt_est) / dist;
-		mdist[i] = mdist[i-1] + (hstep * 0.5f) * (drdt + drdt_est);
-		mheight[i] = mheight[i-1] + (hstep * 0.5f) * (dydt + dydt_est);
+		mdist[i] = mdist[i - 1] + (hstep * 0.5f) * (drdt + drdt_est);
+		mheight[i] = mheight[i - 1] + (hstep * 0.5f) * (dydt + dydt_est);
 	}
 
 	// debug draw
-	if (globalRendering->drawDebugTraceRay) {
-		for (uint32_t i = 1; i < 9; i++) {
+	if (globalRendering->drawDebugTraceRay)
+	{
+		for (uint32_t i = 1; i < 9; i++)
+		{
 			geometricObjects->SetColor(geometricObjects->AddLine(srcPos + targetVec * mdist[i - 1] + UpVector * mheight[i - 1], srcPos + targetVec * mdist[i] + UpVector * mheight[i], 3, 0, GAME_SPEED), 1.0f, 0.0f, 0.0f, 1.0f);
 		}
 	}
 
 	// check for ground collision
-	// might be better to spin this off into TraceRay.cpp 
-	// but the pursuit curve (and the 8 piecewise linear approximation used here) 
+	// might be better to spin this off into TraceRay.cpp
+	// but the pursuit curve (and the 8 piecewise linear approximation used here)
 	// that trajectoryheight missiles follow is singularly unique
 	// so no need to spin it off until something else needs this
 	uint32_t ii = 1;
@@ -180,29 +188,33 @@ bool CMissileLauncher::HaveFreeLineOfFire(const float3& srcPos, const float3& tg
 	float delta2 = 0.0f;
 	float ratio = 0.0f;
 	float hitheight = 0.0f;
-	if ((avoidFlags & Collision::NOGROUND) == 0) {
+	if ((avoidFlags & Collision::NOGROUND) == 0)
+	{
 		// do not check last bit of trajectory, sized by damageAreaOfEffect
 		// to avoid false positive values at very end of trajectory
-		// this mimics CGround::TrajectoryGroundCol called by parabolic cannon shots 
+		// this mimics CGround::TrajectoryGroundCol called by parabolic cannon shots
 		// GetApproximateHeight should already do map boundary checks
-		for (float dd = 0; dd < xzTargetDist - damages->damageAreaOfEffect; dd += SQUARE_SIZE) {
+		for (float dd = 0; dd < xzTargetDist - damages->damageAreaOfEffect; dd += SQUARE_SIZE)
+		{
 			// make sure we are using correct part of the trajectory
-			while (dd > mdist[ii]) {
+			while (dd > mdist[ii])
+			{
 				ii = ii + 1;
 				delta1 = mdist[ii] - mdist[ii - 1];
 			}
 			delta2 = dd - mdist[ii - 1];
 			ratio = delta2 / delta1;
 			hitheight = mheight[ii - 1] + ratio * (mheight[ii] - mheight[ii - 1]);
-			if (CGround::GetApproximateHeight(srcPos + targetVec*dd) > (srcPos.y + hitheight)) {
+			if (CGround::GetApproximateHeight(srcPos + targetVec * dd) > (srcPos.y + hitheight))
+			{
 				return false;
 			}
 		}
 	}
 
 	// check for object collision
-	// might be better to spin this off into TraceRay.cpp 
-	// but the pursuit curve (and the 8 piecewise linear approximation used here) 
+	// might be better to spin this off into TraceRay.cpp
+	// but the pursuit curve (and the 8 piecewise linear approximation used here)
 	// that trajectoryheight missiles follow is singularly unique
 	// so no need to spin it off until something else needs this
 	QuadFieldQuery qfQuery;
@@ -216,42 +228,51 @@ bool CMissileLauncher::HaveFreeLineOfFire(const float3& srcPos, const float3& tg
 	const bool scanForAllies = ((avoidFlags & Collision::NOFRIENDLIES) == 0);
 	const bool scanForNeutrals = ((avoidFlags & Collision::NONEUTRALS) == 0);
 	const bool scanForFeatures = ((avoidFlags & Collision::NOFEATURES) == 0);
-	for (const int quadIdx : *qfQuery.quads) {
-		const CQuadField::Quad& quad = quadField.GetQuad(quadIdx);
+	for (const int quadIdx : *qfQuery.quads)
+	{
+		const CQuadField::Quad &quad = quadField.GetQuad(quadIdx);
 
 		// friendly units in this quad
-		if (scanForAllies) {
-			for (const CUnit* u : quad.teamUnits[owner->allyteam]) {
+		if (scanForAllies)
+		{
+			for (const CUnit *u : quad.teamUnits[owner->allyteam])
+			{
 				if (u == owner)
 					continue;
 				if (!u->HasCollidableStateBit(CSolidObject::CSTATE_BIT_QUADMAPRAYS))
 					continue;
 
 				// chord check here
-				const CollisionVolume* cv = &u->collisionVolume;
+				const CollisionVolume *cv = &u->collisionVolume;
 				const float3 cvRelVec = cv->GetWorldSpacePos(u) - srcPos;
-				const float  cvRelDst = std::clamp(cvRelVec.dot(targetVec), 0.0f, xzTargetDist);
+				const float cvRelDst = std::clamp(cvRelVec.dot(targetVec), 0.0f, xzTargetDist);
 				const CMatrix44f objTransform = u->GetTransformMatrix(true);
-				for (int i = 1; i < 9; i++) {
-					if (cvRelDst < mdist[i]) {
+				for (int i = 1; i < 9; i++)
+				{
+					if (cvRelDst < mdist[i])
+					{
 						// find the relevant linear segment
 						// interpolate the location
 						delta1 = mdist[i] - mdist[i - 1];
 						delta2 = cvRelDst - mdist[i - 1];
 						ratio = delta2 / delta1;
-						hitheight = mheight[i - 1] + ratio*(mheight[i] - mheight[i - 1]);
+						hitheight = mheight[i - 1] + ratio * (mheight[i] - mheight[i - 1]);
 						const float3 hitPos = srcPos + targetVec * cvRelDst + UpVector * hitheight;
-						if (mheight[i] > mheight[i - 1]) {
+						if (mheight[i] > mheight[i - 1])
+						{
 							// do chord check backwards
-							if (CCollisionHandler::DetectHit(u, objTransform, srcPos, hitPos, &cq, true)) {
+							if (CCollisionHandler::DetectHit(u, objTransform, srcPos, hitPos, &cq, true))
+							{
 								return false;
 							}
-						} else {
+						}
+						else
+						{
 							// do chord check forwards
-							if (CCollisionHandler::DetectHit(u, objTransform, hitPos, tgtPos, &cq, true)) {
+							if (CCollisionHandler::DetectHit(u, objTransform, hitPos, tgtPos, &cq, true))
+							{
 								return false;
 							}
-							
 						}
 						break;
 					}
@@ -259,10 +280,11 @@ bool CMissileLauncher::HaveFreeLineOfFire(const float3& srcPos, const float3& tg
 			}
 		}
 
-		
 		// neutral units in this quad
-		if (scanForNeutrals) {
-			for (const CUnit* u : quad.units) {
+		if (scanForNeutrals)
+		{
+			for (const CUnit *u : quad.units)
+			{
 				if (!u->IsNeutral())
 					continue;
 				if (u == owner)
@@ -271,12 +293,14 @@ bool CMissileLauncher::HaveFreeLineOfFire(const float3& srcPos, const float3& tg
 					continue;
 
 				// chord check here
-				const CollisionVolume* cv = &u->collisionVolume;
+				const CollisionVolume *cv = &u->collisionVolume;
 				const float3 cvRelVec = cv->GetWorldSpacePos(u) - srcPos;
-				const float  cvRelDst = std::clamp(cvRelVec.dot(targetVec), 0.0f, xzTargetDist);
+				const float cvRelDst = std::clamp(cvRelVec.dot(targetVec), 0.0f, xzTargetDist);
 				const CMatrix44f objTransform = u->GetTransformMatrix(true);
-				for (int i = 1; i < 9; i++) {
-					if (cvRelDst < mdist[i]) {
+				for (int i = 1; i < 9; i++)
+				{
+					if (cvRelDst < mdist[i])
+					{
 						// find the relevant linear segment
 						// interpolate the location
 						delta1 = mdist[i] - mdist[i - 1];
@@ -284,18 +308,21 @@ bool CMissileLauncher::HaveFreeLineOfFire(const float3& srcPos, const float3& tg
 						ratio = delta2 / delta1;
 						hitheight = mheight[i - 1] + ratio * (mheight[i] - mheight[i - 1]);
 						const float3 hitPos = srcPos + targetVec * cvRelDst + UpVector * hitheight;
-						if (mheight[i] > mheight[i - 1]) {
+						if (mheight[i] > mheight[i - 1])
+						{
 							// do chord check backwards
-							if (CCollisionHandler::DetectHit(u, objTransform, srcPos, hitPos, &cq, true)) {
+							if (CCollisionHandler::DetectHit(u, objTransform, srcPos, hitPos, &cq, true))
+							{
 								return false;
 							}
 						}
-						else {
+						else
+						{
 							// do chord check forwards
-							if (CCollisionHandler::DetectHit(u, objTransform, hitPos, tgtPos, &cq, true)) {
+							if (CCollisionHandler::DetectHit(u, objTransform, hitPos, tgtPos, &cq, true))
+							{
 								return false;
 							}
-
 						}
 						break;
 					}
@@ -304,18 +331,22 @@ bool CMissileLauncher::HaveFreeLineOfFire(const float3& srcPos, const float3& tg
 		}
 
 		// features in this quad
-		if (scanForFeatures) {
-			for (const CFeature* f : quad.features) {
+		if (scanForFeatures)
+		{
+			for (const CFeature *f : quad.features)
+			{
 				if (!f->HasCollidableStateBit(CSolidObject::CSTATE_BIT_QUADMAPRAYS))
 					continue;
 
 				// chord check here
-				const CollisionVolume* cv = &f->collisionVolume;
+				const CollisionVolume *cv = &f->collisionVolume;
 				const float3 cvRelVec = cv->GetWorldSpacePos(f) - srcPos;
-				const float  cvRelDst = std::clamp(cvRelVec.dot(targetVec), 0.0f, xzTargetDist);
+				const float cvRelDst = std::clamp(cvRelVec.dot(targetVec), 0.0f, xzTargetDist);
 				const CMatrix44f objTransform = f->GetTransformMatrix(true);
-				for (int i = 1; i < 9; i++) {
-					if (cvRelDst < mdist[i]) {
+				for (int i = 1; i < 9; i++)
+				{
+					if (cvRelDst < mdist[i])
+					{
 						// find the relevant linear segment
 						// interpolate the location
 						delta1 = mdist[i] - mdist[i - 1];
@@ -323,18 +354,21 @@ bool CMissileLauncher::HaveFreeLineOfFire(const float3& srcPos, const float3& tg
 						ratio = delta2 / delta1;
 						hitheight = mheight[i - 1] + ratio * (mheight[i] - mheight[i - 1]);
 						const float3 hitPos = srcPos + targetVec * cvRelDst + UpVector * hitheight;
-						if (mheight[i] > mheight[i - 1]) {
+						if (mheight[i] > mheight[i - 1])
+						{
 							// do chord check backwards
-							if (CCollisionHandler::DetectHit(f, objTransform, srcPos, hitPos, &cq, true)) {
+							if (CCollisionHandler::DetectHit(f, objTransform, srcPos, hitPos, &cq, true))
+							{
 								return false;
 							}
 						}
-						else {
+						else
+						{
 							// do chord check forwards
-							if (CCollisionHandler::DetectHit(f, objTransform, hitPos, tgtPos, &cq, true)) {
+							if (CCollisionHandler::DetectHit(f, objTransform, hitPos, tgtPos, &cq, true))
+							{
 								return false;
 							}
-
 						}
 						break;
 					}
@@ -345,4 +379,3 @@ bool CMissileLauncher::HaveFreeLineOfFire(const float3& srcPos, const float3& tg
 
 	return true;
 }
-
