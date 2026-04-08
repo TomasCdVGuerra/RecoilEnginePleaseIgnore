@@ -18,6 +18,10 @@ namespace gfx
 
         [[nodiscard]] std::unique_ptr<IVertexBuffer> CreateVertexBuffer(const BufferCreateInfo &ci) override;
         [[nodiscard]] std::unique_ptr<ITexture> CreateTexture(const TextureCreateInfo &ci) override;
+        [[nodiscard]] std::unique_ptr<IVertexArray> CreateVertexArray(
+            const VertexLayoutDesc &layout,
+            std::span<const VertexArrayBufferBinding> vertexBuffers,
+            IVertexBuffer *indexBuffer = nullptr) override;
 
         void DrawLineBatches(
             IVertexBuffer &vertexBuffer,
@@ -32,6 +36,24 @@ namespace gfx
             const TexturedVertexLayout &vertexLayout,
             IndexElementType indexType,
             const TexturedBatchState &state) override;
+
+        void DrawIndexed(
+            IVertexArray &vertexArray,
+            PrimitiveTopology topology,
+            const IndexedDrawDesc &draw,
+            IndexElementType indexType) override;
+
+        void DrawIndexedInstanced(
+            IVertexArray &vertexArray,
+            PrimitiveTopology topology,
+            const IndexedInstancedDrawDesc &draw,
+            IndexElementType indexType) override;
+
+        void MultiDrawIndexedIndirect(
+            IVertexArray &vertexArray,
+            PrimitiveTopology topology,
+            std::span<const IndexedIndirectDrawCommand> commands,
+            IndexElementType indexType) override;
 
         void BeginFrame() override;
         void EndFrame() override;

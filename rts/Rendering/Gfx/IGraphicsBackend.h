@@ -8,6 +8,7 @@
 #include <memory>
 #include <span>
 #include <string_view>
+#include <vector>
 
 namespace gfx
 {
@@ -72,6 +73,40 @@ namespace gfx
         bool useDefaultBlendFunc = true;
     };
 
+    class IVertexBuffer;
+
+    struct VertexArrayBufferBinding
+    {
+        std::uint32_t binding = 0;
+        IVertexBuffer *vertexBuffer = nullptr;
+    };
+
+    struct IndexedDrawDesc
+    {
+        std::uint32_t indexCount = 0;
+        std::uint32_t firstIndex = 0;
+        std::int32_t baseVertex = 0;
+    };
+
+    struct IndexedInstancedDrawDesc
+    {
+        std::uint32_t indexCount = 0;
+        std::uint32_t firstIndex = 0;
+        std::int32_t baseVertex = 0;
+        std::uint32_t instanceCount = 0;
+        std::uint32_t firstInstance = 0;
+    };
+
+    struct IndexedIndirectDrawCommand
+    {
+        std::uint32_t indexCount = 0;
+        std::uint32_t instanceCount = 0;
+        std::uint32_t firstIndex = 0;
+        std::int32_t baseVertex = 0;
+        std::uint32_t firstInstance = 0;
+    };
+
+    class IVertexArray;
     class ITexture;
     class IVertexBuffer;
 
@@ -86,6 +121,10 @@ namespace gfx
 
         [[nodiscard]] virtual std::unique_ptr<IVertexBuffer> CreateVertexBuffer(const BufferCreateInfo &ci) = 0;
         [[nodiscard]] virtual std::unique_ptr<ITexture> CreateTexture(const TextureCreateInfo &ci) = 0;
+        [[nodiscard]] virtual std::unique_ptr<IVertexArray> CreateVertexArray(
+            const VertexLayoutDesc &layout,
+            std::span<const VertexArrayBufferBinding> vertexBuffers,
+            IVertexBuffer *indexBuffer = nullptr) = 0;
 
         virtual void DrawLineBatches(
             IVertexBuffer &vertexBuffer,
@@ -100,6 +139,24 @@ namespace gfx
             const TexturedVertexLayout &vertexLayout,
             IndexElementType indexType,
             const TexturedBatchState &state) = 0;
+
+        virtual void DrawIndexed(
+            IVertexArray &vertexArray,
+            PrimitiveTopology topology,
+            const IndexedDrawDesc &draw,
+            IndexElementType indexType) = 0;
+
+        virtual void DrawIndexedInstanced(
+            IVertexArray &vertexArray,
+            PrimitiveTopology topology,
+            const IndexedInstancedDrawDesc &draw,
+            IndexElementType indexType) = 0;
+
+        virtual void MultiDrawIndexedIndirect(
+            IVertexArray &vertexArray,
+            PrimitiveTopology topology,
+            std::span<const IndexedIndirectDrawCommand> commands,
+            IndexElementType indexType) = 0;
 
         virtual void BeginFrame() = 0;
         virtual void EndFrame() = 0;

@@ -3,14 +3,17 @@
 #include "GLGraphicsBackend.h"
 
 #include "GLTexture.h"
+#include "GLVertexArray.h"
 #include "GLVertexBuffer.h"
 
 #include "Rendering/GL/myGL.h"
 #include "System/Log/ILog.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <vector>
 
 namespace
 {
@@ -26,6 +29,21 @@ namespace
         }
 
         return GL_LINES;
+    }
+
+    GLenum TranslatePrimitiveTopology(gfx::PrimitiveTopology topology)
+    {
+        switch (topology)
+        {
+        case gfx::PrimitiveTopology::Triangles:
+            return GL_TRIANGLES;
+        case gfx::PrimitiveTopology::Lines:
+            return GL_LINES;
+        case gfx::PrimitiveTopology::LineStrip:
+            return GL_LINE_STRIP;
+        }
+
+        return GL_TRIANGLES;
     }
 
     GLint ToGLInt(std::uint32_t value, const char *ctx)
@@ -83,6 +101,89 @@ namespace
         return reinterpret_cast<const GLvoid *>(static_cast<std::uintptr_t>(byteOffset));
     }
 
+    struct GLVertexFormatInfo
+    {
+        GLint components = 0;
+        GLenum type = GL_FLOAT;
+        GLboolean normalized = GL_FALSE;
+        bool integerAttribute = false;
+    };
+
+    bool TranslateVertexFormat(gfx::VertexFormat format, GLVertexFormatInfo &outInfo)
+    {
+        switch (format)
+        {
+        case gfx::VertexFormat::Float:
+            outInfo = {1, GL_FLOAT, GL_FALSE, false};
+            return true;
+        case gfx::VertexFormat::Float2:
+            outInfo = {2, GL_FLOAT, GL_FALSE, false};
+            return true;
+        case gfx::VertexFormat::Float3:
+            outInfo = {3, GL_FLOAT, GL_FALSE, false};
+            return true;
+        case gfx::VertexFormat::Float4:
+            outInfo = {4, GL_FLOAT, GL_FALSE, false};
+            return true;
+        case gfx::VertexFormat::UInt:
+            outInfo = {1, GL_UNSIGNED_INT, GL_FALSE, true};
+            return true;
+        case gfx::VertexFormat::UInt2:
+            outInfo = {2, GL_UNSIGNED_INT, GL_FALSE, true};
+            return true;
+        case gfx::VertexFormat::UInt3:
+            outInfo = {3, GL_UNSIGNED_INT, GL_FALSE, true};
+            return true;
+        case gfx::VertexFormat::UInt4:
+            outInfo = {4, GL_UNSIGNED_INT, GL_FALSE, true};
+            return true;
+        case gfx::VertexFormat::UByte4_UNorm:
+            outInfo = {4, GL_UNSIGNED_BYTE, GL_TRUE, false};
+            return true;
+        case gfx::VertexFormat::UByte4_UInt:
+            outInfo = {4, GL_UNSIGNED_BYTE, GL_FALSE, true};
+            return true;
+        }
+
+        return false;
+    }
+
+    const gfx::VertexBufferBindingDesc *FindBindingDesc(
+        const gfx::VertexLayoutDesc &layout,
+        std::uint32_t binding)
+    {
+        const auto it = std::find_if(
+            layout.bindings.begin(),
+            layout.bindings.end(),
+            [binding](const gfx::VertexBufferBindingDesc &desc)
+            {
+                return desc.binding == binding;
+            });
+
+        if (it == layout.bindings.end())
+            return nullptr;
+
+        return &(*it);
+    }
+
+    const gfx::VertexArrayBufferBinding *FindVertexBufferBinding(
+        std::span<const gfx::VertexArrayBufferBinding> vertexBuffers,
+        std::uint32_t binding)
+    {
+        const auto it = std::find_if(
+            vertexBuffers.begin(),
+            vertexBuffers.end(),
+            [binding](const gfx::VertexArrayBufferBinding &bufferBinding)
+            {
+                return bufferBinding.binding == binding;
+            });
+
+        if (it == vertexBuffers.end())
+            return nullptr;
+
+        return &(*it);
+    }
+
 } // namespace
 
 namespace gfx
@@ -111,6 +212,126 @@ namespace gfx
     std::unique_ptr<ITexture> GLGraphicsBackend::CreateTexture(const TextureCreateInfo &ci)
     {
         return std::make_unique<GLTexture>(ci);
+    }
+
+    std::unique_ptr<IVertexArray> GLGraphicsBackend::CreateVertexArray(
+        const VertexLayoutDesc &layout,
+        std::span<const VertexArrayBufferBinding> vertexBuffers,
+        IVertexBuffer *indexBuffer)
+    {
+        if (layout.attributes.empty())
+        {
+            LOG_L(L_WARNING, "[GLGraphicsBackend::CreateVertexArray] layout.attributes must be non-empty");
+            return nullptr;
+        }
+
+        GLuint vaoId = 0;
+        glGenVertexArrays(1, &vaoId);
+
+        if (vaoId == 0u)
+        {
+            LOG_L(L_WARNING, "[GLGraphicsBackend::CreateVertexArray] glGenVertexArrays returned 0");
+            return nullptr;
+        }
+
+        glBindVertexArray(vaoId);
+
+        for (const VertexAttributeDesc &attribute : layout.attributes)
+        {
+            const VertexBufferBindingDesc *bindingDesc = FindBindingDesc(layout, attribute.binding);
+            if (bindingDesc == nullptr)
+            {
+                LOG_L(L_WARNING, "[GLGraphicsBackend::CreateVertexArray] Missing binding descriptor for binding=%u", attribute.binding);
+                continue;
+            }
+
+            if (bindingDesc->strideBytes == 0u)
+            {
+                LOG_L(L_WARNING, "[GLGraphicsBackend::CreateVertexArray] binding=%u has zero strideBytes", attribute.binding);
+                continue;
+            }
+
+            const VertexArrayBufferBinding *bufferBinding = FindVertexBufferBinding(vertexBuffers, attribute.binding);
+            if ((bufferBinding == nullptr) || (bufferBinding->vertexBuffer == nullptr))
+            {
+                LOG_L(L_WARNING, "[GLGraphicsBackend::CreateVertexArray] Missing vertex buffer for binding=%u", attribute.binding);
+                continue;
+            }
+
+            auto *glVertexBuffer = dynamic_cast<GLVertexBuffer *>(bufferBinding->vertexBuffer);
+            if (glVertexBuffer == nullptr)
+            {
+                LOG_L(L_WARNING, "[GLGraphicsBackend::CreateVertexArray] Unsupported vertex buffer type for binding=%u", attribute.binding);
+                continue;
+            }
+
+            const GLuint vertexBufferId = glVertexBuffer->GetBufferId();
+            if (vertexBufferId == 0u)
+                continue;
+
+            GLVertexFormatInfo formatInfo;
+            if (!TranslateVertexFormat(attribute.format, formatInfo))
+            {
+                LOG_L(L_WARNING, "[GLGraphicsBackend::CreateVertexArray] Unsupported vertex format for location=%u", attribute.location);
+                continue;
+            }
+
+            glBindBuffer(GL_ARRAY_BUFFER, vertexBufferId);
+
+            const std::size_t totalOffsetBytes =
+                static_cast<std::size_t>(bindingDesc->offsetBytes) +
+                static_cast<std::size_t>(attribute.offsetBytes);
+
+            const GLint strideBytes = ToGLInt(bindingDesc->strideBytes, "CreateVertexArray::strideBytes");
+            const GLvoid *offsetPointer = ToGLPointer(totalOffsetBytes);
+
+            if (formatInfo.integerAttribute)
+            {
+                glVertexAttribIPointer(
+                    attribute.location,
+                    formatInfo.components,
+                    formatInfo.type,
+                    strideBytes,
+                    offsetPointer);
+            }
+            else
+            {
+                glVertexAttribPointer(
+                    attribute.location,
+                    formatInfo.components,
+                    formatInfo.type,
+                    formatInfo.normalized,
+                    strideBytes,
+                    offsetPointer);
+            }
+
+            glEnableVertexAttribArray(attribute.location);
+            glVertexAttribDivisor(
+                attribute.location,
+                (bindingDesc->inputRate == VertexInputRate::PerInstance) ? 1u : 0u);
+        }
+
+        if (indexBuffer != nullptr)
+        {
+            auto *glIndexBuffer = dynamic_cast<GLVertexBuffer *>(indexBuffer);
+            if (glIndexBuffer != nullptr)
+            {
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, glIndexBuffer->GetBufferId());
+            }
+            else
+            {
+                LOG_L(L_WARNING, "[GLGraphicsBackend::CreateVertexArray] Unsupported index buffer type");
+            }
+        }
+        else
+        {
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+        }
+
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindVertexArray(0);
+
+        return std::make_unique<GLVertexArray>(vaoId);
     }
 
     void GLGraphicsBackend::DrawLineBatches(
@@ -282,6 +503,155 @@ namespace gfx
 
         glBindTexture(glTexture->GetTarget(), 0);
         glPopAttrib();
+    }
+
+    void GLGraphicsBackend::DrawIndexed(
+        IVertexArray &vertexArray,
+        PrimitiveTopology topology,
+        const IndexedDrawDesc &draw,
+        IndexElementType indexType)
+    {
+        if (draw.indexCount == 0u)
+            return;
+
+        const std::size_t indexElementSizeBytes = IndexElementSizeBytes(indexType);
+        if (indexElementSizeBytes == 0u)
+        {
+            LOG_L(L_WARNING, "[GLGraphicsBackend::DrawIndexed] Unsupported index element type");
+            return;
+        }
+
+        const GLenum glIndexType = TranslateIndexElementType(indexType);
+        const GLenum glPrimitive = TranslatePrimitiveTopology(topology);
+
+        vertexArray.Bind();
+
+        const std::size_t firstIndexByteOffset = static_cast<std::size_t>(draw.firstIndex) * indexElementSizeBytes;
+        if (draw.baseVertex == 0)
+        {
+            glDrawElements(
+                glPrimitive,
+                ToGLSizei(draw.indexCount, "DrawIndexed::indexCount"),
+                glIndexType,
+                ToGLPointer(firstIndexByteOffset));
+        }
+        else
+        {
+            glDrawElementsBaseVertex(
+                glPrimitive,
+                ToGLSizei(draw.indexCount, "DrawIndexed::indexCount"),
+                glIndexType,
+                ToGLPointer(firstIndexByteOffset),
+                draw.baseVertex);
+        }
+
+        vertexArray.Unbind();
+    }
+
+    void GLGraphicsBackend::DrawIndexedInstanced(
+        IVertexArray &vertexArray,
+        PrimitiveTopology topology,
+        const IndexedInstancedDrawDesc &draw,
+        IndexElementType indexType)
+    {
+        if ((draw.indexCount == 0u) || (draw.instanceCount == 0u))
+            return;
+
+        const std::size_t indexElementSizeBytes = IndexElementSizeBytes(indexType);
+        if (indexElementSizeBytes == 0u)
+        {
+            LOG_L(L_WARNING, "[GLGraphicsBackend::DrawIndexedInstanced] Unsupported index element type");
+            return;
+        }
+
+        const GLenum glIndexType = TranslateIndexElementType(indexType);
+        const GLenum glPrimitive = TranslatePrimitiveTopology(topology);
+
+        vertexArray.Bind();
+
+        const std::size_t firstIndexByteOffset = static_cast<std::size_t>(draw.firstIndex) * indexElementSizeBytes;
+        const GLsizei indexCount = ToGLSizei(draw.indexCount, "DrawIndexedInstanced::indexCount");
+        const GLsizei instanceCount = ToGLSizei(draw.instanceCount, "DrawIndexedInstanced::instanceCount");
+        const GLvoid *indexPointer = ToGLPointer(firstIndexByteOffset);
+
+        if ((draw.baseVertex == 0) && (draw.firstInstance == 0u))
+        {
+            glDrawElementsInstanced(
+                glPrimitive,
+                indexCount,
+                glIndexType,
+                indexPointer,
+                instanceCount);
+        }
+        else if (draw.firstInstance == 0u)
+        {
+            glDrawElementsInstancedBaseVertex(
+                glPrimitive,
+                indexCount,
+                glIndexType,
+                indexPointer,
+                instanceCount,
+                draw.baseVertex);
+        }
+        else
+        {
+            glDrawElementsInstancedBaseVertexBaseInstance(
+                glPrimitive,
+                indexCount,
+                glIndexType,
+                indexPointer,
+                instanceCount,
+                draw.baseVertex,
+                draw.firstInstance);
+        }
+
+        vertexArray.Unbind();
+    }
+
+    void GLGraphicsBackend::MultiDrawIndexedIndirect(
+        IVertexArray &vertexArray,
+        PrimitiveTopology topology,
+        std::span<const IndexedIndirectDrawCommand> commands,
+        IndexElementType indexType)
+    {
+        if (commands.empty())
+            return;
+
+        const GLenum glIndexType = TranslateIndexElementType(indexType);
+        const GLenum glPrimitive = TranslatePrimitiveTopology(topology);
+
+        std::vector<SDrawElementsIndirectCommand> glCommands;
+        glCommands.reserve(commands.size());
+
+        for (const IndexedIndirectDrawCommand &command : commands)
+        {
+            if (command.baseVertex < 0)
+            {
+                LOG_L(L_WARNING, "[GLGraphicsBackend::MultiDrawIndexedIndirect] Negative baseVertex (%d) is not supported", command.baseVertex);
+                continue;
+            }
+
+            glCommands.emplace_back(
+                command.indexCount,
+                command.instanceCount,
+                command.firstIndex,
+                static_cast<std::uint32_t>(command.baseVertex),
+                command.firstInstance);
+        }
+
+        if (glCommands.empty())
+            return;
+
+        vertexArray.Bind();
+
+        glMultiDrawElementsIndirect(
+            glPrimitive,
+            glIndexType,
+            glCommands.data(),
+            ToGLSizei(static_cast<std::uint32_t>(glCommands.size()), "MultiDrawIndexedIndirect::drawCount"),
+            static_cast<GLsizei>(sizeof(SDrawElementsIndirectCommand)));
+
+        vertexArray.Unbind();
     }
 
     void GLGraphicsBackend::BeginFrame()

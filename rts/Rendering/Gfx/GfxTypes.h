@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace gfx
 {
@@ -78,6 +79,33 @@ namespace gfx
         MirrorClampToEdge,
     };
 
+    enum class VertexFormat : std::uint8_t
+    {
+        Float,
+        Float2,
+        Float3,
+        Float4,
+        UInt,
+        UInt2,
+        UInt3,
+        UInt4,
+        UByte4_UNorm,
+        UByte4_UInt,
+    };
+
+    enum class VertexInputRate : std::uint8_t
+    {
+        PerVertex,
+        PerInstance,
+    };
+
+    enum class PrimitiveTopology : std::uint8_t
+    {
+        Triangles,
+        Lines,
+        LineStrip,
+    };
+
     enum class TextureUsage : std::uint32_t
     {
         Sampled = 1u << 0,
@@ -107,6 +135,28 @@ namespace gfx
         MemoryAccess memoryAccess = MemoryAccess::CpuToGpu;
         bool readable = false;
         std::string debugName;
+    };
+
+    struct VertexAttributeDesc
+    {
+        std::uint32_t location = 0;
+        std::uint32_t binding = 0;
+        VertexFormat format = VertexFormat::Float3;
+        std::uint32_t offsetBytes = 0;
+    };
+
+    struct VertexBufferBindingDesc
+    {
+        std::uint32_t binding = 0;
+        std::uint32_t strideBytes = 0;
+        std::uint32_t offsetBytes = 0;
+        VertexInputRate inputRate = VertexInputRate::PerVertex;
+    };
+
+    struct VertexLayoutDesc
+    {
+        std::vector<VertexAttributeDesc> attributes;
+        std::vector<VertexBufferBindingDesc> bindings;
     };
 
     struct SamplerState

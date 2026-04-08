@@ -377,7 +377,7 @@ Phase 5.1 implication summary:
 2. A complete migration will need backend-neutral texture parameter application (filtering/wrap/lod/aniso) in addition to upload/mipmap APIs.
 3. Optional async upload optimization can be introduced later through backend staging mechanisms rather than preserving direct PBO dependencies.
 
-#### [IN PROGRESS] Phase 5.2: 3D Model Scouting
+#### [IN PROGRESS] Phase 5.2: 3D Model Migration
 Target files:
 1. `rts/Rendering/Models/3DModel.hpp` (header counterpart to requested `3DModel.h`)
 2. `rts/Rendering/Models/3DModel.cpp`
