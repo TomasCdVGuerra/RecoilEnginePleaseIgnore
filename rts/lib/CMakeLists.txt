@@ -115,6 +115,19 @@ target_compile_definitions(assimp PRIVATE -DASSIMP_BUILD_NO_OWN_ZLIB)
 set(SIMDJSON_AVX512_ALLOWED OFF CACHE BOOL "forced by Recoil build env" FORCE)
 set(SIMDJSON_BASH OFF CACHE BOOL "forced by Recoil build env" FORCE)
 
+# Clear legacy cache keys to avoid deprecation warnings in newer simdjson CMake.
+foreach(var
+	SIMDJSON_IMPLEMENTATION_WESTMERE
+	SIMDJSON_IMPLEMENTATION_HASWELL
+	SIMDJSON_IMPLEMENTATION_ICELAKE
+	SIMDJSON_IMPLEMENTATION_ARM64
+	SIMDJSON_IMPLEMENTATION_PPC64
+	SIMDJSON_IMPLEMENTATION_LSX
+	SIMDJSON_IMPLEMENTATION_LASX
+)
+	unset(${var} CACHE)
+endforeach()
+
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|armv8")
 	# ARM64: enable native NEON implementation (well-tested in simdjson)
 	set(SIMDJSON_IMPLEMENTATION "arm64" CACHE STRING "forced by Recoil build env" FORCE)
