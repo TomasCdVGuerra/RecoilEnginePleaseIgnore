@@ -49,8 +49,7 @@ namespace gfx
             std::uint32_t arrayLayer,
             std::span<const std::byte> pixels,
             std::size_t rowPitchBytes = 0,
-            std::size_t slicePitchBytes = 0
-        ) override;
+            std::size_t slicePitchBytes = 0) override;
 
         void GenerateMipmaps() override;
 

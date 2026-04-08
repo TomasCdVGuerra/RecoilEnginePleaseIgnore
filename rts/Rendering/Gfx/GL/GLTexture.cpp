@@ -11,7 +11,8 @@
 namespace
 {
 
-    struct GLPixelFormatInfo {
+    struct GLPixelFormatInfo
+    {
         GLenum internalFormat;
         GLenum uploadFormat;
         GLenum uploadType;
@@ -23,21 +24,21 @@ namespace
         switch (format)
         {
         case gfx::PixelFormat::RGBA8_UNorm:
-            return { GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, 4 };
+            return {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, 4};
         case gfx::PixelFormat::BGRA8_UNorm:
-            return { GL_RGBA8, GL_BGRA, GL_UNSIGNED_BYTE, 4 };
+            return {GL_RGBA8, GL_BGRA, GL_UNSIGNED_BYTE, 4};
         case gfx::PixelFormat::R8_UNorm:
-            return { GL_R8, GL_RED, GL_UNSIGNED_BYTE, 1 };
+            return {GL_R8, GL_RED, GL_UNSIGNED_BYTE, 1};
         case gfx::PixelFormat::D24S8:
-            return { GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 4 };
+            return {GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 4};
         case gfx::PixelFormat::D32_SFloat:
-            return { GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT, 4 };
+            return {GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT, 4};
         case gfx::PixelFormat::Unknown:
             break;
         }
 
         LOG_L(L_WARNING, "[GLTexture::TranslatePixelFormat] Unknown format requested, defaulting to RGBA8");
-        return { GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, 4 };
+        return {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, 4};
     }
 
     GLenum TranslateTextureTarget(gfx::TextureDimension dimension)
@@ -60,7 +61,8 @@ namespace
     GLsizei ToGLSizei(std::uint32_t value)
     {
         constexpr std::uint32_t maxValue = static_cast<std::uint32_t>(std::numeric_limits<GLsizei>::max());
-        if (value > maxValue) {
+        if (value > maxValue)
+        {
             LOG_L(L_WARNING, "[GLTexture::ToGLSizei] Value (%u) exceeds GLsizei max (%u), clamping", value, maxValue);
             return std::numeric_limits<GLsizei>::max();
         }
@@ -71,7 +73,8 @@ namespace
     GLint ToGLInt(std::size_t value)
     {
         constexpr std::size_t maxValue = static_cast<std::size_t>(std::numeric_limits<GLint>::max());
-        if (value > maxValue) {
+        if (value > maxValue)
+        {
             LOG_L(L_WARNING, "[GLTexture::ToGLInt] Value (%zu) exceeds GLint max (%zu), clamping", value, maxValue);
             return std::numeric_limits<GLint>::max();
         }
@@ -89,8 +92,7 @@ namespace
         return {
             std::max<std::uint32_t>(1u, baseExtent.width >> mipLevel),
             std::max<std::uint32_t>(1u, baseExtent.height >> mipLevel),
-            std::max<std::uint32_t>(1u, baseExtent.depth >> mipLevel)
-        };
+            std::max<std::uint32_t>(1u, baseExtent.depth >> mipLevel)};
     }
 
     void SetupTextureSampling(GLenum target, std::uint32_t mipLevels)
@@ -110,16 +112,10 @@ namespace gfx
 {
 
     GLTexture::GLTexture(const TextureCreateInfo &ci)
-        : dimension(ci.dimension)
-        , format(ci.format)
-        , extent({
-              ClampAtLeastOne(ci.extent.width),
-              ClampAtLeastOne(ci.extent.height),
-              ClampAtLeastOne(ci.extent.depth)
-          })
-        , mipLevels(ClampAtLeastOne(ci.mipLevels))
-        , arrayLayers(ClampAtLeastOne(ci.arrayLayers))
-        , usage(ci.usage)
+        : dimension(ci.dimension), format(ci.format), extent({ClampAtLeastOne(ci.extent.width),
+                                                              ClampAtLeastOne(ci.extent.height),
+                                                              ClampAtLeastOne(ci.extent.depth)}),
+          mipLevels(ClampAtLeastOne(ci.mipLevels)), arrayLayers(ClampAtLeastOne(ci.arrayLayers)), usage(ci.usage)
     {
         const GLPixelFormatInfo glFmt = TranslatePixelFormat(format);
 
@@ -129,14 +125,16 @@ namespace gfx
         bytesPerPixel = glFmt.bytesPerPixel;
         target = TranslateTextureTarget(dimension);
 
-        if (dimension == TextureDimension::Cube && arrayLayers != 6u) {
+        if (dimension == TextureDimension::Cube && arrayLayers != 6u)
+        {
             LOG_L(L_WARNING, "[GLTexture::GLTexture] Cube textures force arrayLayers to 6 (requested=%u)", arrayLayers);
             arrayLayers = 6u;
         }
 
         glGenTextures(1, &textureId);
 
-        if (textureId == 0) {
+        if (textureId == 0)
+        {
             LOG_L(L_WARNING, "[GLTexture::GLTexture] glGenTextures returned 0");
             return;
         }
@@ -144,12 +142,14 @@ namespace gfx
         glBindTexture(target, textureId);
         SetupTextureSampling(target, mipLevels);
 
-        for (std::uint32_t mip = 0; mip < mipLevels; ++mip) {
+        for (std::uint32_t mip = 0; mip < mipLevels; ++mip)
+        {
             const Extent3D mipExtent = CalcMipExtent(extent, mip);
 
             switch (dimension)
             {
-            case TextureDimension::Tex2D: {
+            case TextureDimension::Tex2D:
+            {
                 glTexImage2D(
                     GL_TEXTURE_2D,
                     static_cast<GLint>(mip),
@@ -159,11 +159,12 @@ namespace gfx
                     0,
                     uploadFormat,
                     uploadType,
-                    nullptr
-                );
-            } break;
+                    nullptr);
+            }
+            break;
 
-            case TextureDimension::Tex2DArray: {
+            case TextureDimension::Tex2DArray:
+            {
                 glTexImage3D(
                     GL_TEXTURE_2D_ARRAY,
                     static_cast<GLint>(mip),
@@ -174,11 +175,12 @@ namespace gfx
                     0,
                     uploadFormat,
                     uploadType,
-                    nullptr
-                );
-            } break;
+                    nullptr);
+            }
+            break;
 
-            case TextureDimension::Tex3D: {
+            case TextureDimension::Tex3D:
+            {
                 glTexImage3D(
                     GL_TEXTURE_3D,
                     static_cast<GLint>(mip),
@@ -189,12 +191,14 @@ namespace gfx
                     0,
                     uploadFormat,
                     uploadType,
-                    nullptr
-                );
-            } break;
+                    nullptr);
+            }
+            break;
 
-            case TextureDimension::Cube: {
-                for (std::uint32_t face = 0; face < 6; ++face) {
+            case TextureDimension::Cube:
+            {
+                for (std::uint32_t face = 0; face < 6; ++face)
+                {
                     glTexImage2D(
                         GL_TEXTURE_CUBE_MAP_POSITIVE_X + face,
                         static_cast<GLint>(mip),
@@ -204,10 +208,10 @@ namespace gfx
                         0,
                         uploadFormat,
                         uploadType,
-                        nullptr
-                    );
+                        nullptr);
                 }
-            } break;
+            }
+            break;
             }
         }
 
@@ -216,7 +220,8 @@ namespace gfx
 
     GLTexture::~GLTexture()
     {
-        if (textureId != 0) {
+        if (textureId != 0)
+        {
             glDeleteTextures(1, &textureId);
             textureId = 0;
         }
@@ -244,13 +249,13 @@ namespace gfx
         std::uint32_t arrayLayer,
         std::span<const std::byte> pixels,
         std::size_t rowPitchBytes,
-        std::size_t slicePitchBytes
-    )
+        std::size_t slicePitchBytes)
     {
         if (textureId == 0 || pixels.empty())
             return;
 
-        if (mipLevel >= mipLevels) {
+        if (mipLevel >= mipLevels)
+        {
             LOG_L(L_WARNING, "[GLTexture::Upload] Invalid mip level %u (max=%u)", mipLevel, (mipLevels - 1));
             return;
         }
@@ -268,34 +273,44 @@ namespace gfx
         glGetIntegerv(GL_UNPACK_ALIGNMENT, &prevUnpackAlignment);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-        if (rowPitchBytes != 0) {
-            if ((rowPitchBytes % bytesPerPixel) == 0) {
+        if (rowPitchBytes != 0)
+        {
+            if ((rowPitchBytes % bytesPerPixel) == 0)
+            {
                 glGetIntegerv(GL_UNPACK_ROW_LENGTH, &prevUnpackRowLength);
                 glPixelStorei(GL_UNPACK_ROW_LENGTH, ToGLInt(rowPitchBytes / bytesPerPixel));
                 unpackRowLengthChanged = true;
-            } else {
+            }
+            else
+            {
                 LOG_L(L_WARNING, "[GLTexture::Upload] rowPitchBytes (%zu) is not aligned to bytesPerPixel (%u)", rowPitchBytes, bytesPerPixel);
             }
         }
 
-        if (slicePitchBytes != 0 && (dimension == TextureDimension::Tex2DArray || dimension == TextureDimension::Tex3D)) {
+        if (slicePitchBytes != 0 && (dimension == TextureDimension::Tex2DArray || dimension == TextureDimension::Tex3D))
+        {
             const std::size_t effectiveRowPitch = (rowPitchBytes != 0)
-                ? rowPitchBytes
-                : (static_cast<std::size_t>(mipExtent.width) * bytesPerPixel);
+                                                      ? rowPitchBytes
+                                                      : (static_cast<std::size_t>(mipExtent.width) * bytesPerPixel);
 
-            if (effectiveRowPitch != 0 && (slicePitchBytes % effectiveRowPitch) == 0) {
+            if (effectiveRowPitch != 0 && (slicePitchBytes % effectiveRowPitch) == 0)
+            {
                 glGetIntegerv(GL_UNPACK_IMAGE_HEIGHT, &prevUnpackImageHeight);
                 glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, ToGLInt(slicePitchBytes / effectiveRowPitch));
                 unpackImageHeightChanged = true;
-            } else {
+            }
+            else
+            {
                 LOG_L(L_WARNING, "[GLTexture::Upload] slicePitchBytes (%zu) is incompatible with row pitch (%zu)", slicePitchBytes, effectiveRowPitch);
             }
         }
 
         switch (dimension)
         {
-        case TextureDimension::Tex2D: {
-            if (arrayLayer != 0) {
+        case TextureDimension::Tex2D:
+        {
+            if (arrayLayer != 0)
+            {
                 LOG_L(L_WARNING, "[GLTexture::Upload] arrayLayer ignored for Tex2D (value=%u)", arrayLayer);
             }
 
@@ -308,12 +323,14 @@ namespace gfx
                 ToGLSizei(mipExtent.height),
                 uploadFormat,
                 uploadType,
-                pixels.data()
-            );
-        } break;
+                pixels.data());
+        }
+        break;
 
-        case TextureDimension::Tex2DArray: {
-            if (arrayLayer >= arrayLayers) {
+        case TextureDimension::Tex2DArray:
+        {
+            if (arrayLayer >= arrayLayers)
+            {
                 LOG_L(L_WARNING, "[GLTexture::Upload] Invalid arrayLayer %u for texture with %u layers", arrayLayer, arrayLayers);
                 break;
             }
@@ -329,12 +346,14 @@ namespace gfx
                 1,
                 uploadFormat,
                 uploadType,
-                pixels.data()
-            );
-        } break;
+                pixels.data());
+        }
+        break;
 
-        case TextureDimension::Tex3D: {
-            if (arrayLayer != 0) {
+        case TextureDimension::Tex3D:
+        {
+            if (arrayLayer != 0)
+            {
                 LOG_L(L_WARNING, "[GLTexture::Upload] arrayLayer ignored for Tex3D (value=%u)", arrayLayer);
             }
 
@@ -349,12 +368,14 @@ namespace gfx
                 ToGLSizei(mipExtent.depth),
                 uploadFormat,
                 uploadType,
-                pixels.data()
-            );
-        } break;
+                pixels.data());
+        }
+        break;
 
-        case TextureDimension::Cube: {
-            if (arrayLayer >= 6u) {
+        case TextureDimension::Cube:
+        {
+            if (arrayLayer >= 6u)
+            {
                 LOG_L(L_WARNING, "[GLTexture::Upload] Invalid cube face index %u (expected 0..5)", arrayLayer);
                 break;
             }
@@ -368,9 +389,9 @@ namespace gfx
                 ToGLSizei(mipExtent.height),
                 uploadFormat,
                 uploadType,
-                pixels.data()
-            );
-        } break;
+                pixels.data());
+        }
+        break;
         }
 
         if (unpackImageHeightChanged)

@@ -14,7 +14,8 @@ namespace
     GLsizeiptr ToGLSize(std::size_t value)
     {
         constexpr std::size_t maxValue = static_cast<std::size_t>(std::numeric_limits<GLsizeiptr>::max());
-        if (value > maxValue) {
+        if (value > maxValue)
+        {
             LOG_L(L_WARNING, "[GLVertexBuffer::ToGLSize] Size (%zu) exceeds GLsizeiptr max (%zu), clamping", value, maxValue);
             return std::numeric_limits<GLsizeiptr>::max();
         }
@@ -25,7 +26,8 @@ namespace
     GLintptr ToGLOffset(std::size_t value)
     {
         constexpr std::size_t maxValue = static_cast<std::size_t>(std::numeric_limits<GLintptr>::max());
-        if (value > maxValue) {
+        if (value > maxValue)
+        {
             LOG_L(L_WARNING, "[GLVertexBuffer::ToGLOffset] Offset (%zu) exceeds GLintptr max (%zu), clamping", value, maxValue);
             return std::numeric_limits<GLintptr>::max();
         }
@@ -39,14 +41,12 @@ namespace gfx
 {
 
     GLVertexBuffer::GLVertexBuffer(const BufferCreateInfo &ci)
-        : sizeBytes(ci.sizeBytes)
-        , usage(ci.usage)
-        , memoryAccess(ci.memoryAccess)
-        , readable(ci.readable)
+        : sizeBytes(ci.sizeBytes), usage(ci.usage), memoryAccess(ci.memoryAccess), readable(ci.readable)
     {
         glGenBuffers(1, &bufferId);
 
-        if (bufferId == 0) {
+        if (bufferId == 0)
+        {
             LOG_L(L_WARNING, "[GLVertexBuffer::GLVertexBuffer] glGenBuffers returned 0");
             return;
         }
@@ -60,7 +60,8 @@ namespace gfx
     {
         UnmapWrite();
 
-        if (bufferId != 0) {
+        if (bufferId != 0)
+        {
             glDeleteBuffers(1, &bufferId);
             bufferId = 0;
         }
@@ -103,8 +104,10 @@ namespace gfx
 
         const GLenum glUsage = TranslateUsage(usage);
 
-        if (!preserveData || sizeBytes == 0 || newSizeBytes == 0 || !IS_GL_FUNCTION_AVAILABLE(glCopyBufferSubData)) {
-            if (preserveData && !IS_GL_FUNCTION_AVAILABLE(glCopyBufferSubData)) {
+        if (!preserveData || sizeBytes == 0 || newSizeBytes == 0 || !IS_GL_FUNCTION_AVAILABLE(glCopyBufferSubData))
+        {
+            if (preserveData && !IS_GL_FUNCTION_AVAILABLE(glCopyBufferSubData))
+            {
                 LOG_L(L_WARNING, "[GLVertexBuffer::Resize] glCopyBufferSubData unavailable, resizing without preserving data");
             }
 
@@ -119,7 +122,8 @@ namespace gfx
         GLuint newBufferId = 0;
         glGenBuffers(1, &newBufferId);
 
-        if (newBufferId == 0) {
+        if (newBufferId == 0)
+        {
             LOG_L(L_WARNING, "[GLVertexBuffer::Resize] glGenBuffers for resize failed, resizing without preserving data");
 
             glBindBuffer(GL_ARRAY_BUFFER, bufferId);
@@ -136,14 +140,14 @@ namespace gfx
         glBindBuffer(GL_COPY_READ_BUFFER, bufferId);
 
         const std::size_t copySizeBytes = std::min(sizeBytes, newSizeBytes);
-        if (copySizeBytes > 0) {
+        if (copySizeBytes > 0)
+        {
             glCopyBufferSubData(
                 GL_COPY_READ_BUFFER,
                 GL_COPY_WRITE_BUFFER,
                 ToGLOffset(0),
                 ToGLOffset(0),
-                ToGLSize(copySizeBytes)
-            );
+                ToGLSize(copySizeBytes));
         }
 
         glBindBuffer(GL_COPY_READ_BUFFER, 0);
@@ -159,20 +163,21 @@ namespace gfx
         if (bufferId == 0 || src.empty())
             return;
 
-        if (dstOffsetBytes > sizeBytes) {
+        if (dstOffsetBytes > sizeBytes)
+        {
             LOG_L(L_WARNING, "[GLVertexBuffer::Update] Offset (%zu) is outside buffer size (%zu)", dstOffsetBytes, sizeBytes);
             return;
         }
 
         const std::size_t updateSizeBytes = src.size();
-        if (updateSizeBytes > (sizeBytes - dstOffsetBytes)) {
+        if (updateSizeBytes > (sizeBytes - dstOffsetBytes))
+        {
             LOG_L(
                 L_WARNING,
                 "[GLVertexBuffer::Update] Update range (%zu..%zu) exceeds buffer size (%zu)",
                 dstOffsetBytes,
                 (dstOffsetBytes + updateSizeBytes),
-                sizeBytes
-            );
+                sizeBytes);
             return;
         }
 
@@ -186,24 +191,26 @@ namespace gfx
         if (bufferId == 0 || mapSizeBytes == 0)
             return {};
 
-        if (!IsMappable()) {
+        if (!IsMappable())
+        {
             LOG_L(L_WARNING, "[GLVertexBuffer::MapWrite] Attempted to map a non-mappable buffer");
             return {};
         }
 
-        if (mapped) {
+        if (mapped)
+        {
             LOG_L(L_WARNING, "[GLVertexBuffer::MapWrite] Buffer is already mapped");
             return {};
         }
 
-        if (offsetBytes > sizeBytes || mapSizeBytes > (sizeBytes - offsetBytes)) {
+        if (offsetBytes > sizeBytes || mapSizeBytes > (sizeBytes - offsetBytes))
+        {
             LOG_L(
                 L_WARNING,
                 "[GLVertexBuffer::MapWrite] Map range (%zu..%zu) exceeds buffer size (%zu)",
                 offsetBytes,
                 (offsetBytes + mapSizeBytes),
-                sizeBytes
-            );
+                sizeBytes);
             return {};
         }
 
@@ -213,12 +220,12 @@ namespace gfx
             GL_ARRAY_BUFFER,
             ToGLOffset(offsetBytes),
             ToGLSize(mapSizeBytes),
-            GetMapWriteFlags()
-        );
+            GetMapWriteFlags());
 
         glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-        if (mappedPtr == nullptr) {
+        if (mappedPtr == nullptr)
+        {
             LOG_L(L_WARNING, "[GLVertexBuffer::MapWrite] glMapBufferRange returned null");
             return {};
         }
@@ -227,19 +234,21 @@ namespace gfx
         mappedOffsetBytes = offsetBytes;
         mappedSizeBytes = mapSizeBytes;
 
-        return { static_cast<std::byte *>(mappedPtr), mapSizeBytes };
+        return {static_cast<std::byte *>(mappedPtr), mapSizeBytes};
     }
 
     void GLVertexBuffer::UnmapWrite()
     {
-        if (!mapped || bufferId == 0) {
+        if (!mapped || bufferId == 0)
+        {
             ResetMapState();
             return;
         }
 
         glBindBuffer(GL_ARRAY_BUFFER, bufferId);
 
-        if (!glUnmapBuffer(GL_ARRAY_BUFFER)) {
+        if (!glUnmapBuffer(GL_ARRAY_BUFFER))
+        {
             LOG_L(L_WARNING, "[GLVertexBuffer::UnmapWrite] glUnmapBuffer reported data corruption");
         }
 
