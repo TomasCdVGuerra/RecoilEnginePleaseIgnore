@@ -287,6 +287,30 @@ Migration acceptance criteria for this step:
 2. `LineDrawer` owns only `gfx` abstractions and CPU staging vectors.
 3. Visual parity remains for both normal and stippled command lines.
 
+#### [IN PROGRESS] Phase 4.2: Font Rendering Scouting
+Target files:
+1. `rts/Rendering/Fonts/CFontTexture.cpp`
+2. `rts/Rendering/Fonts/glFontRenderer.cpp`
+
+Texture-coupling findings (`CFontTexture.cpp`):
+1. Texture lifecycle is raw OpenGL handle based (`glyphAtlasTextureID`), created in `CreateTexture(...)` with `glGenTextures` and destroyed in `~CFontTexture()` via `glDeleteTextures`.
+2. Atlas texture state setup is direct GL: `glBindTexture`, `glTexParameteri`, `glTexParameterfv`, `glTexParameteriv`, and format-specific `glTexImage2D` allocation.
+3. Glyph atlas upload path is full-texture replacement in `UploadGlyphAtlasTextureImpl()` using `glTexImage2D` (not sub-region upload), after CPU-side atlas merge/update bookkeeping.
+
+Atlas update mechanism findings:
+1. `LoadGlyph(...)` rasterizes glyphs to CPU bitmaps and queues atlas entries via allocator metadata (`atlasAlloc`, `glyphNameToIdx`, `atlasGlyphs`).
+2. `LoadWantedGlyphs(...)` composes pending glyph bitmaps into `atlasUpdate` and `atlasUpdateShadow`, tracks blur rectangles for outline expansion, and increments update generation counters.
+3. `UpdateGlyphAtlasTexture()` merges shadow atlas into main atlas and marks upload-required state (`needsTextureUpload`), then `UploadGlyphAtlasTexture()` triggers renderer-mediated upload.
+
+Vertex/draw submission findings (`glFontRenderer.cpp`):
+1. Shader path uses `TypedRenderBuffer<VA_TYPE_TC>` and issues indexed draws via GL-backed render-buffer wrappers (`DrawElements(GL_TRIANGLES)`).
+2. Legacy/no-shader path uses raw CPU vectors and fixed-function client arrays (`glVertexPointer`, `glTexCoordPointer`, `glColorPointer`, `glDrawRangeElements`).
+3. Font renderer state is GL-coupled (`glBindTexture`, blend/depth toggles, client state enable/disable, program bind/restore).
+
+Phase 4.2 implication summary:
+1. Texture creation can migrate to `graphicsBackend->CreateTexture(...)`, but incremental atlas updates require a region/offset-aware upload API extension beyond current `ITexture::Upload(...)` semantics.
+2. Font draw submission will require backend API support for textured indexed geometry (and texture binding/state control) to remove residual GL calls from font renderer implementations.
+
 ### [PENDING] Phase 5: Mid-Level Systems Migration
 Goal: Migrate complex geometry, texture streaming, and particle systems.
 
