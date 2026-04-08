@@ -1,7 +1,7 @@
-# Vulkan Migration Plan (Phase 1 Scaffolding)
+# Vulkan Migration Plan (MoltenVK on macOS)
 
 ## Scope
-This document captures the OpenGL surface area in CMake and the first scaffold steps for introducing a Vulkan backend (MoltenVK on macOS) without removing existing OpenGL paths.
+This document captures the OpenGL surface area in CMake and the incremental steps for introducing a Vulkan backend (MoltenVK on macOS) without breaking existing OpenGL and Headless paths.
 
 ## OpenGL CMake Surface Area (Current)
 1. `rts/builds/legacy/CMakeLists.txt`
@@ -215,3 +215,124 @@ public:
 3. Update selected call sites to request resources via `IGraphicsBackend` rather than constructing GL wrappers directly.
 4. Introduce Vulkan implementations matching the same contracts.
 5. Defer command-buffer and render-pass abstraction details until backend-independent resource ownership is proven in-engine.
+
+## Integrated Roadmap Update (MoltenVK on macOS)
+
+This update augments the existing plan starting at Phase 3 and forward, without repeating the already documented introduction, scope, and Phase 1/2 technical details.
+
+### Execution Status Snapshot
+1. `[COMPLETE]` Phase 1: Scaffolding.
+2. `[COMPLETE]` Phase 2: Abstraction Strategy and Interfaces.
+3. `[COMPLETE]` Phase 3: Backend Injection.
+4. `[PENDING]` Phase 4: Bottom-Up Migration (Leaf Nodes).
+5. `[PENDING]` Phase 5: Mid-Level Systems Migration.
+6. `[PENDING]` Phase 6: Core Rendering Systems Migration.
+7. `[PENDING]` Phase 7: Vulkan Backend Implementation.
+8. `[PENDING]` Phase 8: Build System Flip and Validation.
+
+### [COMPLETE] Phase 3: Backend Injection
+Goal: Make the new abstraction available to the engine safely.
+
+1. `[x]` Inject `std::unique_ptr<gfx::IGraphicsBackend> graphicsBackend;` into `GlobalRendering`.
+2. `[x]` Instantiate `GLGraphicsBackend` after valid OpenGL context creation.
+3. `[x]` Handle clean teardown/reset during shutdown paths.
+
+Verification completed for this phase:
+1. `cmake --build build --target engine-headless --parallel $(sysctl -n hw.logicalcpu)`
+2. `cmake --build build --target engine_smoketest --parallel $(sysctl -n hw.logicalcpu)`
+3. `ctest --test-dir build --output-on-failure -R smoketest`
+
+### [PENDING] Phase 4: Bottom-Up Migration (Leaf Nodes)
+Goal: Migrate the simplest rendering subsystems (least dependencies) to use `graphicsBackend` instead of direct OpenGL wrappers.
+
+Coupling observed:
+1. Debug drawers (`LineDrawer.cpp`, `DebugVisibilityDrawer.cpp`): directly construct `VBO` objects and call `glDrawArrays` / `glDrawElements`; relatively isolated from lighting/shadow passes.
+2. Font rendering (`glFontRenderer.cpp`, `CFontTexture.cpp`): direct texture atlas management via `glTexImage2D` and `glBindTexture`; mostly 2D/orthographic.
+3. UI backend (`RmlUi_Renderer_GL3_Recoil.cpp`): hardcoded GL3 render interface path; self-contained geometry + texture sampling.
+
+Incremental adoption path:
+1. Update `LineDrawer` to allocate a `gfx::IVertexBuffer` from `globalRendering->graphicsBackend`.
+2. Introduce `gfx::IIndexBuffer` (parallel to `IVertexBuffer`) for indexed UI geometry and batched draws.
+3. Rewrite the RmlUi renderer backend path so `RenderGeometry` uses `gfx` interfaces only.
+
+#### [COMPLETE] Phase 4.1: LineDrawer Migration
+Scouting findings:
+1. `LineDrawer` does not currently use `VBO.h`; it uses CPU-side float arrays and legacy client-state OpenGL submission.
+2. Submission path is fixed-function and directly issues `glColorPointer`, `glVertexPointer`, and `glDrawArrays` in `DrawAll()`.
+3. Stippled and non-stippled line batches are emitted in separate passes with direct GL state toggles.
+
+Proposed refactor shape:
+1. Keep the existing path-building API (`StartPath`, `DrawLine`, `Break`, `Restart`) unchanged to minimize call-site churn.
+2. Replace per-batch split arrays (`verts` + `colors`) with packed transient upload buffers during `DrawAll()`, using an internal packed vertex layout: `position(float3) + color(float4)`.
+3. Add two backend-owned dynamic buffers in `LineDrawer`:
+	- `lineVertexBuffer` for solid line batches
+	- `stippleVertexBuffer` for stippled line batches
+4. Lazily instantiate each via `globalRendering->graphicsBackend->CreateVertexBuffer(...)` with dynamic CPU-to-GPU usage settings.
+5. On each `DrawAll()`:
+	- flatten queued `LinePair` data into packed contiguous CPU vectors
+	- call `Resize(...)` only if capacity is insufficient
+	- upload with either `MapWrite/UnmapWrite` or `Update(...)` depending on mappability and frame size
+6. Preserve line-strip vs line-list behavior by tracking batch ranges and draw modes during flattening.
+
+Required abstraction extension (to avoid GL leakage at call-sites):
+1. Introduce a minimal line draw submission entry-point on `gfx::IGraphicsBackend`, for example a `DrawLineBatches(...)` style method that accepts:
+	- vertex buffer resource reference
+	- batch spans (mode, first vertex, count)
+	- line-stipple enable flag and stipple params
+2. Implement this in `GLGraphicsBackend` using existing OpenGL calls internally.
+3. Keep all GL state toggles and fixed-function compatibility inside the backend implementation, not inside `LineDrawer`.
+
+Migration acceptance criteria for this step:
+1. `LineDrawer` no longer calls raw `glDrawArrays`, `glColorPointer`, or `glVertexPointer` directly.
+2. `LineDrawer` owns only `gfx` abstractions and CPU staging vectors.
+3. Visual parity remains for both normal and stippled command lines.
+
+### [PENDING] Phase 5: Mid-Level Systems Migration
+Goal: Migrate complex geometry, texture streaming, and particle systems.
+
+Coupling observed:
+1. Textures (`Texture.cpp`, `Bitmap.cpp`, `AtlasedTexture.cpp`): heavy usage of `glGenerateMipmap`, `glTexParameteri`, and PBO-based upload paths.
+2. Models (`3DModel.cpp`, `LocalModel.cpp`): tight VAO coupling for attribute layouts (position/normal/UV).
+3. Particles (`ProjectileDrawer.cpp`): large dynamic VBO streaming with strict CPU->GPU throughput requirements.
+
+Incremental adoption path:
+1. Introduce `gfx::IVertexArray` or backend-neutral vertex layout descriptors to replace direct `glVertexAttribPointer` paths.
+2. Refactor `Texture.cpp` toward manager-style ownership returning `gfx::ITexture` instances instead of raw GL handles.
+3. Validate particle streaming throughput and frame pacing using `gfx::IVertexBuffer::MapWrite` across stress scenarios.
+
+### [PENDING] Phase 6: Core Rendering Systems Migration
+Goal: Abstract the most tightly coupled OpenGL systems: framebuffers, shaders, and map rendering.
+
+Coupling observed:
+1. Framebuffers (`FBO.h`, `RenderBuffers.cpp`): hardcoded `GL_COLOR_ATTACHMENT*`, depth/stencil setup, and `glBlitFramebuffer` logic.
+2. Shaders (`Shader.cpp`, `ShaderHandler.cpp`): direct GLSL compile/link path (`glCreateShader`) and uniform lookups (`glGetUniformLocation`).
+3. Map rendering (`SMFGroundDrawer.cpp`, `WaterRendering.cpp`): multi-pass heavy GL-state usage and engine-specific state macros.
+
+Incremental adoption path:
+1. Design `gfx::IFramebuffer` and `gfx::IRenderTarget` and provide OpenGL adapters first.
+2. Introduce `gfx::IShaderProgram` with backend-specific compilation/reflect paths.
+3. Ensure shader abstraction supports GLSL source for GL backend and SPIR-V bytecode for Vulkan backend.
+4. Refactor map rendering to render against `gfx::IFramebuffer` surfaces instead of direct `FBO` dependencies.
+
+### [PENDING] Phase 7: Vulkan Backend Implementation
+Goal: Implement Vulkan-native versions of `gfx` interfaces to run on macOS via MoltenVK.
+
+Implementation strategy:
+1. Initialization: implement `VulkanGraphicsBackend` for `VkInstance`, `VkDevice`, swapchain/surface setup (including MoltenVK/macOS integration).
+2. Memory management: integrate VMA and map `gfx::BufferUsage` and `MemoryAccess` policies to Vulkan memory and staging strategy.
+3. Buffers and textures: implement `VulkanVertexBuffer` and `VulkanTexture`, including image layout transitions and staging copies.
+4. Command recording: introduce `gfx::ICommandBuffer` abstraction (no-op / implicit behavior for GL backend, explicit for Vulkan).
+5. Pipelines and shaders: map `gfx::IShaderProgram` to Vulkan PSO concepts; compile GLSL to SPIR-V (runtime or build-time pipeline).
+
+### [PENDING] Phase 8: Build System Flip and Validation
+Goal: Make Vulkan the primary rendering path on Apple Silicon while keeping rollback-safe behavior.
+
+1. Wire `ENABLE_VULKAN=ON` path to instantiate `VulkanGraphicsBackend` in `GlobalRendering`.
+2. Validate headless and CI compliance under Vulkan-enabled configurations.
+3. Benchmark performance and frame pacing against OpenGL baseline.
+4. After stabilization, deprecate and remove legacy `rts/Rendering/GL/` wrappers in controlled cleanup waves.
+
+### Risks and Safeguards
+1. Keep OpenGL path as known-good fallback until Vulkan reaches feature parity for gameplay-critical render paths.
+2. Preserve deterministic behavior for synced gameplay code by isolating rendering-only abstractions from simulation state.
+3. Gate large migrations behind focused compile/test loops (`engine-headless`, `engine_smoketest`, `ctest -R smoketest`) at each phase boundary.

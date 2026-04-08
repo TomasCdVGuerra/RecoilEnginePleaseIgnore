@@ -41,6 +41,11 @@ namespace gfx
         [[nodiscard]] std::span<std::byte> MapWrite(std::size_t offsetBytes, std::size_t sizeBytes) override;
         void UnmapWrite() override;
 
+        [[nodiscard]] GLuint GetBufferId() const noexcept
+        {
+            return bufferId;
+        }
+
     private:
         void MoveFrom(GLVertexBuffer &&other) noexcept;
         GLenum TranslateUsage(BufferUsage value) const noexcept;

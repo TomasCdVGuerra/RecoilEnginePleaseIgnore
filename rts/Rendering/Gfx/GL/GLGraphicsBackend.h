@@ -19,6 +19,11 @@ namespace gfx
         [[nodiscard]] std::unique_ptr<IVertexBuffer> CreateVertexBuffer(const BufferCreateInfo &ci) override;
         [[nodiscard]] std::unique_ptr<ITexture> CreateTexture(const TextureCreateInfo &ci) override;
 
+        void DrawLineBatches(
+            IVertexBuffer &vertexBuffer,
+            std::span<const LineBatchDesc> batches,
+            const LineStippleState &stippleState) override;
+
         void BeginFrame() override;
         void EndFrame() override;
         void DeviceWaitIdle() override;

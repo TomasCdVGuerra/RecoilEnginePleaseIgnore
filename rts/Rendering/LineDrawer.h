@@ -5,9 +5,11 @@
 
 #include <vector>
 #include <array>
+#include <memory>
 
 #include "Game/UI/CursorIcons.h"
-#include "Rendering/GL/myGL.h"
+#include "Rendering/Gfx/IGraphicsBackend.h"
+#include "Rendering/Gfx/IVertexBuffer.h"
 
 class CLineDrawer {
 	public:
@@ -47,13 +49,22 @@ class CLineDrawer {
 
 		// queue all lines and draw them in one go later
 		struct LinePair {
-			GLenum type;
-			std::vector<GLfloat> verts;
-			std::vector<GLfloat> colors;
+			gfx::LinePrimitive type = gfx::LinePrimitive::LineStrip;
+			std::vector<float> verts;
+			std::vector<float> colors;
 		};
 
 		std::vector<LinePair> lines;
 		std::vector<LinePair> stippled;
+
+		std::unique_ptr<gfx::IVertexBuffer> lineVertexBuffer;
+		std::unique_ptr<gfx::IVertexBuffer> stippledVertexBuffer;
+
+		std::vector<gfx::LineVertexPC> lineVertices;
+		std::vector<gfx::LineVertexPC> stippledVertices;
+		std::vector<gfx::LineBatchDesc> lineBatches;
+		std::vector<gfx::LineBatchDesc> stippledBatches;
+		gfx::LineStippleState stippleState;
 };
 
 
@@ -101,7 +112,7 @@ inline void CLineDrawer::Restart()
 	LinePair& p = *ptr;
 
 	if (!useColorRestarts)	 {
-		p.type = GL_LINE_STRIP;
+		p.type = gfx::LinePrimitive::LineStrip;
 		p.colors.push_back(lastColor[0]);
 		p.colors.push_back(lastColor[1]);
 		p.colors.push_back(lastColor[2]);
@@ -110,7 +121,7 @@ inline void CLineDrawer::Restart()
 		p.verts.push_back(lastPos[1]);
 		p.verts.push_back(lastPos[2]);
 	} else {
-		p.type = GL_LINES;
+		p.type = gfx::LinePrimitive::Lines;
 	}
 }
 
