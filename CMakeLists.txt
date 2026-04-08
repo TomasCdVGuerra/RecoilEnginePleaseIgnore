@@ -1,9 +1,13 @@
 cmake_minimum_required(VERSION 3.27)
-# CMake 4 removes compatibility with policy versions < 3.5. Several vendored
-# third-party subdirectories still declare older cmake_minimum_required values,
-# so set a global floor to keep configure working without patching submodules.
+# CMake 4 warns when subprojects request policy compatibility below 3.10.
+# Keep a global floor so vendored subdirectories can remain unmodified.
 if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.0")
-	set(CMAKE_POLICY_VERSION_MINIMUM "3.5")
+	set(CMAKE_POLICY_VERSION_MINIMUM "3.10")
+endif()
+
+# CMake 3.31+ warns when install() DESTINATION normalization policy is unset.
+if(POLICY CMP0177)
+	cmake_policy(SET CMP0177 NEW)
 endif()
 #cmake_policy(SET CMP0060 OLD) #causes link errors on Linux otherwise
 #cmake_policy(SET CMP0065 OLD) #we need binaries compiled with -rdynamic for BARb to work (cause unknown https://github.com/beyond-all-reason/spring/issues/405)
@@ -31,6 +35,42 @@ option(INSTALL_PORTABLE "Make a portable installation (instead of regular system
 
 # Allow to set PREFER_STATIC_LIBS from env, defaults to false
 option(PREFER_STATIC_LIBS "Prefer static libraries when linking deps" $ENV{PREFER_STATIC_LIBS})
+
+option(ENABLE_VULKAN "Enable Vulkan rendering backend (MoltenVK on macOS)" OFF)
+if (ENABLE_VULKAN)
+	if (APPLE)
+		set(_MOLTENVK_ICD_CANDIDATES
+			"$ENV{VULKAN_SDK}/share/vulkan/icd.d/MoltenVK_icd.json"
+			"/opt/homebrew/share/vulkan/icd.d/MoltenVK_icd.json"
+			"/usr/local/share/vulkan/icd.d/MoltenVK_icd.json"
+			"/usr/local/opt/molten-vk/share/vulkan/icd.d/MoltenVK_icd.json"
+			"/Library/Frameworks/MoltenVK.framework/Resources/vulkan/icd.d/MoltenVK_icd.json"
+		)
+
+		foreach(_icd ${_MOLTENVK_ICD_CANDIDATES})
+			if (EXISTS "${_icd}")
+				set(VULKAN_MOLTENVK_ICD "${_icd}" CACHE FILEPATH "MoltenVK ICD json path used for macOS Vulkan runtime" FORCE)
+				set(ENV{VK_ICD_FILENAMES} "${VULKAN_MOLTENVK_ICD}")
+				message(STATUS "Using MoltenVK ICD: ${VULKAN_MOLTENVK_ICD}")
+				break()
+			endif()
+		endforeach()
+
+		find_library(VULKAN_FRAMEWORK NAMES Vulkan
+			PATHS
+				"$ENV{VULKAN_SDK}/lib"
+				"/Library/Frameworks"
+				"/opt/homebrew/lib"
+				"/usr/local/lib"
+		)
+		if (VULKAN_FRAMEWORK)
+			set(Vulkan_LIBRARY "${VULKAN_FRAMEWORK}" CACHE FILEPATH "Vulkan loader/framework path hint on macOS" FORCE)
+			message(STATUS "Using Vulkan loader hint: ${Vulkan_LIBRARY}")
+		endif()
+	endif()
+
+	find_package(Vulkan REQUIRED)
+endif()
 
 # dummy so that qtcreator shows all files (even those of windows)
 if(CMAKE_VERSION VERSION_GREATER 3.1.2)
@@ -427,7 +467,7 @@ if    (LDGOLD_FOUND)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${LDGOLD_CXX_FLAGS}")
 	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${LDGOLD_LINKER_FLAGS}")
 else  (LDGOLD_FOUND)
-	message(WARNING "You are using ld.bfd, it's much slower than ld.gold.")
+	message(STATUS "Using ld.bfd (ld.gold not found)")
 endif (LDGOLD_FOUND)
 
 add_definitions(-D_GLIBCXX_USE_NANOSLEEP) # issue in std::chrono with gentoo and few other distros
