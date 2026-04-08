@@ -95,15 +95,61 @@ namespace
             std::max<std::uint32_t>(1u, baseExtent.depth >> mipLevel)};
     }
 
-    void SetupTextureSampling(GLenum target, std::uint32_t mipLevels)
+    GLenum TranslateMinFilterMode(gfx::FilterMode mode)
     {
-        const GLint minFilter = (mipLevels > 1) ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR;
+        switch (mode)
+        {
+        case gfx::FilterMode::Nearest:
+            return GL_NEAREST;
+        case gfx::FilterMode::Linear:
+            return GL_LINEAR;
+        case gfx::FilterMode::NearestMipmapNearest:
+            return GL_NEAREST_MIPMAP_NEAREST;
+        case gfx::FilterMode::LinearMipmapNearest:
+            return GL_LINEAR_MIPMAP_NEAREST;
+        case gfx::FilterMode::NearestMipmapLinear:
+            return GL_NEAREST_MIPMAP_LINEAR;
+        case gfx::FilterMode::LinearMipmapLinear:
+            return GL_LINEAR_MIPMAP_LINEAR;
+        }
 
-        glTexParameteri(target, GL_TEXTURE_MIN_FILTER, minFilter);
-        glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexParameteri(target, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+        return GL_LINEAR;
+    }
+
+    GLenum TranslateMagFilterMode(gfx::FilterMode mode)
+    {
+        switch (mode)
+        {
+        case gfx::FilterMode::Nearest:
+        case gfx::FilterMode::NearestMipmapNearest:
+        case gfx::FilterMode::NearestMipmapLinear:
+            return GL_NEAREST;
+        case gfx::FilterMode::Linear:
+        case gfx::FilterMode::LinearMipmapNearest:
+        case gfx::FilterMode::LinearMipmapLinear:
+            return GL_LINEAR;
+        }
+
+        return GL_LINEAR;
+    }
+
+    GLenum TranslateWrapMode(gfx::WrapMode mode)
+    {
+        switch (mode)
+        {
+        case gfx::WrapMode::Repeat:
+            return GL_REPEAT;
+        case gfx::WrapMode::MirroredRepeat:
+            return GL_MIRRORED_REPEAT;
+        case gfx::WrapMode::ClampToEdge:
+            return GL_CLAMP_TO_EDGE;
+        case gfx::WrapMode::ClampToBorder:
+            return GL_CLAMP_TO_BORDER;
+        case gfx::WrapMode::MirrorClampToEdge:
+            return GL_MIRROR_CLAMP_TO_EDGE;
+        }
+
+        return GL_CLAMP_TO_EDGE;
     }
 
 } // namespace
@@ -140,7 +186,6 @@ namespace gfx
         }
 
         glBindTexture(target, textureId);
-        SetupTextureSampling(target, mipLevels);
 
         for (std::uint32_t mip = 0; mip < mipLevels; ++mip)
         {
@@ -215,7 +260,11 @@ namespace gfx
             }
         }
 
-        glBindTexture(target, 0);
+        SamplerState samplerState = ci.samplerState.value_or(SamplerState{});
+        if (!ci.samplerState.has_value())
+            samplerState.minFilter = (mipLevels > 1u) ? FilterMode::LinearMipmapLinear : FilterMode::Linear;
+
+        ApplySamplerState(samplerState);
     }
 
     GLTexture::~GLTexture()
@@ -411,6 +460,26 @@ namespace gfx
 
         glBindTexture(target, textureId);
         glGenerateMipmap(target);
+        glBindTexture(target, 0);
+    }
+
+    void GLTexture::ApplySamplerState(const SamplerState &state)
+    {
+        if (textureId == 0)
+            return;
+
+        glBindTexture(target, textureId);
+
+        glTexParameteri(target, GL_TEXTURE_MIN_FILTER, static_cast<GLint>(TranslateMinFilterMode(state.minFilter)));
+        glTexParameteri(target, GL_TEXTURE_MAG_FILTER, static_cast<GLint>(TranslateMagFilterMode(state.magFilter)));
+        glTexParameteri(target, GL_TEXTURE_WRAP_S, static_cast<GLint>(TranslateWrapMode(state.wrapS)));
+        glTexParameteri(target, GL_TEXTURE_WRAP_T, static_cast<GLint>(TranslateWrapMode(state.wrapT)));
+        glTexParameteri(target, GL_TEXTURE_WRAP_R, static_cast<GLint>(TranslateWrapMode(state.wrapR)));
+        glTexParameterf(target, GL_TEXTURE_LOD_BIAS, state.lodBias);
+
+        if (state.anisotropy > 0.0f)
+            glTexParameterf(target, GL_TEXTURE_MAX_ANISOTROPY, state.anisotropy);
+
         glBindTexture(target, 0);
     }
 

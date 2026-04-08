@@ -61,6 +61,8 @@ namespace gfx
             std::span<const std::byte> pixels,
             std::size_t rowPitchBytes = 0) override;
 
+        void ApplySamplerState(const SamplerState &state) override;
+
         void GenerateMipmaps() override;
 
         [[nodiscard]] GLuint GetTextureId() const noexcept

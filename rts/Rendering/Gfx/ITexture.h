@@ -37,6 +37,8 @@ namespace gfx
             std::span<const std::byte> pixels,
             std::size_t rowPitchBytes = 0) = 0;
 
+        virtual void ApplySamplerState(const SamplerState &state) = 0;
+
         virtual void GenerateMipmaps() = 0;
     };
 

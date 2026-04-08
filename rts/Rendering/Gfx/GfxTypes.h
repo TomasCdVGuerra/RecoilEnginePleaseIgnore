@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace gfx
@@ -47,6 +48,25 @@ namespace gfx
         D32_SFloat,
     };
 
+    enum class FilterMode
+    {
+        Nearest,
+        Linear,
+        NearestMipmapNearest,
+        LinearMipmapNearest,
+        NearestMipmapLinear,
+        LinearMipmapLinear,
+    };
+
+    enum class WrapMode
+    {
+        Repeat,
+        MirroredRepeat,
+        ClampToEdge,
+        ClampToBorder,
+        MirrorClampToEdge,
+    };
+
     enum class TextureUsage : std::uint32_t
     {
         Sampled = 1u << 0,
@@ -78,6 +98,17 @@ namespace gfx
         std::string debugName;
     };
 
+    struct SamplerState
+    {
+        FilterMode minFilter = FilterMode::Linear;
+        FilterMode magFilter = FilterMode::Linear;
+        WrapMode wrapS = WrapMode::ClampToEdge;
+        WrapMode wrapT = WrapMode::ClampToEdge;
+        WrapMode wrapR = WrapMode::ClampToEdge;
+        float anisotropy = 0.0f;
+        float lodBias = 0.0f;
+    };
+
     struct TextureCreateInfo
     {
         TextureDimension dimension = TextureDimension::Tex2D;
@@ -86,6 +117,7 @@ namespace gfx
         std::uint32_t mipLevels = 1;
         std::uint32_t arrayLayers = 1;
         TextureUsage usage = TextureUsage::Sampled;
+        std::optional<SamplerState> samplerState;
         std::string debugName;
     };
 
