@@ -15,7 +15,7 @@
 #endif
 
 #include "Bitmap.h"
-#include "Rendering/GL/TexBind.h"
+#include "Rendering/Textures/Texture.hpp"
 #include "System/ScopedFPUSettings.h"
 #include "System/ContainerUtil.h"
 #include "System/SafeUtil.h"
@@ -1727,30 +1727,18 @@ uint32_t CBitmap::CreateTexture(const GL::TextureCreationParams& tcp) const
 	if (GetMemSize() == 0)
 		return 0;
 
-	uint32_t texID = tcp.texID;
-	const int32_t numLevels = tcp.reqNumLevels <= 0 ? GetReqNumLevels() : tcp.reqNumLevels;
-	const auto minFilter = tcp.GetMinFilter(numLevels);
-	const auto magFilter = tcp.GetMagFilter();
+	GL::TextureCreationParams effectiveTcp = tcp;
+	effectiveTcp.reqNumLevels = (effectiveTcp.reqNumLevels <= 0) ? GetReqNumLevels() : effectiveTcp.reqNumLevels;
 
-	if (texID == 0)
-		glGenTextures(1, &texID);
+	GL::Texture2D texture(static_cast<uint32_t>(xsize), static_cast<uint32_t>(ysize), GetIntFmt(), effectiveTcp, true);
+	if (!texture.IsValid())
+		return 0;
 
-	auto binding = GL::TexBind(GL_TEXTURE_2D, texID);
+	auto binding = texture.ScopedBind();
+	texture.UploadImage(GetRawMem());
+	texture.ProduceMipmaps();
 
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-	if (tcp.lodBias != 0.0f)
-		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_LOD_BIAS, tcp.lodBias);
-	if (tcp.aniso > 0.0f)
-		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, tcp.aniso);
-
-	RecoilBuildMipmaps(GL_TEXTURE_2D, GetIntFmt(), xsize, ysize, GetExtFmt(), dataType, GetRawMem(), numLevels);
-
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, magFilter);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minFilter);
-
-	return texID;
+	return texture.DisOwn();
 }
 
 

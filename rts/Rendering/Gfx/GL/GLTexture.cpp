@@ -23,12 +23,34 @@ namespace
     {
         switch (format)
         {
+        case gfx::PixelFormat::R8_UNorm:
+            return {GL_R8, GL_RED, GL_UNSIGNED_BYTE, 1};
+        case gfx::PixelFormat::RG8_UNorm:
+            return {GL_RG8, GL_RG, GL_UNSIGNED_BYTE, 2};
+        case gfx::PixelFormat::RGB8_UNorm:
+            return {GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE, 3};
         case gfx::PixelFormat::RGBA8_UNorm:
             return {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, 4};
         case gfx::PixelFormat::BGRA8_UNorm:
             return {GL_RGBA8, GL_BGRA, GL_UNSIGNED_BYTE, 4};
-        case gfx::PixelFormat::R8_UNorm:
-            return {GL_R8, GL_RED, GL_UNSIGNED_BYTE, 1};
+        case gfx::PixelFormat::R16_UNorm:
+            return {GL_R16, GL_RED, GL_UNSIGNED_SHORT, 2};
+        case gfx::PixelFormat::RG16_UNorm:
+            return {GL_RG16, GL_RG, GL_UNSIGNED_SHORT, 4};
+        case gfx::PixelFormat::RGB16_UNorm:
+            return {GL_RGB16, GL_RGB, GL_UNSIGNED_SHORT, 6};
+        case gfx::PixelFormat::RGBA16_UNorm:
+            return {GL_RGBA16, GL_RGBA, GL_UNSIGNED_SHORT, 8};
+        case gfx::PixelFormat::R32_SFloat:
+            return {GL_R32F, GL_RED, GL_FLOAT, 4};
+        case gfx::PixelFormat::RG32_SFloat:
+            return {GL_RG32F, GL_RG, GL_FLOAT, 8};
+        case gfx::PixelFormat::RGB32_SFloat:
+            return {GL_RGB32F, GL_RGB, GL_FLOAT, 12};
+        case gfx::PixelFormat::RGBA32_SFloat:
+            return {GL_RGBA32F, GL_RGBA, GL_FLOAT, 16};
+        case gfx::PixelFormat::RGB10A2_UNorm:
+            return {GL_RGB10_A2, GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV, 4};
         case gfx::PixelFormat::D24S8:
             return {GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 4};
         case gfx::PixelFormat::D32_SFloat:
@@ -177,7 +199,25 @@ namespace gfx
             arrayLayers = 6u;
         }
 
-        glGenTextures(1, &textureId);
+        if (ci.nativeHandle != 0)
+        {
+            constexpr std::uintptr_t maxTextureId = static_cast<std::uintptr_t>(std::numeric_limits<GLuint>::max());
+            if (ci.nativeHandle > maxTextureId)
+            {
+                LOG_L(
+                    L_WARNING,
+                    "[GLTexture::GLTexture] nativeHandle (%zu) exceeds GLuint max (%zu)",
+                    static_cast<std::size_t>(ci.nativeHandle),
+                    static_cast<std::size_t>(maxTextureId));
+                return;
+            }
+
+            textureId = static_cast<GLuint>(ci.nativeHandle);
+        }
+        else
+        {
+            glGenTextures(1, &textureId);
+        }
 
         if (textureId == 0)
         {

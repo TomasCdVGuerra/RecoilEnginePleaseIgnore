@@ -41,9 +41,20 @@ namespace gfx
     enum class PixelFormat
     {
         Unknown,
+        R8_UNorm,
+        RG8_UNorm,
+        RGB8_UNorm,
         RGBA8_UNorm,
         BGRA8_UNorm,
-        R8_UNorm,
+        R16_UNorm,
+        RG16_UNorm,
+        RGB16_UNorm,
+        RGBA16_UNorm,
+        R32_SFloat,
+        RG32_SFloat,
+        RGB32_SFloat,
+        RGBA32_SFloat,
+        RGB10A2_UNorm,
         D24S8,
         D32_SFloat,
     };
@@ -118,6 +129,7 @@ namespace gfx
         std::uint32_t arrayLayers = 1;
         TextureUsage usage = TextureUsage::Sampled;
         std::optional<SamplerState> samplerState;
+        std::uintptr_t nativeHandle = 0;
         std::string debugName;
     };
 

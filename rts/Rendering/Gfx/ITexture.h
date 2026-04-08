@@ -19,6 +19,7 @@ namespace gfx
         [[nodiscard]] virtual PixelFormat Format() const noexcept = 0;
         [[nodiscard]] virtual Extent3D GetExtent() const noexcept = 0;
         [[nodiscard]] virtual std::uint32_t GetMipLevels() const noexcept = 0;
+        [[nodiscard]] virtual std::uintptr_t GetNativeHandle() const noexcept = 0;
 
         virtual void Upload(
             std::uint32_t mipLevel,

@@ -44,6 +44,11 @@ namespace gfx
             return mipLevels;
         }
 
+        [[nodiscard]] std::uintptr_t GetNativeHandle() const noexcept override
+        {
+            return static_cast<std::uintptr_t>(textureId);
+        }
+
         void Upload(
             std::uint32_t mipLevel,
             std::uint32_t arrayLayer,

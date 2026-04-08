@@ -2,6 +2,10 @@
 
 #include <cstdint>
 #include <array>
+#include <memory>
+#include <utility>
+
+#include "Rendering/Gfx/ITexture.h"
 #include "System/type2.h"
 #include "System/TemplateUtils.hpp"
 #include "Rendering/GL/TexBind.h"
@@ -17,9 +21,10 @@ namespace GL {
 		{}
 		virtual ~TextureBase();
 
-		bool IsValid() const { return texID != 0; }
-		auto GetId() const { return texID; }
-		auto DisOwn() { ownTexID = false; return texID; }
+		bool IsValid() const { return backendTexture != nullptr; }
+		auto GetId() const { return GetGLId(); }
+		auto DisOwn() { const auto texID = GetGLId(); backendTexture.release(); return texID; }
+		auto GetGLId() const -> uint32_t;
 
 		[[nodiscard]] GL::TexBind ScopedBind();
 		[[nodiscard]] GL::TexBind ScopedBind(uint32_t relSlot);
@@ -30,7 +35,11 @@ namespace GL {
 		void Unbind();
 		void Unbind(uint32_t relSlot);
 	public:
-		TextureBase(TextureBase&& other) noexcept{ *this = std::move(other); }
+		TextureBase(TextureBase&& other) noexcept
+			: texTarget(other.texTarget)
+		{
+			*this = std::move(other);
+		}
 		TextureBase(const TextureBase&) = delete;
 
 		TextureBase& operator=(TextureBase&& other) noexcept;
@@ -38,11 +47,10 @@ namespace GL {
 	public:
 		virtual void ProduceMipmaps() const = 0;
 	protected:
-		uint32_t texID = 0;
+		std::unique_ptr<gfx::ITexture> backendTexture;
 		uint32_t intFormat = 0;
 		int32_t numLevels = -1;
 		uint32_t lastBoundSlot = 0;
-		bool ownTexID = true;
 		uint32_t texTarget;
 	};
 
@@ -128,7 +136,7 @@ namespace GL {
 			const auto numChannels = GetNumChannelsFromInternalFormat(intFormat);
 			assert(c.size() * sizeof(typename C::value_type) >= size.x * size.y * numChannels * dataSize);
 		#endif // DEBUG
-			UploadImage(c.data());
+			UploadImage(c.data(), layer);
 		}
 
 		template <Concepts::HasSizeAndData C>

@@ -350,7 +350,7 @@ Incremental adoption path:
 2. Refactor `Texture.cpp` toward manager-style ownership returning `gfx::ITexture` instances instead of raw GL handles.
 3. Validate particle streaming throughput and frame pacing using `gfx::IVertexBuffer::MapWrite` across stress scenarios.
 
-#### [IN PROGRESS] Phase 5.1: Texture Management Migration
+#### [COMPLETE] Phase 5.1: Texture Management Migration
 Target files:
 1. `rts/Rendering/Textures/Texture.hpp` (header counterpart to requested `Texture.h`)
 2. `rts/Rendering/Textures/Texture.cpp`
