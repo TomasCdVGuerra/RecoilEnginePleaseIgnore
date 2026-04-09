@@ -340,6 +340,9 @@ Phase 4.3 implication summary:
 ### [PENDING] Phase 5: Mid-Level Systems Migration
 Goal: Migrate complex geometry, texture streaming, and particle systems.
 
+Sub-status:
+1. `[IN PROGRESS]` Phase 5.3: Particle System Scouting.
+
 Coupling observed:
 1. Textures (`Texture.cpp`, `Bitmap.cpp`, `AtlasedTexture.cpp`): heavy usage of `glGenerateMipmap`, `glTexParameteri`, and PBO-based upload paths.
 2. Models (`3DModel.cpp`, `LocalModel.cpp`): tight VAO coupling for attribute layouts (position/normal/UV).
@@ -419,6 +422,40 @@ Phase 5.2 implication summary:
 1. The critical GL lock-in for model migration is VAO attribute-state declaration and indirect indexed submission APIs.
 2. Existing `S3DModelVAO` already centralizes geometry ownership, making it a practical pivot point for introducing backend-neutral vertex-layout and draw-command abstractions.
 3. Legacy fixed-function helpers (`BindLegacyAttrVBOs`, matrix stack usage in piece draw calls, display-list LOD fallback) must be staged behind backend-compatible compatibility paths during migration.
+
+#### [IN PROGRESS] Phase 5.3: Particle System Scouting
+Target files:
+1. `rts/Rendering/Env/Particles/ProjectileDrawer.h`
+2. `rts/Rendering/Env/Particles/ProjectileDrawer.cpp`
+3. `rts/Sim/Projectiles/ExpGenSpawnable.cpp`
+4. `rts/Rendering/GL/RenderBuffers.h`
+5. `rts/Rendering/GL/StreamBuffer.h`
+
+OpenGL coupling findings (vertex data upload path):
+1. Particle/projectile quads are generated on CPU each frame through `CProjectile::Draw()` and derived classes, funneled via `CExpGenSpawnable::AddEffectsQuadImpl(...)` into `TypedRenderBuffer<VA_TYPE_PROJ>` (`CExpGenSpawnable::GetPrimaryRenderBuffer()`).
+2. Submission in `ProjectileDrawer` is centralized: `DrawAlpha()`, `DrawShadowTransparent()`, and `DrawGroundFlashes()` all flush the same buffer using `rb.DrawElements(GL_TRIANGLES)`.
+3. `TypedRenderBuffer<VA_TYPE_PROJ>::DrawElements()` calls `UploadVBO()` and `UploadEBO()` before drawing; these call `IStreamBuffer::Map(...)` and `Unmap()` each frame for newly appended ranges.
+4. `IStreamBuffer` implementation is selected by `SB_AUTODETECT` and runtime capabilities:
+	- `PersistentMapImpl` / `MapAndSyncImpl` / `MapAndOrphanImpl` paths use `glMapBufferRange` (+ flush/unmap/fencing where needed).
+	- fallback `BufferSubDataImpl` uses `glBufferSubData`.
+5. This is not a legacy client-array path for particle geometry; there is no `glVertexPointer`/`glColorPointer` in the `VA_TYPE_PROJ` submission flow.
+
+OpenGL coupling findings (draw mechanism):
+1. Main particle/projectile rendering uses indexed triangle draws (`glDrawElements`) through `TypedRenderBuffer<VA_TYPE_PROJ>::DrawElements(...)`.
+2. Minimap projectile overlays use non-indexed draws (`glDrawArrays`) through `TypedRenderBuffer<VA_TYPE_C>::DrawArrays(...)`.
+3. Model-based projectiles still go through model draw paths (`DrawProjectileModel`), including legacy matrix-stack and model-helper rendering for pieces/weapon models.
+
+OpenGL coupling findings (texture binding and blend state):
+1. `DrawAlpha()` binds atlas texture on unit 0 (`textureAtlas->BindTexture()`), optionally binds copied depth texture on unit 15 for soft particles, and uses shader flags/uniforms to control soft clipping.
+2. Transparent particle pass blend state is explicit: `BlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA)`.
+3. `DrawGroundFlashes()` binds `groundFXAtlas`, uses additive blending (`BlendFunc(GL_SRC_ALPHA, GL_ONE)`), and conditionally toggles depth test/depth write per flash while flushing batched geometry between state changes.
+4. `DrawShadowTransparent()` uses multiplicative blend for shadow color filtering (`BlendFunc(GL_ZERO, GL_SRC_COLOR)`) with atlas-bound textured quads.
+5. Additional GL texture management remains in this subsystem for perlin/noise updates (`glTexSubImage2D`, `glBindTexture`) and perlin blend textures setup.
+
+Phase 5.3 implication summary:
+1. Particle rendering already has a centralized batched stream (`TypedRenderBuffer<VA_TYPE_PROJ>`), making it a good migration seam for replacing GL stream buffers with `gfx::IVertexBuffer` updates.
+2. Current draw path requires an indexed textured-batch backend API equivalent to `DrawElements` over dynamic vertex+index streams (multiple submit points per frame).
+3. Blend/depth/texture-unit state is currently interleaved with submission in `ProjectileDrawer`; migration should separate state descriptors from geometry submission to keep backend boundaries clean.
 
 ### [PENDING] Phase 6: Core Rendering Systems Migration
 Goal: Abstract the most tightly coupled OpenGL systems: framebuffers, shaders, and map rendering.
