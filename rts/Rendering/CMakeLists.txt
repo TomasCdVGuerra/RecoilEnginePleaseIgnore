@@ -179,6 +179,10 @@ if (ENABLE_VULKAN)
 	list(APPEND sources_engine_Rendering
 		"${CMAKE_CURRENT_SOURCE_DIR}/Gfx/Vulkan/VulkanGraphicsBackend.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Gfx/Vulkan/VulkanGraphicsBackend.h"
+		"${CMAKE_CURRENT_SOURCE_DIR}/Gfx/Vulkan/VulkanVertexArray.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/Gfx/Vulkan/VulkanVertexArray.h"
+		"${CMAKE_CURRENT_SOURCE_DIR}/Gfx/Vulkan/VulkanVertexBuffer.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/Gfx/Vulkan/VulkanVertexBuffer.h"
 	)
 endif()
 

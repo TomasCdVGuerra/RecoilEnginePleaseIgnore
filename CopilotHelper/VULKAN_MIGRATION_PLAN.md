@@ -543,6 +543,7 @@ Goal: Implement Vulkan-native versions of `gfx` interfaces to run on macOS via M
 
 Sub-status:
 1. `[COMPLETE]` Phase 7.1: Vulkan Context Initialization.
+2. `[COMPLETE]` Phase 7.2: Vulkan Buffers and Vertex Arrays.
 
 Implementation strategy:
 1. Initialization: implement `VulkanGraphicsBackend` for `VkInstance`, `VkDevice`, swapchain/surface setup (including MoltenVK/macOS integration).

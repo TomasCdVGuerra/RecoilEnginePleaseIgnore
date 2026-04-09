@@ -2,7 +2,11 @@
 
 #include "VulkanGraphicsBackend.h"
 
+#include "VulkanVertexArray.h"
+#include "VulkanVertexBuffer.h"
+
 #include <cstring>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -58,8 +62,7 @@ namespace gfx
 
     std::unique_ptr<IVertexBuffer> VulkanGraphicsBackend::CreateVertexBuffer(const BufferCreateInfo &ci)
     {
-        (void)ci;
-        return nullptr;
+        return std::make_unique<VulkanVertexBuffer>(device, physicalDevice, ci);
     }
 
     std::unique_ptr<ITexture> VulkanGraphicsBackend::CreateTexture(const TextureCreateInfo &ci)
@@ -91,10 +94,7 @@ namespace gfx
         std::span<const VertexArrayBufferBinding> vertexBuffers,
         IVertexBuffer *indexBuffer)
     {
-        (void)layout;
-        (void)vertexBuffers;
-        (void)indexBuffer;
-        return nullptr;
+        return std::make_unique<VulkanVertexArray>(layout, vertexBuffers, indexBuffer);
     }
 
     void VulkanGraphicsBackend::BindFramebuffer(IRenderTarget *target)
