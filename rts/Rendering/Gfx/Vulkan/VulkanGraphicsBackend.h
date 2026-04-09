@@ -15,6 +15,8 @@
 namespace gfx
 {
 
+    class VulkanFramebuffer;
+
     class VulkanGraphicsBackend final : public IGraphicsBackend
     {
     public:
@@ -82,6 +84,7 @@ namespace gfx
         void SelectGraphicsQueueFamily();
         void CreateLogicalDevice();
         void CreateCommandPool();
+        void CreatePrimaryCommandBuffer();
 
         static constexpr std::uint32_t InvalidQueueFamilyIndex = std::numeric_limits<std::uint32_t>::max();
 
@@ -91,6 +94,10 @@ namespace gfx
         VkDevice device = VK_NULL_HANDLE;
         VkQueue graphicsQueue = VK_NULL_HANDLE;
         VkCommandPool commandPool = VK_NULL_HANDLE;
+        VkCommandBuffer primaryCommandBuffer = VK_NULL_HANDLE;
+        bool frameRecording = false;
+        bool renderPassActive = false;
+        VulkanFramebuffer *boundFramebuffer = nullptr;
     };
 
 } // namespace gfx

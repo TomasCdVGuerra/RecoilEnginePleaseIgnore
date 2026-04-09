@@ -34,6 +34,54 @@ namespace
             ThrowVkError(what, result);
     }
 
+    VkIndexType TranslateIndexElementType(gfx::IndexElementType indexType) noexcept
+    {
+        switch (indexType)
+        {
+        case gfx::IndexElementType::UInt16:
+            return VK_INDEX_TYPE_UINT16;
+        case gfx::IndexElementType::UInt32:
+            return VK_INDEX_TYPE_UINT32;
+        }
+
+        return VK_INDEX_TYPE_UINT16;
+    }
+
+    VkPrimitiveTopology TranslatePrimitiveTopology(gfx::PrimitiveTopology topology) noexcept
+    {
+        switch (topology)
+        {
+        case gfx::PrimitiveTopology::Triangles:
+            return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        case gfx::PrimitiveTopology::Lines:
+            return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+        case gfx::PrimitiveTopology::LineStrip:
+            return VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+        }
+
+        return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    }
+
+    VkDeviceSize ResolveVertexBufferOffset(const gfx::VertexLayoutDesc &layout, std::uint32_t binding) noexcept
+    {
+        for (const gfx::VertexBufferBindingDesc &bindingDesc : layout.bindings)
+        {
+            if (bindingDesc.binding == binding)
+                return static_cast<VkDeviceSize>(bindingDesc.offsetBytes);
+        }
+
+        return 0;
+    }
+
+    VkPipeline ResolveCurrentGraphicsPipeline() noexcept
+    {
+        const gfx::VulkanShaderProgram *program = gfx::VulkanShaderProgram::GetBoundProgram();
+        if (program == nullptr)
+            return VK_NULL_HANDLE;
+
+        return program->GetPipeline();
+    }
+
 } // namespace
 
 namespace gfx
@@ -99,8 +147,47 @@ namespace gfx
 
     void VulkanGraphicsBackend::BindFramebuffer(IRenderTarget *target)
     {
-        (void)target;
-        ThrowNotImplemented("BindFramebuffer");
+        if (!frameRecording)
+            BeginFrame();
+
+        if (!frameRecording || (primaryCommandBuffer == VK_NULL_HANDLE))
+            return;
+
+        if (renderPassActive)
+        {
+            vkCmdEndRenderPass(primaryCommandBuffer);
+            renderPassActive = false;
+            boundFramebuffer = nullptr;
+        }
+
+        auto *vulkanFramebuffer = dynamic_cast<VulkanFramebuffer *>(target);
+        if (vulkanFramebuffer == nullptr)
+            return;
+
+        if (vulkanFramebuffer->Validate() != FramebufferStatus::Complete)
+            return;
+
+        const VkRenderPass renderPass = vulkanFramebuffer->GetRenderPass();
+        const VkFramebuffer framebuffer = vulkanFramebuffer->GetFramebuffer();
+
+        if ((renderPass == VK_NULL_HANDLE) || (framebuffer == VK_NULL_HANDLE))
+            return;
+
+        const Extent3D extent = vulkanFramebuffer->GetExtent();
+
+        VkRenderPassBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        beginInfo.renderPass = renderPass;
+        beginInfo.framebuffer = framebuffer;
+        beginInfo.renderArea.offset = {0, 0};
+        beginInfo.renderArea.extent.width = (extent.width == 0u) ? 1u : extent.width;
+        beginInfo.renderArea.extent.height = (extent.height == 0u) ? 1u : extent.height;
+        beginInfo.clearValueCount = 0;
+        beginInfo.pClearValues = nullptr;
+
+        vkCmdBeginRenderPass(primaryCommandBuffer, &beginInfo, VK_SUBPASS_CONTENTS_INLINE);
+        renderPassActive = true;
+        boundFramebuffer = vulkanFramebuffer;
     }
 
     void VulkanGraphicsBackend::DrawLineBatches(
@@ -139,11 +226,39 @@ namespace gfx
         const IndexedDrawDesc &draw,
         IndexElementType indexType)
     {
-        (void)vertexArray;
-        (void)topology;
-        (void)draw;
-        (void)indexType;
-        ThrowNotImplemented("DrawIndexed");
+        if ((draw.indexCount == 0u) || !frameRecording || !renderPassActive || (primaryCommandBuffer == VK_NULL_HANDLE))
+            return;
+
+        auto *vulkanVertexArray = dynamic_cast<VulkanVertexArray *>(&vertexArray);
+        if (vulkanVertexArray == nullptr)
+            return;
+
+        VulkanVertexBuffer *indexBuffer = vulkanVertexArray->GetIndexBuffer();
+        if ((indexBuffer == nullptr) || (indexBuffer->GetBuffer() == VK_NULL_HANDLE))
+            return;
+
+        const VkPipeline pipeline = ResolveCurrentGraphicsPipeline();
+        if (pipeline == VK_NULL_HANDLE)
+            return;
+
+        const VkPrimitiveTopology vkTopology = TranslatePrimitiveTopology(topology);
+        (void)vkTopology;
+
+        vkCmdBindPipeline(primaryCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+
+        const VertexLayoutDesc &layout = vulkanVertexArray->GetLayout();
+        for (const VulkanVertexArray::VertexBufferBindingState &bindingState : vulkanVertexArray->GetVertexBufferStates())
+        {
+            if ((bindingState.vertexBuffer == nullptr) || (bindingState.vertexBuffer->GetBuffer() == VK_NULL_HANDLE))
+                continue;
+
+            const VkBuffer vertexBuffer = bindingState.vertexBuffer->GetBuffer();
+            const VkDeviceSize vertexBufferOffset = ResolveVertexBufferOffset(layout, bindingState.binding);
+            vkCmdBindVertexBuffers(primaryCommandBuffer, bindingState.binding, 1u, &vertexBuffer, &vertexBufferOffset);
+        }
+
+        vkCmdBindIndexBuffer(primaryCommandBuffer, indexBuffer->GetBuffer(), 0u, TranslateIndexElementType(indexType));
+        vkCmdDrawIndexed(primaryCommandBuffer, draw.indexCount, 1u, draw.firstIndex, draw.baseVertex, 0u);
     }
 
     void VulkanGraphicsBackend::DrawIndexedInstanced(
@@ -165,21 +280,97 @@ namespace gfx
         std::span<const IndexedIndirectDrawCommand> commands,
         IndexElementType indexType)
     {
-        (void)vertexArray;
-        (void)topology;
-        (void)commands;
-        (void)indexType;
-        ThrowNotImplemented("MultiDrawIndexedIndirect");
+        if (commands.empty() || !frameRecording || !renderPassActive || (primaryCommandBuffer == VK_NULL_HANDLE))
+            return;
+
+        auto *vulkanVertexArray = dynamic_cast<VulkanVertexArray *>(&vertexArray);
+        if (vulkanVertexArray == nullptr)
+            return;
+
+        VulkanVertexBuffer *indexBuffer = vulkanVertexArray->GetIndexBuffer();
+        if ((indexBuffer == nullptr) || (indexBuffer->GetBuffer() == VK_NULL_HANDLE))
+            return;
+
+        const VkPipeline pipeline = ResolveCurrentGraphicsPipeline();
+        if (pipeline == VK_NULL_HANDLE)
+            return;
+
+        const VkPrimitiveTopology vkTopology = TranslatePrimitiveTopology(topology);
+        (void)vkTopology;
+
+        vkCmdBindPipeline(primaryCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+
+        const VertexLayoutDesc &layout = vulkanVertexArray->GetLayout();
+        for (const VulkanVertexArray::VertexBufferBindingState &bindingState : vulkanVertexArray->GetVertexBufferStates())
+        {
+            if ((bindingState.vertexBuffer == nullptr) || (bindingState.vertexBuffer->GetBuffer() == VK_NULL_HANDLE))
+                continue;
+
+            const VkBuffer vertexBuffer = bindingState.vertexBuffer->GetBuffer();
+            const VkDeviceSize vertexBufferOffset = ResolveVertexBufferOffset(layout, bindingState.binding);
+            vkCmdBindVertexBuffers(primaryCommandBuffer, bindingState.binding, 1u, &vertexBuffer, &vertexBufferOffset);
+        }
+
+        vkCmdBindIndexBuffer(primaryCommandBuffer, indexBuffer->GetBuffer(), 0u, TranslateIndexElementType(indexType));
+
+        // Temporary CPU-side fan-out for scaffolded draw-command support.
+        for (const IndexedIndirectDrawCommand &command : commands)
+        {
+            if ((command.indexCount == 0u) || (command.instanceCount == 0u))
+                continue;
+
+            vkCmdDrawIndexed(
+                primaryCommandBuffer,
+                command.indexCount,
+                command.instanceCount,
+                command.firstIndex,
+                command.baseVertex,
+                command.firstInstance);
+        }
     }
 
     void VulkanGraphicsBackend::BeginFrame()
     {
-        ThrowNotImplemented("BeginFrame");
+        if (frameRecording || (primaryCommandBuffer == VK_NULL_HANDLE))
+            return;
+
+        CheckVkResult(vkResetCommandBuffer(primaryCommandBuffer, 0), "vkResetCommandBuffer");
+
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        beginInfo.pInheritanceInfo = nullptr;
+
+        CheckVkResult(vkBeginCommandBuffer(primaryCommandBuffer, &beginInfo), "vkBeginCommandBuffer");
+
+        frameRecording = true;
+        renderPassActive = false;
+        boundFramebuffer = nullptr;
     }
 
     void VulkanGraphicsBackend::EndFrame()
     {
-        ThrowNotImplemented("EndFrame");
+        if (!frameRecording || (primaryCommandBuffer == VK_NULL_HANDLE) || (graphicsQueue == VK_NULL_HANDLE))
+            return;
+
+        if (renderPassActive)
+        {
+            vkCmdEndRenderPass(primaryCommandBuffer);
+            renderPassActive = false;
+            boundFramebuffer = nullptr;
+        }
+
+        CheckVkResult(vkEndCommandBuffer(primaryCommandBuffer), "vkEndCommandBuffer");
+
+        VkSubmitInfo submitInfo{};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &primaryCommandBuffer;
+
+        CheckVkResult(vkQueueSubmit(graphicsQueue, 1u, &submitInfo, VK_NULL_HANDLE), "vkQueueSubmit");
+        CheckVkResult(vkQueueWaitIdle(graphicsQueue), "vkQueueWaitIdle");
+
+        frameRecording = false;
     }
 
     void VulkanGraphicsBackend::DeviceWaitIdle()
@@ -197,6 +388,7 @@ namespace gfx
             SelectGraphicsQueueFamily();
             CreateLogicalDevice();
             CreateCommandPool();
+            CreatePrimaryCommandBuffer();
         }
         catch (...)
         {
@@ -207,6 +399,19 @@ namespace gfx
 
     void VulkanGraphicsBackend::Cleanup() noexcept
     {
+        if (device != VK_NULL_HANDLE)
+            (void)vkDeviceWaitIdle(device);
+
+        frameRecording = false;
+        renderPassActive = false;
+        boundFramebuffer = nullptr;
+
+        if ((device != VK_NULL_HANDLE) && (commandPool != VK_NULL_HANDLE) && (primaryCommandBuffer != VK_NULL_HANDLE))
+        {
+            vkFreeCommandBuffers(device, commandPool, 1u, &primaryCommandBuffer);
+            primaryCommandBuffer = VK_NULL_HANDLE;
+        }
+
         if (commandPool != VK_NULL_HANDLE)
         {
             vkDestroyCommandPool(device, commandPool, nullptr);
@@ -215,7 +420,6 @@ namespace gfx
 
         if (device != VK_NULL_HANDLE)
         {
-            (void)vkDeviceWaitIdle(device);
             vkDestroyDevice(device, nullptr);
             device = VK_NULL_HANDLE;
         }
@@ -380,6 +584,17 @@ namespace gfx
         commandPoolCreateInfo.queueFamilyIndex = graphicsQueueFamilyIndex;
 
         CheckVkResult(vkCreateCommandPool(device, &commandPoolCreateInfo, nullptr, &commandPool), "vkCreateCommandPool");
+    }
+
+    void VulkanGraphicsBackend::CreatePrimaryCommandBuffer()
+    {
+        VkCommandBufferAllocateInfo allocateInfo{};
+        allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocateInfo.commandPool = commandPool;
+        allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocateInfo.commandBufferCount = 1;
+
+        CheckVkResult(vkAllocateCommandBuffers(device, &allocateInfo, &primaryCommandBuffer), "vkAllocateCommandBuffers");
     }
 
 } // namespace gfx

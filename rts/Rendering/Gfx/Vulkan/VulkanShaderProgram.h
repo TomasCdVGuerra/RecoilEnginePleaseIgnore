@@ -70,6 +70,8 @@ namespace gfx
             return pipeline;
         }
 
+        [[nodiscard]] static VulkanShaderProgram *GetBoundProgram() noexcept;
+
     private:
         struct AttachedShaderState
         {

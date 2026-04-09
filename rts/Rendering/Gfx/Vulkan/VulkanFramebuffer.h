@@ -44,6 +44,11 @@ namespace gfx
             return renderPass;
         }
 
+        [[nodiscard]] VkFramebuffer GetFramebuffer() const noexcept
+        {
+            return framebuffer;
+        }
+
     private:
         void RecreateFramebuffer();
         void DestroyFramebufferObjects() noexcept;

@@ -11,6 +11,8 @@
 namespace
 {
 
+    thread_local gfx::VulkanShaderProgram *g_boundVulkanProgram = nullptr;
+
     std::uintptr_t ToNativeHandle(VkPipeline handle)
     {
         std::uintptr_t nativeHandle = 0;
@@ -34,6 +36,9 @@ namespace gfx
 
     VulkanShaderProgram::~VulkanShaderProgram()
     {
+        if (g_boundVulkanProgram == this)
+            g_boundVulkanProgram = nullptr;
+
         DestroyPipelineObjects();
     }
 
@@ -137,12 +142,26 @@ namespace gfx
 
     void VulkanShaderProgram::Bind()
     {
-        bound = valid;
+        if (!valid)
+        {
+            bound = false;
+
+            if (g_boundVulkanProgram == this)
+                g_boundVulkanProgram = nullptr;
+
+            return;
+        }
+
+        bound = true;
+        g_boundVulkanProgram = this;
     }
 
     void VulkanShaderProgram::Unbind()
     {
         bound = false;
+
+        if (g_boundVulkanProgram == this)
+            g_boundVulkanProgram = nullptr;
     }
 
     bool VulkanShaderProgram::SetParameter(std::string_view name, const UniformParameter &parameter)
@@ -176,6 +195,11 @@ namespace gfx
     std::uintptr_t VulkanShaderProgram::GetNativeHandle() const noexcept
     {
         return ToNativeHandle(pipeline);
+    }
+
+    VulkanShaderProgram *VulkanShaderProgram::GetBoundProgram() noexcept
+    {
+        return g_boundVulkanProgram;
     }
 
     void VulkanShaderProgram::DestroyPipelineObjects() noexcept

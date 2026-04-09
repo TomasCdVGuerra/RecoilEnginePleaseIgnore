@@ -546,6 +546,7 @@ Sub-status:
 2. `[COMPLETE]` Phase 7.2: Vulkan Buffers and Vertex Arrays.
 3. `[COMPLETE]` Phase 7.3: Vulkan Textures and Framebuffers.
 4. `[COMPLETE]` Phase 7.4: Vulkan Shaders and Pipelines.
+5. `[COMPLETE]` Phase 7.5: Command Buffers and Render Loop.
 
 Implementation strategy:
 1. Initialization: implement `VulkanGraphicsBackend` for `VkInstance`, `VkDevice`, swapchain/surface setup (including MoltenVK/macOS integration).
