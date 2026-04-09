@@ -541,6 +541,9 @@ Phase 6.2 implication summary:
 ### [PENDING] Phase 7: Vulkan Backend Implementation
 Goal: Implement Vulkan-native versions of `gfx` interfaces to run on macOS via MoltenVK.
 
+Sub-status:
+1. `[COMPLETE]` Phase 7.1: Vulkan Context Initialization.
+
 Implementation strategy:
 1. Initialization: implement `VulkanGraphicsBackend` for `VkInstance`, `VkDevice`, swapchain/surface setup (including MoltenVK/macOS integration).
 2. Memory management: integrate VMA and map `gfx::BufferUsage` and `MemoryAccess` policies to Vulkan memory and staging strategy.
