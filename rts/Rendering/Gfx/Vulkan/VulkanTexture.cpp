@@ -157,18 +157,7 @@ namespace gfx
         VkCommandPool commandPool_,
         VkQueue graphicsQueue_,
         const TextureCreateInfo &ci)
-        : device(device_)
-        , physicalDevice(physicalDevice_)
-        , commandPool(commandPool_)
-        , graphicsQueue(graphicsQueue_)
-        , dimension(ci.dimension)
-        , format(ci.format)
-        , extent({ClampAtLeastOne(ci.extent.width), ClampAtLeastOne(ci.extent.height), ClampAtLeastOne(ci.extent.depth)})
-        , mipLevels(ClampAtLeastOne(ci.mipLevels))
-        , usage(ci.usage)
-        , vkFormat(TranslateFormat(ci.format))
-        , aspectMask(DetermineAspectMask(ci.format))
-        , bytesPerPixel(BytesPerPixel(ci.format))
+        : device(device_), physicalDevice(physicalDevice_), commandPool(commandPool_), graphicsQueue(graphicsQueue_), dimension(ci.dimension), format(ci.format), extent({ClampAtLeastOne(ci.extent.width), ClampAtLeastOne(ci.extent.height), ClampAtLeastOne(ci.extent.depth)}), mipLevels(ClampAtLeastOne(ci.mipLevels)), usage(ci.usage), vkFormat(TranslateFormat(ci.format)), aspectMask(DetermineAspectMask(ci.format)), bytesPerPixel(BytesPerPixel(ci.format))
     {
         if (device == VK_NULL_HANDLE)
             throw std::runtime_error("VulkanTexture: VkDevice is null");

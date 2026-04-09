@@ -120,11 +120,7 @@ namespace gfx
     };
 
     VulkanFramebuffer::VulkanFramebuffer(VkDevice device_, const RenderTargetDesc &desc)
-        : device(device_)
-        , extent({ClampAtLeastOne(desc.extent.width), ClampAtLeastOne(desc.extent.height), ClampAtLeastOne(desc.extent.depth)})
-        , sampleCount(ClampAtLeastOne(desc.sampleCount))
-        , attachmentViews(desc.attachments.begin(), desc.attachments.end())
-        , colorDrawTargets(desc.colorDrawOrder.begin(), desc.colorDrawOrder.end())
+        : device(device_), extent({ClampAtLeastOne(desc.extent.width), ClampAtLeastOne(desc.extent.height), ClampAtLeastOne(desc.extent.depth)}), sampleCount(ClampAtLeastOne(desc.sampleCount)), attachmentViews(desc.attachments.begin(), desc.attachments.end()), colorDrawTargets(desc.colorDrawOrder.begin(), desc.colorDrawOrder.end())
     {
         RecreateFramebuffer();
     }
