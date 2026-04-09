@@ -462,6 +462,7 @@ Goal: Abstract the most tightly coupled OpenGL systems: framebuffers, shaders, a
 
 Sub-status:
 1. `[COMPLETE]` Phase 6.1: Framebuffer Abstraction.
+2. `[IN PROGRESS]` Phase 6.2: Shader Scouting.
 
 Coupling observed:
 1. Framebuffers (`FBO.h`, `RenderBuffers.cpp`): hardcoded `GL_COLOR_ATTACHMENT*`, depth/stencil setup, and `glBlitFramebuffer` logic.
@@ -502,6 +503,40 @@ Phase 6.1 implication summary:
 1. Framebuffer creation, attachment, and blit behavior can be abstracted behind backend-neutral interfaces, but current APIs must stop exposing raw `GLuint` texture/renderbuffer ownership.
 2. MRT configuration should become an explicit backend API call on a render-target descriptor rather than a direct `glDrawBuffers` call in pass code.
 3. Context-loss restore logic in `FBO` (attachment readback/reupload) should be reviewed as a separate responsibility from core framebuffer binding/attachment API during interface design.
+
+#### [IN PROGRESS] Phase 6.2: Shader Scouting
+Target files:
+1. `rts/Rendering/Shaders/Shader.h`
+2. `rts/Rendering/Shaders/Shader.cpp`
+3. `rts/Rendering/Shaders/ShaderHandler.h`
+4. `rts/Rendering/Shaders/ShaderHandler.cpp`
+
+OpenGL coupling findings (program creation/link/bind):
+1. Shader object compilation is direct GLSL runtime text compile: `glCreateShader`, `glShaderSource`, and `glCompileShader` in `GLSLShaderObject::CompileShaderObject()`.
+2. Program objects are created with `glCreateProgram` and linked by attaching compiled shader objects (`glAttachShader`) followed by `glLinkProgram` in `GLSLProgramObject::Reload(...)`.
+3. Program binding/unbinding is direct global GL state mutation via `glUseProgram(objID)` / `glUseProgram(0)` in `GLSLProgramObject::EnableRaw()` / `DisableRaw()`.
+4. `CShaderHandler` currently hardcodes GLSL construction paths (`new Shader::GLSLProgramObject`, `new Shader::GLSLShaderObject`) and keeps a GL object-ID cache keyed by source hash.
+
+OpenGL coupling findings (uniform model):
+1. Uniform locations are resolved with `glGetUniformLocation` and cached in `UniformState` entries keyed by hashed uniform names.
+2. Uniform uploads are immediate `glUniform*` calls (`glUniform1i/f`, `glUniform2/3/4*`, matrix variants), guarded by `UniformState` change checks to avoid redundant submission.
+3. Legacy index-based uniform APIs are still present (`SetUniformLocation` + `SetUniformXi/Xf` by index) and map through `uniformLocs` into the same cached-uniform path.
+4. There is no active UBO binding/upload path in these files (no `glGetUniformBlockIndex`, `glUniformBlockBinding`, or `glBindBufferBase` usage for submission); UBO presence is only detected during validation via `GL_UNIFORM_BLOCK_INDEX` so warnings can ignore block uniforms.
+
+OpenGL coupling findings (vertex attributes and outputs):
+1. Attribute bindings are name/index maps collected before link and applied by `glBindAttribLocation`.
+2. Fragment-output bindings are similarly applied by `glBindFragDataLocation` before link.
+3. Debug validation checks attribute location results through `glGetAttribLocation` after successful link.
+
+OpenGL coupling findings (sampler texture binding):
+1. Texture units are managed in-program via `IProgramObject::AddTextureBinding` and stored as `LuaMatTexture` bindings indexed by texture unit.
+2. Runtime binding/unbinding uses `glActiveTexture(GL_TEXTURE0 + relSlot)` plus `LuaMatTexture::Bind/Unbind`, then restores active unit 0.
+3. Sampler uniform assignment still relies on regular uniform APIs (`SetUniform*`) and is not represented as a backend-neutral descriptor set model.
+
+Phase 6.2 implication summary:
+1. Shader and program lifecycle must move behind a backend abstraction while keeping current runtime-GLSL compile support for OpenGL.
+2. Uniform handling should remain API-compatible short-term (name-based and index-based entry points) but be internally redirected toward backend-neutral parameter/block submission.
+3. `CShaderHandler` should remain as a high-level shader registry/reload/cache manager, but its concrete object creation should be delegated to `gfx::IGraphicsBackend` instead of hardcoded GLSL types.
 
 ### [PENDING] Phase 7: Vulkan Backend Implementation
 Goal: Implement Vulkan-native versions of `gfx` interfaces to run on macOS via MoltenVK.
