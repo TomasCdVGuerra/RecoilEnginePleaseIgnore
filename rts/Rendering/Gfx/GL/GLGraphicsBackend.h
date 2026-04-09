@@ -18,10 +18,13 @@ namespace gfx
 
         [[nodiscard]] std::unique_ptr<IVertexBuffer> CreateVertexBuffer(const BufferCreateInfo &ci) override;
         [[nodiscard]] std::unique_ptr<ITexture> CreateTexture(const TextureCreateInfo &ci) override;
+        [[nodiscard]] std::unique_ptr<IFramebuffer> CreateFramebuffer(const RenderTargetDesc &desc) override;
         [[nodiscard]] std::unique_ptr<IVertexArray> CreateVertexArray(
             const VertexLayoutDesc &layout,
             std::span<const VertexArrayBufferBinding> vertexBuffers,
             IVertexBuffer *indexBuffer = nullptr) override;
+
+        void BindFramebuffer(IRenderTarget *target) override;
 
         void DrawLineBatches(
             IVertexBuffer &vertexBuffer,

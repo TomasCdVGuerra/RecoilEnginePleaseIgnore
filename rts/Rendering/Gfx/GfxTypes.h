@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -10,6 +11,9 @@
 
 namespace gfx
 {
+
+    class ITexture;
+    class IRenderTarget;
 
     enum class BackendType
     {
@@ -115,6 +119,21 @@ namespace gfx
         TransferDst = 1u << 4,
     };
 
+    enum class AttachmentPoint : std::uint8_t
+    {
+        Color0 = 0,
+        Color1,
+        Color2,
+        Color3,
+        Color4,
+        Color5,
+        Color6,
+        Color7,
+        Depth,
+        Stencil,
+        DepthStencil,
+    };
+
     constexpr TextureUsage operator|(TextureUsage a, TextureUsage b)
     {
         return static_cast<TextureUsage>(
@@ -181,6 +200,42 @@ namespace gfx
         std::optional<SamplerState> samplerState;
         std::uintptr_t nativeHandle = 0;
         std::string debugName;
+    };
+
+    struct AttachmentViewDesc
+    {
+        AttachmentPoint point = AttachmentPoint::Color0;
+        ITexture *texture = nullptr;
+        std::uint32_t mipLevel = 0;
+        std::uint32_t baseLayer = 0;
+        std::uint32_t layerCount = 1;
+    };
+
+    struct RenderTargetDesc
+    {
+        Extent3D extent;
+        std::uint32_t sampleCount = 1;
+        std::vector<AttachmentViewDesc> attachments;
+        std::vector<AttachmentPoint> colorDrawOrder;
+        std::string debugName;
+    };
+
+    enum class FramebufferStatus : std::uint8_t
+    {
+        Complete,
+        MissingAttachment,
+        IncompleteAttachment,
+        Unsupported,
+    };
+
+    struct FramebufferBlitDesc
+    {
+        IRenderTarget *src = nullptr;
+        IRenderTarget *dst = nullptr;
+        std::array<int, 4> srcRect = {0, 0, 0, 0};
+        std::array<int, 4> dstRect = {0, 0, 0, 0};
+        std::uint32_t mask = 0;
+        FilterMode filter = FilterMode::Nearest;
     };
 
 } // namespace gfx

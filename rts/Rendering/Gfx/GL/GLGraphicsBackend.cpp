@@ -2,6 +2,7 @@
 
 #include "GLGraphicsBackend.h"
 
+#include "GLFramebuffer.h"
 #include "GLTexture.h"
 #include "GLVertexArray.h"
 #include "GLVertexBuffer.h"
@@ -68,6 +69,18 @@ namespace
         }
 
         return static_cast<GLsizei>(value);
+    }
+
+    GLuint ToGLuint(std::uintptr_t value, const char *ctx)
+    {
+        constexpr std::uintptr_t maxValue = static_cast<std::uintptr_t>(std::numeric_limits<GLuint>::max());
+        if (value > maxValue)
+        {
+            LOG_L(L_WARNING, "[GLGraphicsBackend::%s] native handle (%zu) exceeds GLuint max (%zu)", ctx, static_cast<std::size_t>(value), static_cast<std::size_t>(maxValue));
+            return 0u;
+        }
+
+        return static_cast<GLuint>(value);
     }
 
     GLenum TranslateIndexElementType(gfx::IndexElementType indexType)
@@ -214,6 +227,11 @@ namespace gfx
         return std::make_unique<GLTexture>(ci);
     }
 
+    std::unique_ptr<IFramebuffer> GLGraphicsBackend::CreateFramebuffer(const RenderTargetDesc &desc)
+    {
+        return std::make_unique<GLFramebuffer>(desc);
+    }
+
     std::unique_ptr<IVertexArray> GLGraphicsBackend::CreateVertexArray(
         const VertexLayoutDesc &layout,
         std::span<const VertexArrayBufferBinding> vertexBuffers,
@@ -332,6 +350,16 @@ namespace gfx
         glBindVertexArray(0);
 
         return std::make_unique<GLVertexArray>(vaoId);
+    }
+
+    void GLGraphicsBackend::BindFramebuffer(IRenderTarget *target)
+    {
+        GLuint framebufferId = 0u;
+
+        if (target != nullptr)
+            framebufferId = ToGLuint(target->GetNativeHandle(), "BindFramebuffer");
+
+        glBindFramebuffer(GL_FRAMEBUFFER, framebufferId);
     }
 
     void GLGraphicsBackend::DrawLineBatches(

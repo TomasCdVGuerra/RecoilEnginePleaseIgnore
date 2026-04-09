@@ -109,6 +109,8 @@ namespace gfx
     class IVertexArray;
     class ITexture;
     class IVertexBuffer;
+    class IFramebuffer;
+    class IRenderTarget;
 
     class IGraphicsBackend
     {
@@ -121,10 +123,13 @@ namespace gfx
 
         [[nodiscard]] virtual std::unique_ptr<IVertexBuffer> CreateVertexBuffer(const BufferCreateInfo &ci) = 0;
         [[nodiscard]] virtual std::unique_ptr<ITexture> CreateTexture(const TextureCreateInfo &ci) = 0;
+        [[nodiscard]] virtual std::unique_ptr<IFramebuffer> CreateFramebuffer(const RenderTargetDesc &desc) = 0;
         [[nodiscard]] virtual std::unique_ptr<IVertexArray> CreateVertexArray(
             const VertexLayoutDesc &layout,
             std::span<const VertexArrayBufferBinding> vertexBuffers,
             IVertexBuffer *indexBuffer = nullptr) = 0;
+
+        virtual void BindFramebuffer(IRenderTarget *target) = 0;
 
         virtual void DrawLineBatches(
             IVertexBuffer &vertexBuffer,
