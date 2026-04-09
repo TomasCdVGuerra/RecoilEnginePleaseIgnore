@@ -460,6 +460,9 @@ Phase 5.3 implication summary:
 ### [PENDING] Phase 6: Core Rendering Systems Migration
 Goal: Abstract the most tightly coupled OpenGL systems: framebuffers, shaders, and map rendering.
 
+Sub-status:
+1. `[IN PROGRESS]` Phase 6.1: Framebuffer Scouting.
+
 Coupling observed:
 1. Framebuffers (`FBO.h`, `RenderBuffers.cpp`): hardcoded `GL_COLOR_ATTACHMENT*`, depth/stencil setup, and `glBlitFramebuffer` logic.
 2. Shaders (`Shader.cpp`, `ShaderHandler.cpp`): direct GLSL compile/link path (`glCreateShader`) and uniform lookups (`glGetUniformLocation`).
@@ -470,6 +473,35 @@ Incremental adoption path:
 2. Introduce `gfx::IShaderProgram` with backend-specific compilation/reflect paths.
 3. Ensure shader abstraction supports GLSL source for GL backend and SPIR-V bytecode for Vulkan backend.
 4. Refactor map rendering to render against `gfx::IFramebuffer` surfaces instead of direct `FBO` dependencies.
+
+#### [IN PROGRESS] Phase 6.1: Framebuffer Scouting
+Target files:
+1. `rts/Rendering/GL/FBO.h`
+2. `rts/Rendering/GL/FBO.cpp`
+
+OpenGL coupling findings (framebuffer creation and binding):
+1. `FBO::Init(...)` directly queries `GL_MAX_COLOR_ATTACHMENTS_EXT`, allocates GL objects via `glGenFramebuffersEXT`, and performs first-time bind/unbind through `glBindFramebufferEXT`.
+2. `FBO::Bind()` and static `FBO::Unbind()` directly mutate GL framebuffer binding state (`glBindFramebufferEXT(..., fboId/0)`).
+3. `FBO::GetCurrentBoundFBO()` reads current draw framebuffer binding through `glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, ...)`.
+
+OpenGL coupling findings (attachment APIs):
+1. Texture attachment paths are direct GL calls (`glFramebufferTexture1DEXT`, `glFramebufferTexture2DEXT`, `glFramebufferTexture3DEXT`, `glFramebufferTexture`, `glFramebufferTextureLayerEXT`) and use raw texture ids (`GLuint`).
+2. Renderbuffer attachment paths directly use `glFramebufferRenderbufferEXT` and `glRenderbufferStorage*EXT` after `glGenRenderbuffersEXT`.
+3. Attachment teardown (`Detach`, `DetachAll`) inspects and clears attachment object types via `glGetFramebufferAttachmentParameterivEXT` and unbinds either texture or renderbuffer attachments.
+
+OpenGL coupling findings (MRT draw-target setup):
+1. `FBO` manages attachment objects and limits (`maxAttachments`) but does not configure active color draw targets via `glDrawBuffers`.
+2. MRT routing is currently configured by higher-level passes after attachments are set (for example, `rts/Rendering/GL/GeometryBuffer.cpp` calls `glDrawBuffers(...)`).
+
+OpenGL coupling findings (status checks and blit/resolve):
+1. FBO validity checks are GL-status based (`glCheckFramebufferStatus(GL_FRAMEBUFFER_EXT)`) with direct mapping of incomplete/unsupported codes in `FBO::CheckStatus(...)`.
+2. `FBO::Blit(...)` uses explicit read/draw bindings (`glBindFramebufferEXT(GL_READ_FRAMEBUFFER_EXT, ...)`, `glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, ...)`) and resolve/copy through `glBlitFramebufferEXT`.
+3. Blit path is hard-gated by extension availability (`GLAD_GL_EXT_framebuffer_blit`) and rectangle validity checks, then restores prior framebuffer binding.
+
+Phase 6.1 implication summary:
+1. Framebuffer creation, attachment, and blit behavior can be abstracted behind backend-neutral interfaces, but current APIs must stop exposing raw `GLuint` texture/renderbuffer ownership.
+2. MRT configuration should become an explicit backend API call on a render-target descriptor rather than a direct `glDrawBuffers` call in pass code.
+3. Context-loss restore logic in `FBO` (attachment readback/reupload) should be reviewed as a separate responsibility from core framebuffer binding/attachment API during interface design.
 
 ### [PENDING] Phase 7: Vulkan Backend Implementation
 Goal: Implement Vulkan-native versions of `gfx` interfaces to run on macOS via MoltenVK.
