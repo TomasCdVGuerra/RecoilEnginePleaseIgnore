@@ -545,6 +545,7 @@ Sub-status:
 1. `[COMPLETE]` Phase 7.1: Vulkan Context Initialization.
 2. `[COMPLETE]` Phase 7.2: Vulkan Buffers and Vertex Arrays.
 3. `[COMPLETE]` Phase 7.3: Vulkan Textures and Framebuffers.
+4. `[COMPLETE]` Phase 7.4: Vulkan Shaders and Pipelines.
 
 Implementation strategy:
 1. Initialization: implement `VulkanGraphicsBackend` for `VkInstance`, `VkDevice`, swapchain/surface setup (including MoltenVK/macOS integration).

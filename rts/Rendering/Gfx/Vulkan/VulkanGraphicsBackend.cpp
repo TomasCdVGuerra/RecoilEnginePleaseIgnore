@@ -3,6 +3,8 @@
 #include "VulkanGraphicsBackend.h"
 
 #include "VulkanFramebuffer.h"
+#include "VulkanShader.h"
+#include "VulkanShaderProgram.h"
 #include "VulkanTexture.h"
 #include "VulkanVertexArray.h"
 #include "VulkanVertexBuffer.h"
@@ -79,14 +81,12 @@ namespace gfx
 
     std::unique_ptr<IShader> VulkanGraphicsBackend::CreateShader(const ShaderCreateInfo &ci)
     {
-        (void)ci;
-        return nullptr;
+        return std::make_unique<VulkanShader>(device, ci);
     }
 
     std::unique_ptr<IShaderProgram> VulkanGraphicsBackend::CreateShaderProgram(const ShaderProgramCreateInfo &ci)
     {
-        (void)ci;
-        return nullptr;
+        return std::make_unique<VulkanShaderProgram>(device, ci);
     }
 
     std::unique_ptr<IVertexArray> VulkanGraphicsBackend::CreateVertexArray(
