@@ -5,9 +5,14 @@
 
 #include <vector>
 #include <array>
+#include <memory>
 
 #include "myGL.h"
 #include "System/UnorderedMap.hpp"
+
+namespace gfx {
+	class IFramebuffer;
+}
 
 // TODO: add multisample buffers
 
@@ -28,21 +33,14 @@ public:
 	static bool IsReady();
 	static GLint GetCurrentBoundFBO();
 
-	FBO(         ) { Init(false); }
-	explicit FBO(bool noop) { Init( noop); }
-	~FBO() { Kill(); }
+	FBO();
+	explicit FBO(bool noop);
+	~FBO();
 
 	void Init(bool noop);
 	void Kill();
 
-	uint32_t GetId() const { return fboId; }
-
-	/**
-	 * @brief fboId
-	 *
-	 * GLuint pointing to the current framebuffer
-	 */
-	GLuint fboId = 0;
+	uint32_t GetId() const;
 
 	/**
 	 * @brief reloadOnAltTab
@@ -159,6 +157,29 @@ public:
 
 
 private:
+	struct AttachmentBinding {
+		GLenum attachment = GL_COLOR_ATTACHMENT0_EXT;
+		bool isRenderbuffer = false;
+		GLuint objectId = 0;
+		GLenum texTarget = GL_TEXTURE_2D;
+		int mipLevel = 0;
+		int layer = 0;
+		int zSlice = 0;
+		bool useLayerBinding = false;
+	};
+
+	AttachmentBinding* FindAttachmentBinding(GLenum attachment);
+	const AttachmentBinding* FindAttachmentBinding(GLenum attachment) const;
+
+	void SyncAttachmentBindings();
+	void AttachLegacyTexture(const AttachmentBinding& binding) const;
+	void AttachLegacyRenderbuffer(const AttachmentBinding& binding) const;
+
+	bool IsBackendAvailable() const;
+
+	std::unique_ptr<gfx::IFramebuffer> backendFramebuffer;
+	std::vector<AttachmentBinding> attachmentBindings;
+
 	bool valid = false;
 
 	/**

@@ -1216,7 +1216,7 @@ void CMiniMap::UpdateTextureCache()
 	// resolve multisampled FBO if there is one
 	if (multisampledFBO) {
 		const std::array rect = { 0, 0, minimapTexSize.x, minimapTexSize.y };
-		FBO::Blit(fbo.fboId, fboResolve.fboId, rect, rect, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+		FBO::Blit(fbo.GetId(), fboResolve.GetId(), rect, rect, GL_COLOR_BUFFER_BIT, GL_NEAREST);
 	}
 }
 

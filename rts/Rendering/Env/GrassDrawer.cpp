@@ -922,8 +922,8 @@ void CGrassDrawer::CreateFarTex()
 	glDisable(GL_CLIP_PLANE0);
 
 	// scale down the rendered fartextures (MSAA) and write to the final texture
-	glBindFramebufferEXT(GL_READ_FRAMEBUFFER, fbo.fboId);
-	glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER, fboTex.fboId);
+	glBindFramebufferEXT(GL_READ_FRAMEBUFFER, fbo.GetId());
+	glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER, fboTex.GetId());
 	glBlitFramebufferEXT(0, 0, texSizeX*sizeMod, texSizeY*sizeMod,
 		0, 0, texSizeX, texSizeY,
 		GL_COLOR_BUFFER_BIT, GL_LINEAR);

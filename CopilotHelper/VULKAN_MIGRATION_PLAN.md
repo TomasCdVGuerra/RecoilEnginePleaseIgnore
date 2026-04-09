@@ -461,7 +461,7 @@ Phase 5.3 implication summary:
 Goal: Abstract the most tightly coupled OpenGL systems: framebuffers, shaders, and map rendering.
 
 Sub-status:
-1. `[IN PROGRESS]` Phase 6.1: Framebuffer Abstraction.
+1. `[COMPLETE]` Phase 6.1: Framebuffer Abstraction.
 
 Coupling observed:
 1. Framebuffers (`FBO.h`, `RenderBuffers.cpp`): hardcoded `GL_COLOR_ATTACHMENT*`, depth/stencil setup, and `glBlitFramebuffer` logic.
@@ -474,7 +474,7 @@ Incremental adoption path:
 3. Ensure shader abstraction supports GLSL source for GL backend and SPIR-V bytecode for Vulkan backend.
 4. Refactor map rendering to render against `gfx::IFramebuffer` surfaces instead of direct `FBO` dependencies.
 
-#### [IN PROGRESS] Phase 6.1: Framebuffer Abstraction
+#### [COMPLETE] Phase 6.1: Framebuffer Abstraction
 Target files:
 1. `rts/Rendering/GL/FBO.h`
 2. `rts/Rendering/GL/FBO.cpp`
