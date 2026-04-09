@@ -31,12 +31,7 @@ namespace gfx
 {
 
     VulkanVertexBuffer::VulkanVertexBuffer(VkDevice device_, VkPhysicalDevice physicalDevice_, const BufferCreateInfo &ci)
-        : device(device_)
-        , physicalDevice(physicalDevice_)
-        , sizeBytes(ci.sizeBytes)
-        , usage(ci.usage)
-        , memoryAccess(ci.memoryAccess)
-        , readable(ci.readable)
+        : device(device_), physicalDevice(physicalDevice_), sizeBytes(ci.sizeBytes), usage(ci.usage), memoryAccess(ci.memoryAccess), readable(ci.readable)
     {
         if (device == VK_NULL_HANDLE)
             throw std::runtime_error("VulkanVertexBuffer: VkDevice is null");
