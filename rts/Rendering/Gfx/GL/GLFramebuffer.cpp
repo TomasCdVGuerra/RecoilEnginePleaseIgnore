@@ -389,7 +389,8 @@ namespace gfx
         const GLint mipLevel = ToGLInt(view.mipLevel, "AttachView::mipLevel");
         const GLint layer = ToGLInt(view.baseLayer, "AttachView::baseLayer");
 
-        if (view.layerCount > 1u && IS_GL_FUNCTION_AVAILABLE(glFramebufferTextureEXT)) {
+        if (view.layerCount > 1u && IS_GL_FUNCTION_AVAILABLE(glFramebufferTextureEXT))
+        {
             glFramebufferTextureEXT(GL_FRAMEBUFFER_EXT, attachment, textureId, mipLevel);
             return true;
         }

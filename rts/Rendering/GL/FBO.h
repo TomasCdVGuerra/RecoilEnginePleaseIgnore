@@ -10,7 +10,8 @@
 #include "myGL.h"
 #include "System/UnorderedMap.hpp"
 
-namespace gfx {
+namespace gfx
+{
 	class IFramebuffer;
 }
 
@@ -52,7 +53,7 @@ public:
 	/**
 	 * @brief check FBO status
 	 */
-	bool CheckStatus(const char* name);
+	bool CheckStatus(const char *name);
 
 	/**
 	 * @brief get FBO status
@@ -70,9 +71,10 @@ public:
 	 */
 	bool IsValid() const;
 
-
-	void AttachTextures(const GLuint* ids, const GLenum* attachments, const GLenum texTarget, const unsigned int texCount, const int mipLevel = 0, const int zSlice = 0) {
-		for (unsigned int i = 0; i < texCount; i++) {
+	void AttachTextures(const GLuint *ids, const GLenum *attachments, const GLenum texTarget, const unsigned int texCount, const int mipLevel = 0, const int zSlice = 0)
+	{
+		for (unsigned int i = 0; i < texCount; i++)
+		{
 			AttachTexture(ids[i], texTarget, attachments[i], mipLevel, zSlice);
 		}
 	}
@@ -139,11 +141,10 @@ public:
 	static bool Blit(
 		int32_t fromID,
 		int32_t toID,
-		const std::array<int, 4>& srcRect,
-		const std::array<int, 4>& dstRect,
+		const std::array<int, 4> &srcRect,
+		const std::array<int, 4> &dstRect,
 		uint32_t mask = GL_DEPTH_BUFFER_BIT,
-		uint32_t filter = GL_NEAREST
-	);
+		uint32_t filter = GL_NEAREST);
 
 	/**
 	 * @brief GLContextLost (post atl-tab)
@@ -155,9 +156,9 @@ public:
 	 */
 	static void GLContextReinit();
 
-
 private:
-	struct AttachmentBinding {
+	struct AttachmentBinding
+	{
 		GLenum attachment = GL_COLOR_ATTACHMENT0_EXT;
 		bool isRenderbuffer = false;
 		GLuint objectId = 0;
@@ -168,12 +169,12 @@ private:
 		bool useLayerBinding = false;
 	};
 
-	AttachmentBinding* FindAttachmentBinding(GLenum attachment);
-	const AttachmentBinding* FindAttachmentBinding(GLenum attachment) const;
+	AttachmentBinding *FindAttachmentBinding(GLenum attachment);
+	const AttachmentBinding *FindAttachmentBinding(GLenum attachment) const;
 
 	void SyncAttachmentBindings();
-	void AttachLegacyTexture(const AttachmentBinding& binding) const;
-	void AttachLegacyRenderbuffer(const AttachmentBinding& binding) const;
+	void AttachLegacyTexture(const AttachmentBinding &binding) const;
+	void AttachLegacyRenderbuffer(const AttachmentBinding &binding) const;
 
 	bool IsBackendAvailable() const;
 
@@ -189,12 +190,13 @@ private:
 	 */
 	std::vector<GLuint> rboIDs;
 
-
-	struct TexData {
+	struct TexData
+	{
 	public:
 		TexData() { id = 0; }
-		TexData(const TexData& td) { assert(td.id == 0); } // = delete;
-		TexData(TexData&& td) {
+		TexData(const TexData &td) { assert(td.id == 0); } // = delete;
+		TexData(TexData &&td)
+		{
 			id = td.id;
 
 			xsize = td.xsize;
@@ -203,7 +205,7 @@ private:
 
 			target = td.target;
 			format = td.format;
-			type   = td.type;
+			type = td.type;
 
 			pixels = std::move(td.pixels);
 		}
@@ -215,7 +217,7 @@ private:
 		std::vector<unsigned char> pixels;
 	};
 
-	static std::vector<FBO*> activeFBOs;
+	static std::vector<FBO *> activeFBOs;
 	static spring::unordered_map<GLuint, TexData> fboTexData;
 
 	static GLint maxAttachments;
