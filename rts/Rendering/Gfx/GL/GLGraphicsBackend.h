@@ -19,6 +19,8 @@ namespace gfx
         [[nodiscard]] std::unique_ptr<IVertexBuffer> CreateVertexBuffer(const BufferCreateInfo &ci) override;
         [[nodiscard]] std::unique_ptr<ITexture> CreateTexture(const TextureCreateInfo &ci) override;
         [[nodiscard]] std::unique_ptr<IFramebuffer> CreateFramebuffer(const RenderTargetDesc &desc) override;
+        [[nodiscard]] std::unique_ptr<IShader> CreateShader(const ShaderCreateInfo &ci) override;
+        [[nodiscard]] std::unique_ptr<IShaderProgram> CreateShaderProgram(const ShaderProgramCreateInfo &ci) override;
         [[nodiscard]] std::unique_ptr<IVertexArray> CreateVertexArray(
             const VertexLayoutDesc &layout,
             std::span<const VertexArrayBufferBinding> vertexBuffers,

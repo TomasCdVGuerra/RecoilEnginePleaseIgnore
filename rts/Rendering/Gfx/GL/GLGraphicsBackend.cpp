@@ -3,6 +3,8 @@
 #include "GLGraphicsBackend.h"
 
 #include "GLFramebuffer.h"
+#include "GLShader.h"
+#include "GLShaderProgram.h"
 #include "GLTexture.h"
 #include "GLVertexArray.h"
 #include "GLVertexBuffer.h"
@@ -230,6 +232,16 @@ namespace gfx
     std::unique_ptr<IFramebuffer> GLGraphicsBackend::CreateFramebuffer(const RenderTargetDesc &desc)
     {
         return std::make_unique<GLFramebuffer>(desc);
+    }
+
+    std::unique_ptr<IShader> GLGraphicsBackend::CreateShader(const ShaderCreateInfo &ci)
+    {
+        return std::make_unique<GLShader>(ci);
+    }
+
+    std::unique_ptr<IShaderProgram> GLGraphicsBackend::CreateShaderProgram(const ShaderProgramCreateInfo &ci)
+    {
+        return std::make_unique<GLShaderProgram>(ci);
     }
 
     std::unique_ptr<IVertexArray> GLGraphicsBackend::CreateVertexArray(

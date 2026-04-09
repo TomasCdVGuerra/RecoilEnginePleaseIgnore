@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace gfx
@@ -134,6 +135,22 @@ namespace gfx
         DepthStencil,
     };
 
+    enum class ShaderStage : std::uint8_t
+    {
+        Vertex,
+        TessControl,
+        TessEvaluation,
+        Geometry,
+        Fragment,
+        Compute,
+    };
+
+    enum class ShaderSourceFormat : std::uint8_t
+    {
+        GLSL,
+        SPIRV,
+    };
+
     constexpr TextureUsage operator|(TextureUsage a, TextureUsage b)
     {
         return static_cast<TextureUsage>(
@@ -200,6 +217,62 @@ namespace gfx
         std::optional<SamplerState> samplerState;
         std::uintptr_t nativeHandle = 0;
         std::string debugName;
+    };
+
+    struct ShaderCreateInfo
+    {
+        ShaderStage stage = ShaderStage::Vertex;
+        ShaderSourceFormat sourceFormat = ShaderSourceFormat::GLSL;
+        std::string entryPoint = "main";
+        std::string sourceCode;
+        std::vector<std::byte> sourceBinary;
+        std::string definitions;
+        std::string debugName;
+    };
+
+    struct ShaderProgramCreateInfo
+    {
+        std::string debugName;
+    };
+
+    struct UniformMat2
+    {
+        std::array<float, 4> value = {};
+        bool transpose = false;
+    };
+
+    struct UniformMat3
+    {
+        std::array<float, 9> value = {};
+        bool transpose = false;
+    };
+
+    struct UniformMat4
+    {
+        std::array<float, 16> value = {};
+        bool transpose = false;
+    };
+
+    using UniformParameterValue = std::variant<
+        std::int32_t,
+        std::uint32_t,
+        float,
+        std::array<std::int32_t, 2>,
+        std::array<std::int32_t, 3>,
+        std::array<std::int32_t, 4>,
+        std::array<std::uint32_t, 2>,
+        std::array<std::uint32_t, 3>,
+        std::array<std::uint32_t, 4>,
+        std::array<float, 2>,
+        std::array<float, 3>,
+        std::array<float, 4>,
+        UniformMat2,
+        UniformMat3,
+        UniformMat4>;
+
+    struct UniformParameter
+    {
+        UniformParameterValue value = std::int32_t{0};
     };
 
     struct AttachmentViewDesc
