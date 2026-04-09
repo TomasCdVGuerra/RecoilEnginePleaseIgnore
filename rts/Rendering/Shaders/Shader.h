@@ -4,7 +4,6 @@
 #define SPRING_SHADER_HDR
 
 #include <algorithm>
-#include <functional>
 #include <string>
 #include <memory>
 #include <vector>
@@ -14,6 +13,8 @@
 #include "System/UnorderedMap.hpp"
 #include "System/StringHash.h"
 #include "System/Cpp11Compat.hpp"
+#include "Rendering/Gfx/IShader.h"
+#include "Rendering/Gfx/IShaderProgram.h"
 #include "Rendering/GL/VertexArrayTypes.h"
 
 struct fast_hash
@@ -89,19 +90,18 @@ namespace Shader {
 		GLSLShaderObject(unsigned int, const std::string&, const std::string& shSrcDefs = "");
 
 		struct CompiledShaderObject {
-			CompiledShaderObject() : id(0), valid(false) {}
+			CompiledShaderObject() : valid(false) {}
 
-			unsigned int id;
+			std::unique_ptr<gfx::IShader> backendShader;
 			bool      valid;
 			std::string log;
 		};
 
-		/// @brief Returns a GLSL shader object in an unique pointer that auto deletes that instance.
-		///        Quote of GL docs: If a shader object is deleted while it is attached to a program object,
-		///        it will be flagged for deletion, and deletion will not occur until glDetachShader is called
-		///        to detach it from all program objects to which it is attached.
-		typedef std::unique_ptr<CompiledShaderObject, std::function<void(CompiledShaderObject* so)>> CompiledShaderObjectUniquePtr;
+		typedef std::unique_ptr<CompiledShaderObject> CompiledShaderObjectUniquePtr;
 		CompiledShaderObjectUniquePtr CompileShaderObject();
+		void Release() override;
+
+		std::unique_ptr<gfx::IShader> backendShader;
 	};
 
 	struct IProgramObject;
@@ -418,7 +418,7 @@ namespace Shader {
 	struct GLSLProgramObject: public Shader::IProgramObject {
 	public:
 		GLSLProgramObject(const std::string& poName);
-		~GLSLProgramObject() override { Release(); }
+		~GLSLProgramObject() override;
 
 		void BindAttribLocation(const std::string& name, uint32_t index) override;
 		void BindOutputLocation(const std::string& name, uint32_t index) override;
@@ -495,6 +495,7 @@ namespace Shader {
 	private:
 		std::vector<size_t> uniformLocs;
 		unsigned int curSrcHash;
+		std::unique_ptr<gfx::IShaderProgram> backendProgram;
 	};
 
 	template<typename VAT>

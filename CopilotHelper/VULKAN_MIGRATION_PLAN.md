@@ -462,7 +462,7 @@ Goal: Abstract the most tightly coupled OpenGL systems: framebuffers, shaders, a
 
 Sub-status:
 1. `[COMPLETE]` Phase 6.1: Framebuffer Abstraction.
-2. `[IN PROGRESS]` Phase 6.2: Shader Abstraction.
+2. `[COMPLETE]` Phase 6.2: Shader Abstraction.
 
 Coupling observed:
 1. Framebuffers (`FBO.h`, `RenderBuffers.cpp`): hardcoded `GL_COLOR_ATTACHMENT*`, depth/stencil setup, and `glBlitFramebuffer` logic.
@@ -504,7 +504,7 @@ Phase 6.1 implication summary:
 2. MRT configuration should become an explicit backend API call on a render-target descriptor rather than a direct `glDrawBuffers` call in pass code.
 3. Context-loss restore logic in `FBO` (attachment readback/reupload) should be reviewed as a separate responsibility from core framebuffer binding/attachment API during interface design.
 
-#### [IN PROGRESS] Phase 6.2: Shader Abstraction
+#### [COMPLETE] Phase 6.2: Shader Abstraction
 Target files:
 1. `rts/Rendering/Shaders/Shader.h`
 2. `rts/Rendering/Shaders/Shader.cpp`
