@@ -95,6 +95,10 @@ if (ENABLE_STREFLOP)
 	list(APPEND engineCommonLibraries streflop)
 endif ()
 
+if (ENABLE_VULKAN)
+	list(APPEND engineCommonLibraries Vulkan::Vulkan)
+endif ()
+
 if (WIN32)
 	list(APPEND engineCommonLibraries ${WIN32_LIBRARIES})
 endif (WIN32)
