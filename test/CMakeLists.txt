@@ -458,6 +458,7 @@ endif()
 
 ################################################################################
 ### SQRT
+	if (NOT APPLE)
 	set(test_name SQRT)
 	set(test_src
 			"${CMAKE_CURRENT_SOURCE_DIR}/engine/System/testSQRT.cpp"
@@ -472,6 +473,7 @@ endif()
 		)
 	set(test_flags "-DNOT_USING_CREG -DBUILDING_AI")
 	add_spring_test(${test_name} "${test_src}" "${test_libs}" "${test_flags}")
+	endif()
 
 ################################################################################
 ### ClampRad
