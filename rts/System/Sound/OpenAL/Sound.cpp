@@ -4,7 +4,17 @@
 
 #include <cstdlib>
 #include <cmath>
+#if defined(__has_include)
+#if __has_include(<alext.h>)
 #include <alext.h>
+#elif __has_include(<OpenAL/alext.h>)
+#include <OpenAL/alext.h>
+#elif __has_include(<AL/alext.h>)
+#include <AL/alext.h>
+#endif
+#else
+#include <alext.h>
+#endif
 
 #ifdef ALC_SOFT_loopback
 #include <SDL.h>
@@ -44,9 +54,7 @@
 
 #include "System/float3.h"
 
-
 spring::recursive_mutex soundMutex;
-
 
 CSound::CSound()
 {
@@ -57,7 +65,6 @@ CSound::~CSound()
 {
 	configHandler->RemoveObserver(this);
 }
-
 
 void CSound::Init()
 {
@@ -124,10 +131,11 @@ void CSound::Kill()
 	SoundBuffer::Deinitialise();
 }
 
-
-void CSound::Cleanup() {
+void CSound::Cleanup()
+{
 #ifdef ALC_SOFT_loopback
-	if (hasAlcSoftLoopBack && sdlDeviceID != 0) {
+	if (hasAlcSoftLoopBack && sdlDeviceID != 0)
+	{
 		LOG("[Sound::%s][SDL_CloseAudioDevice(%d)]", __func__, sdlDeviceID);
 		SDL_CloseAudioDevice(sdlDeviceID);
 		SDL_CloseAudio();
@@ -137,22 +145,23 @@ void CSound::Cleanup() {
 	}
 #endif
 
-	if (curContext != nullptr) {
+	if (curContext != nullptr)
+	{
 		LOG("[Sound::%s][alcDestroyContext(%p)]", __func__, curContext);
 		alcMakeContextCurrent(nullptr);
 		alcDestroyContext(curContext);
 		curContext = nullptr;
 	}
 
-	if (curDevice != nullptr) {
+	if (curDevice != nullptr)
+	{
 		LOG("[Sound::%s][alcCloseDevice(%p)]", __func__, curDevice);
 		alcCloseDevice(curDevice);
 		curDevice = nullptr;
 	}
 }
 
-
-bool CSound::HasSoundItem(const std::string& name) const
+bool CSound::HasSoundItem(const std::string &name) const
 {
 	// soundMap can be concurrently touched by GetSoundId if preloading
 	std::lock_guard<spring::recursive_mutex> lck(soundMutex);
@@ -163,18 +172,17 @@ bool CSound::HasSoundItem(const std::string& name) const
 	return (soundItemDefsMap.find(StringToLower(name)) != soundItemDefsMap.end());
 }
 
-bool CSound::PreloadSoundItem(const std::string& name)
+bool CSound::PreloadSoundItem(const std::string &name)
 {
-	#if 0
+#if 0
 	ThreadPool::Enqueue([name]() { sound->GetSoundId(name); });
-	#else
+#else
 	std::lock_guard<spring::recursive_mutex> lck(soundMutex);
 	return ((preloadSet.insert(name)).second);
-	#endif
+#endif
 }
 
-
-size_t CSound::GetDefSoundId(const std::string& name)
+size_t CSound::GetDefSoundId(const std::string &name)
 {
 	// only attempt to load if sounds.lua has an entry for this sound
 	if (!HasSoundItem(name))
@@ -183,7 +191,7 @@ size_t CSound::GetDefSoundId(const std::string& name)
 	return (GetSoundId(name));
 }
 
-size_t CSound::GetSoundId(const std::string& name)
+size_t CSound::GetSoundId(const std::string &name)
 {
 	std::lock_guard<spring::recursive_mutex> lck(soundMutex);
 
@@ -203,7 +211,8 @@ size_t CSound::GetSoundId(const std::string& name)
 		return (preloadSet.erase(name), MakeItemFromDef(itemDefIt->second));
 
 	// name does not match any sounds.lua item, interpret as raw file reference
-	if (LoadSoundBuffer(name) > 0) {
+	if (LoadSoundBuffer(name) > 0)
+	{
 		SoundItemNameMap itemMap = defaultItemNameMap;
 		itemMap.erase("file");
 		itemMap.emplace("file", name);
@@ -214,8 +223,8 @@ size_t CSound::GetSoundId(const std::string& name)
 	return (preloadSet.erase(name), 0);
 }
 
-
-SoundItem* CSound::GetSoundItem(size_t id) {
+SoundItem *CSound::GetSoundItem(size_t id)
+{
 	// id==0 is a special id and invalid
 	if (id == 0 || id >= soundItems.size())
 		return nullptr;
@@ -224,7 +233,7 @@ SoundItem* CSound::GetSoundItem(size_t id) {
 	return &soundItems[id];
 }
 
-CSoundSource* CSound::GetNextBestSource(bool lock)
+CSoundSource *CSound::GetNextBestSource(bool lock)
 {
 	std::unique_lock<spring::recursive_mutex> lck(soundMutex, std::defer_lock);
 	if (lock)
@@ -234,21 +243,23 @@ CSoundSource* CSound::GetNextBestSource(bool lock)
 		return nullptr;
 
 	// find a free source; pointer remains valid until thread exits
-	const auto pred = [](const CSoundSource& src) { return (!src.IsPlaying(false)); };
+	const auto pred = [](const CSoundSource &src)
+	{ return (!src.IsPlaying(false)); };
 	const auto iter = std::find_if(soundSources.begin(), soundSources.end(), pred);
 
 	if (iter != soundSources.end())
 		return &(*iter);
 
 	// check the next best free source
-	CSoundSource* bestSrc = nullptr;
+	CSoundSource *bestSrc = nullptr;
 	int bestPriority = INT_MAX;
 
-	for (CSoundSource& src: soundSources) {
-		#if 0
+	for (CSoundSource &src : soundSources)
+	{
+#if 0
 		if (!src.IsPlaying(true))
 			return &src;
-		#endif
+#endif
 		if (src.GetCurrentPriority() > bestPriority)
 			continue;
 
@@ -263,73 +274,110 @@ void CSound::PitchAdjust(const float newPitch)
 {
 	std::lock_guard<spring::recursive_mutex> lck(soundMutex);
 
-	switch (pitchAdjustMode) {
-		case  1: { CSoundSource::SetPitch(std::sqrt(newPitch)); } break;
-		case  2: { CSoundSource::SetPitch(          newPitch ); } break;
-		default: {                                              } break;
+	switch (pitchAdjustMode)
+	{
+	case 1:
+	{
+		CSoundSource::SetPitch(std::sqrt(newPitch));
+	}
+	break;
+	case 2:
+	{
+		CSoundSource::SetPitch(newPitch);
+	}
+	break;
+	default:
+	{
+	}
+	break;
 	}
 }
 
-void CSound::ConfigNotify(const std::string& key, const std::string& value)
+void CSound::ConfigNotify(const std::string &key, const std::string &value)
 {
 	std::lock_guard<spring::recursive_mutex> lck(soundMutex);
 
-	switch (hashString(key.c_str())) {
-		case hashString("snd_volmaster"): {
-			masterVolume = std::atoi(value.c_str()) * 0.01f;
+	switch (hashString(key.c_str()))
+	{
+	case hashString("snd_volmaster"):
+	{
+		masterVolume = std::atoi(value.c_str()) * 0.01f;
 
-			if (!mute && !appIsIconified)
-				alListenerf(AL_GAIN, masterVolume);
+		if (!mute && !appIsIconified)
+			alListenerf(AL_GAIN, masterVolume);
+	}
+	break;
+	case hashString("snd_eaxpreset"):
+	{
+		efx.SetPreset(value);
+	}
+	break;
+	case hashString("snd_filter"):
+	{
+		float gainlf = 1.0f;
+		float gainhf = 1.0f;
+		sscanf(value.c_str(), "%f %f", &gainlf, &gainhf);
+		efx.sfxProperties.filter_props_f[AL_LOWPASS_GAIN] = gainlf;
+		efx.sfxProperties.filter_props_f[AL_LOWPASS_GAINHF] = gainhf;
+		efx.CommitEffects();
+	}
+	break;
 
-		} break;
-		case hashString("snd_eaxpreset"): {
-			efx.SetPreset(value);
-		} break;
-		case hashString("snd_filter"): {
-			float gainlf = 1.0f;
-			float gainhf = 1.0f;
-			sscanf(value.c_str(), "%f %f", &gainlf, &gainhf);
-			efx.sfxProperties.filter_props_f[AL_LOWPASS_GAIN  ] = gainlf;
-			efx.sfxProperties.filter_props_f[AL_LOWPASS_GAINHF] = gainhf;
-			efx.CommitEffects();
-		} break;
+	case hashString("UseEFX"):
+	{
+		if (std::atoi(value.c_str()) != 0)
+		{
+			efx.Enable();
+		}
+		else
+		{
+			efx.Disable();
+		}
+	}
+	break;
 
-		case hashString("UseEFX"): {
-			if (std::atoi(value.c_str()) != 0) {
-				efx.Enable();
-			} else {
-				efx.Disable();
-			}
-		} break;
+	case hashString("snd_volgeneral"):
+	{
+		Channels::General->SetVolume(std::atoi(value.c_str()) * 0.01f);
+	}
+	break;
+	case hashString("snd_volunitreply"):
+	{
+		Channels::UnitReply->SetVolume(std::atoi(value.c_str()) * 0.01f);
+	}
+	break;
+	case hashString("snd_volbattle"):
+	{
+		Channels::Battle->SetVolume(std::atoi(value.c_str()) * 0.01f);
+	}
+	break;
+	case hashString("snd_volui"):
+	{
+		Channels::UserInterface->SetVolume(std::atoi(value.c_str()) * 0.01f);
+	}
+	break;
+	case hashString("snd_volmusic"):
+	{
+		Channels::BGMusic->SetVolume(std::atoi(value.c_str()) * 0.01f);
+	}
+	break;
 
-		case hashString("snd_volgeneral"): {
-			Channels::General->SetVolume(std::atoi(value.c_str()) * 0.01f);
-		} break;
-		case hashString("snd_volunitreply"): {
-			Channels::UnitReply->SetVolume(std::atoi(value.c_str()) * 0.01f);
-		} break;
-		case hashString("snd_volbattle"): {
-			Channels::Battle->SetVolume(std::atoi(value.c_str()) * 0.01f);
-		} break;
-		case hashString("snd_volui"): {
-			Channels::UserInterface->SetVolume(std::atoi(value.c_str()) * 0.01f);
-		} break;
-		case hashString("snd_volmusic"): {
-			Channels::BGMusic->SetVolume(std::atoi(value.c_str()) * 0.01f);
-		} break;
+	case hashString("PitchAdjust"):
+	{
+		const int tempPitchAdjustMode = std::atoi(value.c_str());
 
-		case hashString("PitchAdjust"): {
-			const int tempPitchAdjustMode = std::atoi(value.c_str());
+		// reset adjustment factor if disabling
+		if (tempPitchAdjustMode == 0)
+			PitchAdjust(1.0f);
 
-			// reset adjustment factor if disabling
-			if (tempPitchAdjustMode == 0)
-				PitchAdjust(1.0f);
+		pitchAdjustMode = tempPitchAdjustMode;
+	}
+	break;
 
-			pitchAdjustMode = tempPitchAdjustMode;
-		} break;
-
-		default: {
-		} break;
+	default:
+	{
+	}
+	break;
 	}
 }
 
@@ -358,7 +406,7 @@ void CSound::DeviceChanged(uint32_t sdlDeviceIndex)
 	// In these cases, no event is emitted — SDL2 switches the active audio device internally through the OS-specific audio backend (WASAPI, PulseAudio, etc.).
 	// However, with certain device changes a short dropout may occur, and SDL2 will emit the SDL_AUDIODEVICEREMOVED event.
 	// Shortly afterwards, the default device can usually be reinitialized.
-	
+
 	// This behavior can be reproduced on several test systems, for example when switching the Windows default device from monitor audio over HDMI to a sound card (HDMI->analog)
 
 	std::lock_guard<spring::recursive_mutex> lck(soundMutex);
@@ -391,7 +439,7 @@ void CSound::DeviceChanged(uint32_t sdlDeviceIndex)
 	//
 	// ToDo: Once OpenAL-Soft is updated, we can make use of alcReopenDeviceSOFT, etc.
 
-	SDL_PauseAudioDevice(sdlDeviceID, 0);  // Resume SDL-callback 'RenderSDLSamples'
+	SDL_PauseAudioDevice(sdlDeviceID, 0); // Resume SDL-callback 'RenderSDLSamples'
 	LOG("[Sound::%s] Reopened device", __func__);
 }
 
@@ -399,7 +447,8 @@ void CSound::Iconified(bool state)
 {
 	std::lock_guard<spring::recursive_mutex> lck(soundMutex);
 
-	if (appIsIconified != state && !mute) {
+	if (appIsIconified != state && !mute)
+	{
 		if (!state)
 			alListenerf(AL_GAIN, masterVolume);
 		else
@@ -409,24 +458,26 @@ void CSound::Iconified(bool state)
 	appIsIconified = state;
 }
 
-
-void CSound::OpenOpenALDevice(const std::string& deviceName)
+void CSound::OpenOpenALDevice(const std::string &deviceName)
 {
 	assert(curDevice == nullptr);
 
-	if (!deviceName.empty()) {
+	if (!deviceName.empty())
+	{
 		LOG("[Sound::%s] opening configured device \"%s\"", __func__, deviceName.c_str());
 
 		curDevice = alcOpenDevice(deviceName.c_str());
 	}
 
-	if (curDevice == nullptr) {
+	if (curDevice == nullptr)
+	{
 		LOG("[Sound::%s] opening default device \"%s\"", __func__, alcGetString(nullptr, ALC_DEFAULT_DEVICE_SPECIFIER));
 
 		curDevice = alcOpenDevice(nullptr);
 	}
 
-	if (curDevice == nullptr) {
+	if (curDevice == nullptr)
+	{
 		LOG_L(L_ERROR, "[%s][2] failed to open device", __func__);
 
 		// fall back to NullSound
@@ -442,66 +493,91 @@ void CSound::OpenOpenALDevice(const std::string& deviceName)
 	LOG("[Sound::%s] device=%p(%s) context=%p", __func__, curDevice, selectedDeviceName.c_str(), curContext);
 }
 
-
-
 #ifdef ALC_SOFT_loopback
 
 static LPALCLOOPBACKOPENDEVICESOFT alcLoopbackOpenDeviceSOFT;
 static LPALCISRENDERFORMATSUPPORTEDSOFT alcIsRenderFormatSupportedSOFT;
 static LPALCRENDERSAMPLESSOFT alcRenderSamplesSOFT;
 
-static void SDLCALL RenderSDLSamples(void* userdata, Uint8* stream, int len)
+static void SDLCALL RenderSDLSamples(void *userdata, Uint8 *stream, int len)
 {
-	CSound* snd = reinterpret_cast<CSound*>(userdata);
-	ALCdevice* dev = snd->GetCurrentDevice();
+	CSound *snd = reinterpret_cast<CSound *>(userdata);
+	ALCdevice *dev = snd->GetCurrentDevice();
 
 	assert(snd->GetFrameSize() > 0);
 	alcRenderSamplesSOFT(dev, stream, len / snd->GetFrameSize());
 }
 
-static const char* ChannelsName(ALCenum chans)
+static const char *ChannelsName(ALCenum chans)
 {
-	switch (chans) {
-		case ALC_MONO_SOFT: return "Mono";
-		case ALC_STEREO_SOFT: return "Stereo";
-		case ALC_QUAD_SOFT: return "Quadraphonic";
-		case ALC_5POINT1_SOFT: return "5.1 Surround";
-		case ALC_6POINT1_SOFT: return "6.1 Surround";
-		case ALC_7POINT1_SOFT: return "7.1 Surround";
+	switch (chans)
+	{
+	case ALC_MONO_SOFT:
+		return "Mono";
+	case ALC_STEREO_SOFT:
+		return "Stereo";
+	case ALC_QUAD_SOFT:
+		return "Quadraphonic";
+	case ALC_5POINT1_SOFT:
+		return "5.1 Surround";
+	case ALC_6POINT1_SOFT:
+		return "6.1 Surround";
+	case ALC_7POINT1_SOFT:
+		return "7.1 Surround";
 	}
 	return "Unknown Channels";
 }
 
-static const char* TypeName(ALCenum type)
+static const char *TypeName(ALCenum type)
 {
-	switch (type) {
-		case ALC_BYTE_SOFT: return "S8";
-		case ALC_UNSIGNED_BYTE_SOFT: return "U8";
-		case ALC_SHORT_SOFT: return "S16";
-		case ALC_UNSIGNED_SHORT_SOFT: return "U16";
-		case ALC_INT_SOFT: return "S32";
-		case ALC_UNSIGNED_INT_SOFT: return "U32";
-		case ALC_FLOAT_SOFT: return "Float32";
+	switch (type)
+	{
+	case ALC_BYTE_SOFT:
+		return "S8";
+	case ALC_UNSIGNED_BYTE_SOFT:
+		return "U8";
+	case ALC_SHORT_SOFT:
+		return "S16";
+	case ALC_UNSIGNED_SHORT_SOFT:
+		return "U16";
+	case ALC_INT_SOFT:
+		return "S32";
+	case ALC_UNSIGNED_INT_SOFT:
+		return "U32";
+	case ALC_FLOAT_SOFT:
+		return "Float32";
 	}
 	return "Unknown Type";
 }
 
 #endif
 
-bool CSound::OpenSdlDevice(const std::string& deviceName, SDL_AudioSpec& obtainedSpec)
+#ifndef ALC_SOFT_loopback
+bool CSound::OpenSdlDevice(const std::string &deviceName, SDL_AudioSpec &obtainedSpec)
 {
-	if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
+	(void)deviceName;
+	(void)obtainedSpec;
+	LOG("[Sound::%s] ALC_SOFT_loopback headers are unavailable; SDL loopback path is disabled", __func__);
+	return false;
+}
+#else
+bool CSound::OpenSdlDevice(const std::string &deviceName, SDL_AudioSpec &obtainedSpec)
+{
+	if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0)
+	{
 		LOG("[Sound::%s] failed to initialize SDL audio, error:  \"%s\"", __func__, SDL_GetError());
 		return false;
 	}
 
-	if (SDL_GetNumAudioDevices(0) <= 0) {
+	if (SDL_GetNumAudioDevices(0) <= 0)
+	{
 		LOG("[Sound::%s] UseSDLAudio is set, but no SDL sound devices for playback can be found. Falling back to openal-soft backends", __func__);
 		return false;
 	}
 
 	LOG("[Sound::%s] SDL audio device(s): ", __func__);
-	for (int i = 0, n = SDL_GetNumAudioDevices(0); i < n; ++i) {
+	for (int i = 0, n = SDL_GetNumAudioDevices(0); i < n; ++i)
+	{
 		LOG("[Sound::%s]  * \"%d\" \"%s\"", __func__, i, SDL_GetAudioDeviceName(i, 0));
 	}
 
@@ -513,7 +589,7 @@ bool CSound::OpenSdlDevice(const std::string& deviceName, SDL_AudioSpec& obtaine
 	desiredSpec.samples = 4096;
 	desiredSpec.callback = RenderSDLSamples;
 	desiredSpec.userdata = this;
-	
+
 	/* SDL bug: can return devices with >2 channels (3D surround), even if we ask for just 2.
 	 * This causes the 2 "primary" channels to be moved in the 3D space compared to their "normal" state
 	 * and directional sound doesn't work anymore (though volume change with distance still does).
@@ -522,24 +598,28 @@ bool CSound::OpenSdlDevice(const std::string& deviceName, SDL_AudioSpec& obtaine
 	 * Note that proper support for 3D surround sounds sounds hard, for example as of 2023 counter-strike has very weak support
 	 * for it, apparently noticeably worse than just stereo according to players, despite being in a more relevant genre. */
 	selectedDeviceName = "";
-	for (int channelsDesired : {2, 1}) {
+	for (int channelsDesired : {2, 1})
+	{
 		desiredSpec.channels = channelsDesired;
 
 		sdlDeviceID = 0;
 
-		if (!deviceName.empty()) {
+		if (!deviceName.empty())
+		{
 			LOG("[Sound::%s] opening configured device \"%s\"", __func__, deviceName.c_str());
 			sdlDeviceID = SDL_OpenAudioDevice(deviceName.c_str(), 0, &desiredSpec, &obtainedSpec, SDL_AUDIO_ALLOW_ANY_CHANGE & ~SDL_AUDIO_ALLOW_CHANNELS_CHANGE);
 			selectedDeviceName = deviceName;
 		}
 
-		if (sdlDeviceID == 0) {
+		if (sdlDeviceID == 0)
+		{
 			LOG("[Sound::%s] opening default device", __func__);
 			sdlDeviceID = SDL_OpenAudioDevice(nullptr, 0, &desiredSpec, &obtainedSpec, SDL_AUDIO_ALLOW_ANY_CHANGE & ~SDL_AUDIO_ALLOW_CHANNELS_CHANGE);
 			selectedDeviceName = "default";
 		}
 
-		if (obtainedSpec.channels == desiredSpec.channels) {
+		if (obtainedSpec.channels == desiredSpec.channels)
+		{
 			break;
 		}
 
@@ -547,14 +627,16 @@ bool CSound::OpenSdlDevice(const std::string& deviceName, SDL_AudioSpec& obtaine
 		SDL_CloseAudioDevice(sdlDeviceID);
 	}
 
-	if (sdlDeviceID == 0) {
+	if (sdlDeviceID == 0)
+	{
 		LOG("[Sound::%s] failed to open SDL audio, error:  \"%s\"", __func__, SDL_GetError());
 		SDL_QuitSubSystem(SDL_INIT_AUDIO);
 		return false;
 	}
 
 	// needs to be at least 1 or the callback will divide by 0
-	if ((frameSize = obtainedSpec.channels * SDL_AUDIO_BITSIZE(obtainedSpec.format) / 8) <= 0) {
+	if ((frameSize = obtainedSpec.channels * SDL_AUDIO_BITSIZE(obtainedSpec.format) / 8) <= 0)
+	{
 		LOG("[Sound::%s] failed to obtain valid SDL spec: numChannels=%d formatBits=%d", __func__, obtainedSpec.channels, SDL_AUDIO_BITSIZE(obtainedSpec.format));
 		Cleanup();
 		return false;
@@ -562,8 +644,9 @@ bool CSound::OpenSdlDevice(const std::string& deviceName, SDL_AudioSpec& obtaine
 
 	return true;
 }
+#endif
 
-void CSound::OpenLoopbackDevice(const std::string& deviceName)
+void CSound::OpenLoopbackDevice(const std::string &deviceName)
 {
 	assert(curDevice == nullptr);
 
@@ -572,13 +655,14 @@ void CSound::OpenLoopbackDevice(const std::string& deviceName)
 #endif
 
 	hasAlcSoftLoopBack = (alcIsExtensionPresent(nullptr, "ALC_SOFT_loopback") == AL_TRUE);
-	if (!hasAlcSoftLoopBack) {
+	if (!hasAlcSoftLoopBack)
+	{
 		LOG("[Sound::%s] ALC_SOFT_loopback extension NOT found using alcIsExtensionPresent(...)!", __func__);
 		return;
 	}
 
 #ifdef ALC_SOFT_loopback
-#define LOAD_PROC(x) ((x) = (decltype(x)) alcGetProcAddress(nullptr, #x))
+#define LOAD_PROC(x) ((x) = (decltype(x))alcGetProcAddress(nullptr, #x))
 	LOAD_PROC(alcLoopbackOpenDeviceSOFT);
 	LOAD_PROC(alcIsRenderFormatSupportedSOFT);
 	LOAD_PROC(alcRenderSamplesSOFT);
@@ -587,7 +671,8 @@ void CSound::OpenLoopbackDevice(const std::string& deviceName)
 	if (alcLoopbackOpenDeviceSOFT == nullptr || alcIsRenderFormatSupportedSOFT == nullptr || alcRenderSamplesSOFT == nullptr)
 		return;
 
-	if (!configHandler->GetBool("UseSDLAudio")) {
+	if (!configHandler->GetBool("UseSDLAudio"))
+	{
 		LOG("[Sound::%s] UseSDLAudio is NOT set, falling back to openal-soft backends", __func__);
 		return;
 	}
@@ -602,53 +687,89 @@ void CSound::OpenLoopbackDevice(const std::string& deviceName)
 	// set up our OpenAL attributes based on what we got from SDL
 	attrs[0] = ALC_FORMAT_CHANNELS_SOFT;
 
-	switch (obtainedSpec.channels) {
-		case 1: { attrs[1] = ALC_MONO_SOFT  ; } break;
-		case 2: { attrs[1] = ALC_STEREO_SOFT; } break;
-		default: {
-			LOG("[Sound::%s] unhandled SDL channel count: %d", __func__, obtainedSpec.channels);
-			Cleanup();
-			return;
-		} break;
+	switch (obtainedSpec.channels)
+	{
+	case 1:
+	{
+		attrs[1] = ALC_MONO_SOFT;
+	}
+	break;
+	case 2:
+	{
+		attrs[1] = ALC_STEREO_SOFT;
+	}
+	break;
+	default:
+	{
+		LOG("[Sound::%s] unhandled SDL channel count: %d", __func__, obtainedSpec.channels);
+		Cleanup();
+		return;
+	}
+	break;
 	}
 
 	attrs[2] = ALC_FORMAT_TYPE_SOFT;
 
-	switch (obtainedSpec.format) {
-		case AUDIO_U8    : { attrs[3] = ALC_UNSIGNED_BYTE_SOFT ; } break;
-		case AUDIO_S8    : { attrs[3] = ALC_BYTE_SOFT          ; } break;
-		case AUDIO_U16SYS: { attrs[3] = ALC_UNSIGNED_SHORT_SOFT; } break;
-		case AUDIO_S16SYS: { attrs[3] = ALC_SHORT_SOFT         ; } break;
-		case AUDIO_F32   : { attrs[3] = ALC_FLOAT_SOFT         ; } break;
-		default: {
-			LOG("[Sound::%s] unhandled SDL format: 0x%04x", __func__, obtainedSpec.format);
-			Cleanup();
-			return;
-		} break;
+	switch (obtainedSpec.format)
+	{
+	case AUDIO_U8:
+	{
+		attrs[3] = ALC_UNSIGNED_BYTE_SOFT;
+	}
+	break;
+	case AUDIO_S8:
+	{
+		attrs[3] = ALC_BYTE_SOFT;
+	}
+	break;
+	case AUDIO_U16SYS:
+	{
+		attrs[3] = ALC_UNSIGNED_SHORT_SOFT;
+	}
+	break;
+	case AUDIO_S16SYS:
+	{
+		attrs[3] = ALC_SHORT_SOFT;
+	}
+	break;
+	case AUDIO_F32:
+	{
+		attrs[3] = ALC_FLOAT_SOFT;
+	}
+	break;
+	default:
+	{
+		LOG("[Sound::%s] unhandled SDL format: 0x%04x", __func__, obtainedSpec.format);
+		Cleanup();
+		return;
+	}
+	break;
 	}
 
 	attrs[4] = ALC_FREQUENCY;
 	attrs[5] = obtainedSpec.freq;
 	attrs[6] = 0; // end of list
 
-
 	LOG("[Sound::%s] opening loopback device", __func__);
 
 	// initialize OpenAL loopback device, using our format attributes
-	if ((curDevice = alcLoopbackOpenDeviceSOFT(nullptr)) == nullptr) {
+	if ((curDevice = alcLoopbackOpenDeviceSOFT(nullptr)) == nullptr)
+	{
 		LOG("[Sound::%s] failed to create loopback device", __func__);
 		Cleanup();
 		return;
 	}
 
 	// make sure the format is supported before setting them on the device
-	if (alcIsRenderFormatSupportedSOFT(curDevice, attrs[5], attrs[1], attrs[3]) == ALC_FALSE) {
+	if (alcIsRenderFormatSupportedSOFT(curDevice, attrs[5], attrs[1], attrs[3]) == ALC_FALSE)
+	{
 		LOG("[Sound::%s] render format not supported: %s, %s, %dhz\n", __func__, ChannelsName(attrs[1]), TypeName(attrs[3]), attrs[5]);
 		Cleanup();
 		return;
 	}
 
-	if ((curContext = alcCreateContext(curDevice, attrs)) == nullptr) {
+	if ((curContext = alcCreateContext(curDevice, attrs)) == nullptr)
+	{
 		LOG_L(L_ERROR, "[Sound::%s] failed to create loopback context", __func__);
 		Cleanup();
 		return;
@@ -657,8 +778,6 @@ void CSound::OpenLoopbackDevice(const std::string& deviceName)
 	LOG("[Sound::%s] device=%p(%s) context=%p  numChannels=%d frameSize=%d", __func__, curDevice, selectedDeviceName.c_str(), curContext, obtainedSpec.channels, frameSize);
 #endif
 }
-
-
 
 void CSound::InitThread(int cfgMaxSounds)
 {
@@ -683,7 +802,8 @@ void CSound::InitThread(int cfgMaxSounds)
 		if (curContext == nullptr)
 			OpenOpenALDevice(configDeviceName);
 
-		if (curContext == nullptr) {
+		if (curContext == nullptr)
+		{
 			LOG_L(L_ERROR, "[Sound::%s][3] failed to create context", __func__);
 
 			Cleanup();
@@ -691,7 +811,8 @@ void CSound::InitThread(int cfgMaxSounds)
 			return;
 		}
 
-		if (!alcMakeContextCurrent(curContext)) {
+		if (!alcMakeContextCurrent(curContext))
+		{
 			LOG_L(L_ERROR, "[Sound::%s][3] failed to set current context", __func__);
 
 			Cleanup();
@@ -702,21 +823,24 @@ void CSound::InitThread(int cfgMaxSounds)
 
 		{
 			LOG("[Sound::%s][4][OpenAL API Info]", __func__);
-			LOG("  Vendor:         %s", (const char*) alGetString(AL_VENDOR));
-			LOG("  Version:        %s", (const char*) alGetString(AL_VERSION));
-			LOG("  Renderer:       %s", (const char*) alGetString(AL_RENDERER));
-			LOG("  AL Extensions:  %s", (const char*) alGetString(AL_EXTENSIONS));
-			LOG("  ALC Extensions: %s", (const char*) alcGetString(curDevice, ALC_EXTENSIONS));
+			LOG("  Vendor:         %s", (const char *)alGetString(AL_VENDOR));
+			LOG("  Version:        %s", (const char *)alGetString(AL_VERSION));
+			LOG("  Renderer:       %s", (const char *)alGetString(AL_RENDERER));
+			LOG("  AL Extensions:  %s", (const char *)alGetString(AL_EXTENSIONS));
+			LOG("  ALC Extensions: %s", (const char *)alcGetString(curDevice, ALC_EXTENSIONS));
 			// same as renderer
 			// LOG("  Implementation: %s", (const char*) alcGetString(curDevice, ALC_DEVICE_SPECIFIER));
 			LOG("  Devices:");
 
 			std::vector<std::string> devices = GetSoundDevices();
 
-			if (devices.size()) {
-				for(const std::string& deviceName: devices)
+			if (devices.size())
+			{
+				for (const std::string &deviceName : devices)
 					LOG("    [%s]", deviceName.c_str());
-			} else {
+			}
+			else
+			{
 				LOG("    [N/A]");
 			}
 		}
@@ -762,7 +886,8 @@ void CSound::UpdateThread(int cfgMaxSounds)
 		LOG("[Sound::%s][2]", __func__);
 	}
 
-	while (!soundThreadQuit) {
+	while (!soundThreadQuit)
+	{
 		// update at roughly 30Hz
 		spring::this_thread::sleep_for(std::chrono::milliseconds(1000 / GAME_SPEED));
 
@@ -799,11 +924,13 @@ void CSound::Update()
 
 	// limit consumption-rate to prevent source starvation
 	// lock is held, size can not be changed except by loop
-	for (size_t i = 0, n = std::min(size_t(4), preloadSet.size()); i < n; i++) {
+	for (size_t i = 0, n = std::min(size_t(4), preloadSet.size()); i < n; i++)
+	{
 		GetSoundId(*preloadSet.begin());
 	}
 
-	for (CSoundSource& source: soundSources) {
+	for (CSoundSource &source : soundSources)
+	{
 		source.Update();
 	}
 
@@ -811,7 +938,7 @@ void CSound::Update()
 	UpdateListenerReal();
 }
 
-size_t CSound::MakeItemFromDef(const SoundItemNameMap& itemDef)
+size_t CSound::MakeItemFromDef(const SoundItemNameMap &itemDef)
 {
 	// only callers are LoadSoundDefs{Impl} and GetSoundId which both grab this
 	// std::lock_guard<spring::recursive_mutex> lck(soundMutex);
@@ -822,16 +949,15 @@ size_t CSound::MakeItemFromDef(const SoundItemNameMap& itemDef)
 		return 0;
 
 	const size_t bufferID = LoadSoundBuffer(defIt->second);
-	const size_t   itemID = soundItems.size();
+	const size_t itemID = soundItems.size();
 
 	if (bufferID == 0)
 		return 0;
 
 	soundItems.emplace_back(itemID, bufferID, itemDef);
-	soundMap[ soundItems[itemID].Name() ] = itemID;
+	soundMap[soundItems[itemID].Name()] = itemID;
 	return itemID;
 }
-
 
 void CSound::UpdateListenerReal()
 {
@@ -874,7 +1000,6 @@ void CSound::UpdateListenerReal()
 	CheckError("[Sound::UpdateListener]");
 }
 
-
 void CSound::PrintDebugInfo()
 {
 	std::lock_guard<spring::recursive_mutex> lck(soundMutex);
@@ -889,26 +1014,28 @@ void CSound::PrintDebugInfo()
 	LOG_L(L_DEBUG, "# SoundItems: %i", (int)soundItems.size());
 }
 
-bool CSound::LoadSoundDefsImpl(LuaParser* defsParser)
+bool CSound::LoadSoundDefsImpl(LuaParser *defsParser)
 {
 	// can be called from LuaUnsyncedCtrl too
 	std::lock_guard<spring::recursive_mutex> lck(soundMutex);
 
 	defsParser->Execute();
 
-	const std::string& fileName = defsParser->fileName;
-	const std::string& errorLog = defsParser->GetErrorLog();
+	const std::string &fileName = defsParser->fileName;
+	const std::string &errorLog = defsParser->GetErrorLog();
 
-	if (!defsParser->IsValid()) {
+	if (!defsParser->IsValid())
+	{
 		LOG_L(L_WARNING, "[%s] could not load %s: %s", __func__, fileName.c_str(), errorLog.c_str());
 		return false;
 	}
 
 	{
-		const LuaTable& soundRoot = defsParser->GetRoot();
-		const LuaTable& soundItemTable = soundRoot.SubTable("SoundItems");
+		const LuaTable &soundRoot = defsParser->GetRoot();
+		const LuaTable &soundItemTable = soundRoot.SubTable("SoundItems");
 
-		if (!soundItemTable.IsValid()) {
+		if (!soundItemTable.IsValid())
+		{
 			LOG_L(L_WARNING, "[%s] could not parse SoundItems table in %s", __func__, fileName.c_str());
 			return false;
 		}
@@ -917,13 +1044,15 @@ bool CSound::LoadSoundDefsImpl(LuaParser* defsParser)
 			std::vector<std::string> keys;
 			soundItemTable.GetKeys(keys);
 
-			for (const std::string& name: keys) {
+			for (const std::string &name : keys)
+			{
 				SoundItemNameMap bufmap;
 				const LuaTable buf(soundItemTable.SubTable(name));
 				buf.GetMap(bufmap);
 				bufmap["name"] = name;
 
-				if (name == "default") {
+				if (name == "default")
+				{
 					defaultItemNameMap = std::move(bufmap);
 					defaultItemNameMap.erase("name"); // must be empty for default item
 					defaultItemNameMap.erase("file");
@@ -933,7 +1062,8 @@ bool CSound::LoadSoundDefsImpl(LuaParser* defsParser)
 				if (soundItemDefsMap.find(name) != soundItemDefsMap.end())
 					LOG_L(L_WARNING, "[%s] sound %s overwrites %s", __func__, fileName.c_str(), name.c_str());
 
-				if (!buf.KeyExists("file")) {
+				if (!buf.KeyExists("file"))
+				{
 					// no file, drop
 					LOG_L(L_WARNING, "[%s] sound %s is missing file tag (ignoring)", __func__, name.c_str());
 					continue;
@@ -951,8 +1081,9 @@ bool CSound::LoadSoundDefsImpl(LuaParser* defsParser)
 		}
 	}
 
-	for (auto& pair: soundItemDefsMap) {
-		SoundItemNameMap& snddef = pair.second;
+	for (auto &pair : soundItemDefsMap)
+	{
+		SoundItemNameMap &snddef = pair.second;
 
 		if (snddef.find("name") != snddef.end())
 			continue;
@@ -960,7 +1091,7 @@ bool CSound::LoadSoundDefsImpl(LuaParser* defsParser)
 		// uses defaultItemNameMap! update it!
 		const std::string file = snddef["file"];
 
-		//FIXME why do sounds w/o an own soundItemDef create (!=pointer) a new one from the defaultItemNameMap?
+		// FIXME why do sounds w/o an own soundItemDef create (!=pointer) a new one from the defaultItemNameMap?
 		snddef = defaultItemNameMap;
 		snddef["file"] = file;
 	}
@@ -969,7 +1100,7 @@ bool CSound::LoadSoundDefsImpl(LuaParser* defsParser)
 }
 
 // only used internally, locked in caller's scope
-size_t CSound::LoadSoundBuffer(const std::string& path)
+size_t CSound::LoadSoundBuffer(const std::string &path)
 {
 	const size_t id = SoundBuffer::GetId(path);
 
@@ -991,34 +1122,51 @@ size_t CSound::LoadSoundBuffer(const std::string& path)
 	// steal back
 	loadBuffer = std::move(file.GetBuffer());
 
-	if (!file.FileExists()) {
+	if (!file.FileExists())
+	{
 		LOG_L(L_ERROR, "[%s] unable to open audio file \"%s\"", __func__, path.c_str());
 		failureSet.insert(path);
 		return 0;
 	}
 
-	if (loadBuffer.empty()) {
+	if (loadBuffer.empty())
+	{
 		// copy file into buffer manually if not in VFS
 		loadBuffer.resize(file.FileSize());
 		file.Read(loadBuffer.data(), loadBuffer.size());
 	}
 
-
 	SoundBuffer soundBuf;
-	const std::string& soundExt = file.GetFileExt();
+	const std::string &soundExt = file.GetFileExt();
 
-	switch (soundExt[0]) {
-		case 'w': { soundBuf.LoadWAV   (path, loadBuffer); } break; // wav
-		case 'o': { soundBuf.LoadVorbis(path, loadBuffer); } break; // ogg
-		case 'm': { soundBuf.LoadMp3   (path, loadBuffer); } break; // mp3
-		default : {
-			LOG_L(L_WARNING, "[%s] unknown audio format \"%s\"", __func__, soundExt.c_str());
-		} break;
+	switch (soundExt[0])
+	{
+	case 'w':
+	{
+		soundBuf.LoadWAV(path, loadBuffer);
+	}
+	break; // wav
+	case 'o':
+	{
+		soundBuf.LoadVorbis(path, loadBuffer);
+	}
+	break; // ogg
+	case 'm':
+	{
+		soundBuf.LoadMp3(path, loadBuffer);
+	}
+	break; // mp3
+	default:
+	{
+		LOG_L(L_WARNING, "[%s] unknown audio format \"%s\"", __func__, soundExt.c_str());
+	}
+	break;
 	}
 
 	CheckError("[Sound::LoadSoundBuffer]");
 
-	if (soundBuf.GetLength() <= 0.0f) {
+	if (soundBuf.GetLength() <= 0.0f)
+	{
 		LOG_L(L_WARNING, "[%s] failed to load file \"%s\"", __func__, path.c_str());
 		failureSet.insert(path);
 		return 0;
@@ -1035,10 +1183,8 @@ void CSound::NewFrame()
 	Channels::UserInterface->UpdateFrame();
 }
 
-
-
 // try to get the maximum number of supported sounds; feeds into GenSources
-int CSound::GetMaxMonoSources(ALCdevice* device, int cfgMaxSounds)
+int CSound::GetMaxMonoSources(ALCdevice *device, int cfgMaxSounds)
 {
 	ALCint size;
 	ALCint attrs[1024 + 1];
@@ -1058,7 +1204,8 @@ int CSound::GetMaxMonoSources(ALCdevice* device, int cfgMaxSounds)
 
 	alcGetIntegerv(device, ALC_ALL_ATTRIBUTES, size = std::min(size_t(size), maxSize), &attrs[0]);
 
-	for (size_t i = 0, s = (size - 1) >> 1; i < s; ++i) {
+	for (size_t i = 0, s = (size - 1) >> 1; i < s; ++i)
+	{
 		const ALCint key = attrs[i * 2 + 0];
 		const ALCint val = attrs[i * 2 + 1];
 
@@ -1077,7 +1224,8 @@ void CSound::GenSources(int alMaxSounds)
 	soundSources.clear();
 	soundSources.reserve(alMaxSounds);
 
-	for (int i = 0; i < alMaxSounds; i++) {
+	for (int i = 0; i < alMaxSounds; i++)
+	{
 		soundSources.emplace_back();
 
 		if (soundSources.back().IsValid())
@@ -1097,13 +1245,16 @@ std::vector<std::string> CSound::GetSoundDevices()
 	const bool hasAllEnumExt = alcIsExtensionPresent(nullptr, "ALC_ENUMERATE_ALL_EXT");
 	const bool hasDefEnumExt = alcIsExtensionPresent(nullptr, "ALC_ENUMERATION_EXT");
 
-	if (hasAllEnumExt || hasDefEnumExt) {
-		const char* deviceSpecStr = alcGetString(nullptr, hasAllEnumExt? ALC_ALL_DEVICES_SPECIFIER: ALC_DEVICE_SPECIFIER);
+	if (hasAllEnumExt || hasDefEnumExt)
+	{
+		const char *deviceSpecStr = alcGetString(nullptr, hasAllEnumExt ? ALC_ALL_DEVICES_SPECIFIER : ALC_DEVICE_SPECIFIER);
 
-		while (*deviceSpecStr != '\0') {
+		while (*deviceSpecStr != '\0')
+		{
 			devices.emplace_back(deviceSpecStr);
 
-			while (*deviceSpecStr++ != '\0');
+			while (*deviceSpecStr++ != '\0')
+				;
 		}
 	}
 	return devices;

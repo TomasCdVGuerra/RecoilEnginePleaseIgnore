@@ -175,3 +175,8 @@ build-*
 /.idea
 
 /.i-understand-git-submodules.txt
+
+
+# Local install and test folders
+run_game/
+build/

@@ -6,12 +6,49 @@
 #include <string>
 
 #include <al.h>
+
+#ifndef RECOIL_OPENAL_HAS_EFX
+#if defined(__has_include)
+#if __has_include(<OpenAL/efx.h>)
+#define RECOIL_OPENAL_HAS_EFX 1
+#elif __has_include(<AL/efx.h>)
+#define RECOIL_OPENAL_HAS_EFX 1
+#elif __has_include(<efx.h>)
+#define RECOIL_OPENAL_HAS_EFX 1
+#else
+#define RECOIL_OPENAL_HAS_EFX 0
+#endif
+#else
+#define RECOIL_OPENAL_HAS_EFX 1
+#endif
+#endif
+
+#if RECOIL_OPENAL_HAS_EFX
+#if defined(__has_include)
+#if __has_include(<OpenAL/efx.h>)
+#include <OpenAL/efx.h>
+#elif __has_include(<AL/efx.h>)
+#include <AL/efx.h>
+#else
 #include <efx.h>
+#endif
+#else
+#include <efx.h>
+#endif
+#endif
+
+#ifndef AL_LOWPASS_GAIN
+#define AL_LOWPASS_GAIN 0x0001
+#endif
+#ifndef AL_LOWPASS_GAINHF
+#define AL_LOWPASS_GAINHF 0x0002
+#endif
 
 #include "System/float3.h"
 #include "System/UnorderedMap.hpp"
 
-struct EAXSfxProps {
+struct EAXSfxProps
+{
 	EAXSfxProps() {}
 	EAXSfxProps(
 		ALfloat _density,
@@ -36,8 +73,9 @@ struct EAXSfxProps {
 		ALfloat _hfReference,
 		ALfloat _lfReference,
 		ALfloat _roomRollOffFactor,
-		ALboolean _decayHFLimit
-	) {
+		ALboolean _decayHFLimit)
+	{
+#if RECOIL_OPENAL_HAS_EFX
 		reverb_props_f[AL_EAXREVERB_DENSITY] = _density;
 		reverb_props_f[AL_EAXREVERB_DIFFUSION] = _diffusion;
 		reverb_props_f[AL_EAXREVERB_GAIN] = _gain;
@@ -61,19 +99,22 @@ struct EAXSfxProps {
 		reverb_props_f[AL_EAXREVERB_HFREFERENCE] = _hfReference;
 		reverb_props_f[AL_EAXREVERB_LFREFERENCE] = _lfReference;
 		reverb_props_f[AL_EAXREVERB_ROOM_ROLLOFF_FACTOR] = _roomRollOffFactor;
+#endif
 
 		filter_props_f[AL_LOWPASS_GAIN] = 1.0f;
 		filter_props_f[AL_LOWPASS_GAINHF] = 1.0f;
 	}
 
 	spring::unsynced_map<ALuint, ALfloat> reverb_props_f;
-	spring::unsynced_map<ALuint, ALint>   reverb_props_i;
-	spring::unsynced_map<ALuint, float3>  reverb_props_v;
+	spring::unsynced_map<ALuint, ALint> reverb_props_i;
+	spring::unsynced_map<ALuint, float3> reverb_props_v;
 	spring::unsynced_map<ALuint, ALfloat> filter_props_f;
 };
 
-namespace EFXParamTypes {
-	enum {
+namespace EFXParamTypes
+{
+	enum
+	{
 		FLOAT,
 		VECTOR,
 		BOOL

@@ -31,7 +31,7 @@ LOG_REGISTER_SECTION_GLOBAL(LOG_SECTION_SKY_BOX)
 
 // use the specific section for all LOG*() calls in this source file
 #ifdef LOG_SECTION_CURRENT
-	#undef LOG_SECTION_CURRENT
+#undef LOG_SECTION_CURRENT
 #endif
 #define LOG_SECTION_CURRENT LOG_SECTION_SKY_BOX
 
@@ -43,14 +43,16 @@ void CSkyBox::Init(uint32_t textureID, uint32_t xsize, uint32_t ysize, bool conv
 	if (textureID == 0)
 		return;
 
-	if (convertToCM) {
+	if (convertToCM)
+	{
 		auto generateMipMaps = configHandler->GetBool("CubeTexGenerateMipMaps");
 		// here textureID represents 2D texture
 
 		auto cubeTexID = spring::ScopedResource(
-			[]() { uint32_t tempID = 0; glGenTextures(1, &tempID); return tempID; }(),
-			[](uint32_t texID) { if (texID > 0) glDeleteTextures(1, &texID); }
-		);
+			[]()
+			{ uint32_t tempID = 0; glGenTextures(1, &tempID); return tempID; }(),
+			[](uint32_t texID)
+			{ if (texID > 0) glDeleteTextures(1, &texID); });
 
 		glEnable(GL_TEXTURE_CUBE_MAP);
 
@@ -62,8 +64,8 @@ void CSkyBox::Init(uint32_t textureID, uint32_t xsize, uint32_t ysize, bool conv
 		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
-
-		for (GLenum glFace = GL_TEXTURE_CUBE_MAP_POSITIVE_X; glFace <= GL_TEXTURE_CUBE_MAP_NEGATIVE_Z; ++glFace) {
+		for (GLenum glFace = GL_TEXTURE_CUBE_MAP_POSITIVE_X; glFace <= GL_TEXTURE_CUBE_MAP_NEGATIVE_Z; ++glFace)
+		{
 			glTexImage2D(glFace, 0, GL_RGBA8, ysize, ysize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 		}
 
@@ -77,7 +79,7 @@ void CSkyBox::Init(uint32_t textureID, uint32_t xsize, uint32_t ysize, bool conv
 
 		fbo.Bind();
 
-		auto* ercShader = shaderHandler->CreateProgramObject("[SkyBox]", "EquiRectConverter");
+		auto *ercShader = shaderHandler->CreateProgramObject("[SkyBox]", "EquiRectConverter");
 		ercShader->AttachShaderObject(shaderHandler->CreateShaderObject("GLSL/CubeMapVS.glsl", "", GL_VERTEX_SHADER));
 		ercShader->AttachShaderObject(shaderHandler->CreateShaderObject("GLSL/EquiRectConverterFS.glsl", "", GL_FRAGMENT_SHADER));
 		ercShader->Link();
@@ -86,7 +88,8 @@ void CSkyBox::Init(uint32_t textureID, uint32_t xsize, uint32_t ysize, bool conv
 		ercShader->SetUniform("uvFlip", 1.0f, 1.0f, 1.0f);
 		ercShader->Disable();
 
-		if (!ercShader->Validate()) {
+		if (!ercShader->Validate())
+		{
 			fbo.DetachAll();
 			FBO::Unbind();
 			cubeTexID = nullptr;
@@ -111,18 +114,19 @@ void CSkyBox::Init(uint32_t textureID, uint32_t xsize, uint32_t ysize, bool conv
 			glPushMatrix();
 
 			static constexpr std::array viewMatParams = {
-				std::pair{ float3( 1.0f,  0.0f,  0.0f), float3(0.0f, -1.0f,  0.0f) }, // GL_TEXTURE_CUBE_MAP_POSITIVE_X
-				std::pair{ float3(-1.0f,  0.0f,  0.0f), float3(0.0f, -1.0f,  0.0f) }, // GL_TEXTURE_CUBE_MAP_NEGATIVE_X
-				std::pair{ float3( 0.0f,  1.0f,  0.0f), float3(0.0f,  0.0f,  1.0f) }, // GL_TEXTURE_CUBE_MAP_POSITIVE_Y
-				std::pair{ float3( 0.0f, -1.0f,  0.0f), float3(0.0f,  0.0f, -1.0f) }, // GL_TEXTURE_CUBE_MAP_NEGATIVE_Y
-				std::pair{ float3( 0.0f,  0.0f,  1.0f), float3(0.0f, -1.0f,  0.0f) }, // GL_TEXTURE_CUBE_MAP_POSITIVE_Z
-				std::pair{ float3( 0.0f,  0.0f, -1.0f), float3(0.0f, -1.0f,  0.0f) }  // GL_TEXTURE_CUBE_MAP_NEGATIVE_Z
+				std::pair{float3(1.0f, 0.0f, 0.0f), float3(0.0f, -1.0f, 0.0f)},	 // GL_TEXTURE_CUBE_MAP_POSITIVE_X
+				std::pair{float3(-1.0f, 0.0f, 0.0f), float3(0.0f, -1.0f, 0.0f)}, // GL_TEXTURE_CUBE_MAP_NEGATIVE_X
+				std::pair{float3(0.0f, 1.0f, 0.0f), float3(0.0f, 0.0f, 1.0f)},	 // GL_TEXTURE_CUBE_MAP_POSITIVE_Y
+				std::pair{float3(0.0f, -1.0f, 0.0f), float3(0.0f, 0.0f, -1.0f)}, // GL_TEXTURE_CUBE_MAP_NEGATIVE_Y
+				std::pair{float3(0.0f, 0.0f, 1.0f), float3(0.0f, -1.0f, 0.0f)},	 // GL_TEXTURE_CUBE_MAP_POSITIVE_Z
+				std::pair{float3(0.0f, 0.0f, -1.0f), float3(0.0f, -1.0f, 0.0f)}	 // GL_TEXTURE_CUBE_MAP_NEGATIVE_Z
 			};
 
 			VAO vao;
 			vao.Bind();
 			ercShader->Enable();
-			for (int side = 0; side < 6; ++side) {
+			for (int side = 0; side < 6; ++side)
+			{
 				fbo.AttachTexture(cubeTexID, GL_TEXTURE_CUBE_MAP_POSITIVE_X + side, GL_COLOR_ATTACHMENT0);
 				valid &= fbo.CheckStatus("SKYBOX-EQUIRECT-CONVERT");
 				if (!valid)
@@ -131,8 +135,7 @@ void CSkyBox::Init(uint32_t textureID, uint32_t xsize, uint32_t ysize, bool conv
 				CMatrix44f viewMat = CMatrix44f::LookAtView(
 					float3(),
 					viewMatParams[side].first,
-					viewMatParams[side].second
-				);
+					viewMatParams[side].second);
 				glLoadMatrixf(viewMat);
 
 				glDrawBuffer(GL_COLOR_ATTACHMENT0);
@@ -141,7 +144,6 @@ void CSkyBox::Init(uint32_t textureID, uint32_t xsize, uint32_t ysize, bool conv
 			}
 			ercShader->Disable();
 			vao.Unbind();
-
 
 			glMatrixMode(GL_PROJECTION);
 			glPopMatrix();
@@ -152,16 +154,17 @@ void CSkyBox::Init(uint32_t textureID, uint32_t xsize, uint32_t ysize, bool conv
 
 			FBO::Unbind();
 
-			if (!valid) {
-				fbo = {};
+			if (!valid)
+			{
 				cubeTexID = nullptr;
 				return;
 			}
 
-			if (generateMipMaps) {
+			if (generateMipMaps)
+			{
 				glBindTexture(GL_TEXTURE_CUBE_MAP, cubeTexID);
 				glGenerateMipmapEXT(GL_TEXTURE_CUBE_MAP);
-				glBindTexture(GL_TEXTURE_CUBE_MAP,         0);
+				glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 			}
 		}
 
@@ -172,7 +175,8 @@ void CSkyBox::Init(uint32_t textureID, uint32_t xsize, uint32_t ysize, bool conv
 		skyTex.SetRawTexID(cubeTexID.Release());
 		skyTex.SetRawSize(int2(ysize, ysize));
 	}
-	else {
+	else
+	{
 		valid = true;
 
 		skyTex.SetRawTexID(textureID);
@@ -202,20 +206,20 @@ void CSkyBox::Init(uint32_t textureID, uint32_t xsize, uint32_t ysize, bool conv
 	globalRendering->drawFog = (fogStart <= 0.99f);
 }
 
-CSkyBox::CSkyBox(const std::string& texture)
+CSkyBox::CSkyBox(const std::string &texture)
 {
 	CBitmap btex;
 #ifndef HEADLESS
-	if (!btex.Load(texture) || !(btex.textype == GL_TEXTURE_CUBE_MAP || btex.textype == GL_TEXTURE_2D)) {
+	if (!btex.Load(texture) || !(btex.textype == GL_TEXTURE_CUBE_MAP || btex.textype == GL_TEXTURE_2D))
+	{
 		LOG_L(L_WARNING, "could not load skybox texture from file %s", texture.c_str());
 		valid = false;
 	}
 	Init(btex.CreateTexture(), btex.xsize, btex.ysize, btex.textype == GL_TEXTURE_2D);
 #else
-	Init(btex.CreateTexture(), btex.xsize, btex.ysize,                         false);
+	Init(btex.CreateTexture(), btex.xsize, btex.ysize, false);
 #endif
 }
-
 
 CSkyBox::~CSkyBox()
 {
@@ -242,8 +246,10 @@ void CSkyBox::Draw()
 
 	glMatrixMode(GL_MODELVIEW);
 	glPushMatrix();
-	CMatrix44f model; model.Rotate(skyAxisAngle.w, float3{ skyAxisAngle.x, skyAxisAngle.y, skyAxisAngle.z });
-	CMatrix44f view = camera->GetViewMatrix(); view.SetPos(float3());
+	CMatrix44f model;
+	model.Rotate(skyAxisAngle.w, float3{skyAxisAngle.x, skyAxisAngle.y, skyAxisAngle.z});
+	CMatrix44f view = camera->GetViewMatrix();
+	view.SetPos(float3());
 	glLoadMatrixf(view * model);
 
 	glMatrixMode(GL_PROJECTION);
@@ -258,11 +264,10 @@ void CSkyBox::Draw()
 	shader->Enable();
 
 	shader->SetUniform("planeColor",
-		waterRendering->planeColor.x,
-		waterRendering->planeColor.y,
-		waterRendering->planeColor.z,
-		static_cast<float>(waterRendering->hasWaterPlane && !globalRendering->drawDebugCubeMap)
-	);
+					   waterRendering->planeColor.x,
+					   waterRendering->planeColor.y,
+					   waterRendering->planeColor.z,
+					   static_cast<float>(waterRendering->hasWaterPlane && !globalRendering->drawDebugCubeMap));
 
 	glDrawArrays(GL_TRIANGLES, 0, 36);
 

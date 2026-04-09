@@ -2,6 +2,7 @@
 
 #include "AssParser.h"
 
+#include <cmath>
 #include <regex>
 #include <algorithm>
 #include <numeric>
@@ -35,40 +36,19 @@
 
 #include "System/Misc/TracyDefs.h"
 
-
 #define IS_QNAN(f) (f != f)
 
 // triangulate guarantees the most complex mesh is a triangle
 // sortbytype ensure only 1 type of primitive type per mesh is used
 static constexpr unsigned int ASS_POSTPROCESS_OPTIONS =
-	  aiProcess_RemoveComponent
-	| aiProcess_FindInvalidData
-	| aiProcess_CalcTangentSpace
-	| aiProcess_GenSmoothNormals
-	| aiProcess_Triangulate
-	| aiProcess_GenUVCoords
-	| aiProcess_SortByPType
-	| aiProcess_JoinIdenticalVertices
+	aiProcess_RemoveComponent | aiProcess_FindInvalidData | aiProcess_CalcTangentSpace | aiProcess_GenSmoothNormals | aiProcess_Triangulate | aiProcess_GenUVCoords | aiProcess_SortByPType | aiProcess_JoinIdenticalVertices
 	//| aiProcess_ImproveCacheLocality // FIXME crashes in an assert in VertexTriangleAdjancency.h (date 04/2011)
-	| aiProcess_LimitBoneWeights
-	| aiProcess_SplitLargeMeshes
-	;
+	| aiProcess_LimitBoneWeights | aiProcess_SplitLargeMeshes;
 
 static constexpr unsigned int ASS_IMPORTER_OPTIONS =
-	  aiComponent_CAMERAS
-	| aiComponent_LIGHTS
-	| aiComponent_TEXTURES
-	| aiComponent_ANIMATIONS
-	| aiComponent_MATERIALS
-	;
+	aiComponent_CAMERAS | aiComponent_LIGHTS | aiComponent_TEXTURES | aiComponent_ANIMATIONS | aiComponent_MATERIALS;
 static constexpr unsigned int ASS_LOGGING_OPTIONS =
-	  Assimp::Logger::Debugging
-	| Assimp::Logger::Info
-	| Assimp::Logger::Err
-	| Assimp::Logger::Warn
-	;
-
-
+	Assimp::Logger::Debugging | Assimp::Logger::Info | Assimp::Logger::Err | Assimp::Logger::Warn;
 
 static inline float3 aiVectorToFloat3(const aiVector3D v)
 {
@@ -80,15 +60,27 @@ static inline float3 aiVectorToFloat3(const aiVector3D v)
 	// return float3(v.x, v.z, -v.y);
 }
 
-static inline CMatrix44f aiMatrixToMatrix(const aiMatrix4x4t<float>& m)
+static inline CMatrix44f aiMatrixToMatrix(const aiMatrix4x4t<float> &m)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	CMatrix44f n;
 
-	n[ 0] = m.a1; n[ 1] = m.a2; n[ 2] = m.a3; n[ 3] = m.a4; // 1st column
-	n[ 4] = m.b1; n[ 5] = m.b2; n[ 6] = m.b3; n[ 7] = m.b4; // 2nd column
-	n[ 8] = m.c1; n[ 9] = m.c2; n[10] = m.c3; n[11] = m.c4; // 3rd column
-	n[12] = m.d1; n[13] = m.d2; n[14] = m.d3; n[15] = m.d4; // 4th column
+	n[0] = m.a1;
+	n[1] = m.a2;
+	n[2] = m.a3;
+	n[3] = m.a4; // 1st column
+	n[4] = m.b1;
+	n[5] = m.b2;
+	n[6] = m.b3;
+	n[7] = m.b4; // 2nd column
+	n[8] = m.c1;
+	n[9] = m.c2;
+	n[10] = m.c3;
+	n[11] = m.c4; // 3rd column
+	n[12] = m.d1;
+	n[13] = m.d2;
+	n[14] = m.d3;
+	n[15] = m.d4; // 4th column
 
 	// AssImp (row-major, RH) --> Spring (column-major, LH)
 	return (n.Transpose());
@@ -128,32 +120,30 @@ static float3 aiQuaternionToRadianAngles(const aiQuaternion q1)
 }
 */
 
-
-
-
 class AssLogStream : public Assimp::LogStream
 {
 public:
-	void write(const char* message) override {
+	void write(const char *message) override
+	{
 		LOG_SL(LOG_SECTION_MODEL, L_DEBUG, "Assimp: %s", message);
 	}
 };
 
-
-
-struct SPseudoAssPiece {
+struct SPseudoAssPiece
+{
 	std::string name;
 
-	S3DModelPiece* parent;
+	S3DModelPiece *parent;
 
-	Transform bposeTransform;    /// bind-pose transform, including baked rots
-	std::optional<Transform> bakedTransform;    /// baked local-space rotations
+	Transform bposeTransform;				 /// bind-pose transform, including baked rots
+	std::optional<Transform> bakedTransform; /// baked local-space rotations
 
-	float3 offset;     /// local (piece-space) offset wrt. parent piece
+	float3 offset;	   /// local (piece-space) offset wrt. parent piece
 	float scale{1.0f}; /// baked uniform scaling factor (assimp-only)
 
 	// copy of S3DModelPiece::SetBakedTransform()
-	void SetBakedTransform(const Transform& tra) {
+	void SetBakedTransform(const Transform &tra)
+	{
 		if (tra.IsIdentity())
 			bakedTransform = std::nullopt;
 		else
@@ -161,23 +151,24 @@ struct SPseudoAssPiece {
 	}
 
 	// copy of S3DModelPiece::ComposeTransform(), unused?
-	Transform ComposeTransform(const float3& t, const float3& r, float s) const;
+	Transform ComposeTransform(const float3 &t, const float3 &r, float s) const;
 
 	// copy of S3DModelPiece::SetPieceTransform()
 	// except there's no need to do it recursively
-	void SetPieceTransform(const Transform& tra);
+	void SetPieceTransform(const Transform &tra);
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
-namespace Impl {
-	template<typename PieceObject>
+namespace Impl
+{
+	template <typename PieceObject>
 	void LoadPieceTransformations(
-		PieceObject* piece,
-		const S3DModel* model,
-		const aiNode* pieceNode,
-		const LuaTable& pieceTable,
-		const CQuaternion* optRotation
-	) {
+		PieceObject *piece,
+		const S3DModel *model,
+		const aiNode *pieceNode,
+		const LuaTable &pieceTable,
+		const CQuaternion *optRotation)
+	{
 		RECOIL_DETAILED_TRACY_ZONE;
 		aiVector3D aiScaleVec;
 		aiVector3D aiTransVec;
@@ -187,7 +178,7 @@ namespace Impl {
 		pieceNode->mTransformation.Decompose(aiScaleVec, aiRotateQuat, aiTransVec);
 
 		// metadata-scaling
-		float3 scales{ 1.0f, 1.0f, 1.0f };
+		float3 scales{1.0f, 1.0f, 1.0f};
 		scales = pieceTable.GetFloat3("scale", aiVectorToFloat3(aiScaleVec));
 		scales.x = pieceTable.GetFloat("scalex", scales.x);
 		scales.y = pieceTable.GetFloat("scaley", scales.y);
@@ -222,19 +213,17 @@ namespace Impl {
 		bakedRotAngles *= math::DEG_TO_RAD;
 
 		LOG_SL(LOG_SECTION_PIECE, L_INFO,
-			"(%d:%s) Assimp offset (%f,%f,%f), rotate (%f,%f,%f,%f), scale (%f,%f,%f)",
-			model->numPieces, piece->name.c_str(),
-			aiTransVec.x, aiTransVec.y, aiTransVec.z,
-			aiRotateQuat.w, aiRotateQuat.x, aiRotateQuat.y, aiRotateQuat.z,
-			aiScaleVec.x, aiScaleVec.y, aiScaleVec.z
-		);
+			   "(%d:%s) Assimp offset (%f,%f,%f), rotate (%f,%f,%f,%f), scale (%f,%f,%f)",
+			   model->numPieces, piece->name.c_str(),
+			   aiTransVec.x, aiTransVec.y, aiTransVec.z,
+			   aiRotateQuat.w, aiRotateQuat.x, aiRotateQuat.y, aiRotateQuat.z,
+			   aiScaleVec.x, aiScaleVec.y, aiScaleVec.z);
 		LOG_SL(LOG_SECTION_PIECE, L_INFO,
-			"(%d:%s) Relative offset (%f,%f,%f), rotate (%f,%f,%f), scale (%f)",
-			model->numPieces, piece->name.c_str(),
-			piece->offset.x, piece->offset.y, piece->offset.z,
-			bakedRotAngles.x, bakedRotAngles.y, bakedRotAngles.z,
-			piece->scale
-		);
+			   "(%d:%s) Relative offset (%f,%f,%f), rotate (%f,%f,%f), scale (%f)",
+			   model->numPieces, piece->name.c_str(),
+			   piece->offset.x, piece->offset.y, piece->offset.z,
+			   bakedRotAngles.x, bakedRotAngles.y, bakedRotAngles.z,
+			   piece->scale);
 
 		// construct 'baked' piece-space transform
 		//
@@ -251,12 +240,14 @@ namespace Impl {
 		piece->SetBakedTransform(bakedTransform);
 	}
 
-	std::vector<std::string> GetBoneNames(const aiScene* scene)
+	std::vector<std::string> GetBoneNames(const aiScene *scene)
 	{
 		RECOIL_DETAILED_TRACY_ZONE;
 		std::vector<std::string> boneNames;
-		for (size_t m = 0; m < scene->mNumMeshes; ++m) {
-			for (size_t b = 0; b < scene->mMeshes[m]->mNumBones; ++b) {
+		for (size_t m = 0; m < scene->mNumMeshes; ++m)
+		{
+			for (size_t b = 0; b < scene->mMeshes[m]->mNumBones; ++b)
+			{
 				std::string boneName(scene->mMeshes[m]->mBones[b]->mName.data);
 				auto it = std::find(boneNames.begin(), boneNames.end(), boneName);
 				if (it == boneNames.end())
@@ -267,25 +258,27 @@ namespace Impl {
 		return boneNames;
 	}
 
-	std::vector<std::string> GetMeshNames(const aiScene* scene)
+	std::vector<std::string> GetMeshNames(const aiScene *scene)
 	{
 		RECOIL_DETAILED_TRACY_ZONE;
 		std::vector<std::string> meshNames;
-		for (uint32_t m = 0; m < scene->mNumMeshes; ++m) {
+		for (uint32_t m = 0; m < scene->mNumMeshes; ++m)
+		{
 			meshNames.emplace_back(scene->mMeshes[m]->mName.data);
 		}
 
 		return meshNames;
 	}
 
-	aiNode* FindNode(const aiScene* scene, aiNode* node, const std::string& name)
+	aiNode *FindNode(const aiScene *scene, aiNode *node, const std::string &name)
 	{
 		RECOIL_DETAILED_TRACY_ZONE;
 		if (std::string(node->mName.C_Str()) == name)
 			return node;
 
-		for (uint32_t ci = 0; ci < node->mNumChildren; ++ci) {
-			auto* childTargetNode = FindNode(scene, node->mChildren[ci], name);
+		for (uint32_t ci = 0; ci < node->mNumChildren; ++ci)
+		{
+			auto *childTargetNode = FindNode(scene, node->mChildren[ci], name);
 			if (childTargetNode)
 				return childTargetNode;
 		}
@@ -293,11 +286,13 @@ namespace Impl {
 		return nullptr;
 	}
 
-	aiNode* FindFallbackNode(const aiScene* scene)
+	aiNode *FindFallbackNode(const aiScene *scene)
 	{
 		RECOIL_DETAILED_TRACY_ZONE;
-		for (uint32_t ci = 0; ci < scene->mRootNode->mNumChildren; ++ci) {
-			if (scene->mRootNode->mChildren[ci]->mNumChildren == 0) {
+		for (uint32_t ci = 0; ci < scene->mRootNode->mNumChildren; ++ci)
+		{
+			if (scene->mRootNode->mChildren[ci]->mNumChildren == 0)
+			{
 				return scene->mRootNode->mChildren[ci];
 			}
 		}
@@ -305,12 +300,13 @@ namespace Impl {
 		return nullptr;
 	}
 
-	std::vector<Transform> GetMeshBoneTransforms(const aiScene* scene, const S3DModel* model, std::vector<SPseudoAssPiece>& meshPPs)
+	std::vector<Transform> GetMeshBoneTransforms(const aiScene *scene, const S3DModel *model, std::vector<SPseudoAssPiece> &meshPPs)
 	{
 		RECOIL_DETAILED_TRACY_ZONE;
 		std::vector<Transform> meshBoneTransform;
 
-		for (auto& meshPP : meshPPs) {
+		for (auto &meshPP : meshPPs)
+		{
 			meshPP.SetPieceTransform(meshPP.parent->bposeTransform);
 			meshBoneTransform.emplace_back(meshPP.bposeTransform);
 		}
@@ -318,27 +314,28 @@ namespace Impl {
 		return meshBoneTransform;
 	}
 
-	std::vector<Skinning::SkinnedMesh> GetModelSpaceMeshes(const aiScene* scene, const S3DModel* model, const std::vector<Transform>& meshBoneTransforms)
+	std::vector<Skinning::SkinnedMesh> GetModelSpaceMeshes(const aiScene *scene, const S3DModel *model, const std::vector<Transform> &meshBoneTransforms)
 	{
 		RECOIL_DETAILED_TRACY_ZONE;
 		std::vector<uint32_t> meshVertexMapping;
 		std::vector<Skinning::SkinnedMesh> meshes;
 
-		for (uint32_t meshIndex = 0; meshIndex < scene->mNumMeshes; ++meshIndex) {
-			auto& [verts, indcs] = meshes.emplace_back();
+		for (uint32_t meshIndex = 0; meshIndex < scene->mNumMeshes; ++meshIndex)
+		{
+			auto &[verts, indcs] = meshes.emplace_back();
 
-			const aiMesh* mesh = scene->mMeshes[meshIndex];
-			const auto& boneTra = meshBoneTransforms[meshIndex];
+			const aiMesh *mesh = scene->mMeshes[meshIndex];
+			const auto &boneTra = meshBoneTransforms[meshIndex];
 
 			LOG_SL(LOG_SECTION_PIECE, L_DEBUG, "Fetching mesh %d from scene", meshIndex);
 			LOG_SL(LOG_SECTION_PIECE, L_DEBUG,
-				"Processing vertices for mesh %d (%d vertices)",
-				meshIndex, mesh->mNumVertices);
+				   "Processing vertices for mesh %d (%d vertices)",
+				   meshIndex, mesh->mNumVertices);
 			LOG_SL(LOG_SECTION_PIECE, L_DEBUG,
-				"Normals: %s Tangents/Bitangents: %s TexCoords: %s",
-				(mesh->HasNormals() ? "Y" : "N"),
-				(mesh->HasTangentsAndBitangents() ? "Y" : "N"),
-				(mesh->HasTextureCoords(0) ? "Y" : "N"));
+				   "Normals: %s Tangents/Bitangents: %s TexCoords: %s",
+				   (mesh->HasNormals() ? "Y" : "N"),
+				   (mesh->HasTangentsAndBitangents() ? "Y" : "N"),
+				   (mesh->HasTextureCoords(0) ? "Y" : "N"));
 
 			verts.reserve(mesh->mNumVertices);
 			indcs.reserve(mesh->mNumFaces * 3);
@@ -346,14 +343,16 @@ namespace Impl {
 			meshVertexMapping.clear();
 			meshVertexMapping.reserve(mesh->mNumVertices);
 
-			//bones info
+			// bones info
 			std::vector<std::vector<std::pair<uint16_t, float>>> vertexWeights(mesh->mNumVertices);
 
-			for (uint32_t boneIndex = 0; boneIndex < mesh->mNumBones; boneIndex++) {
-				const aiBone* bone = mesh->mBones[boneIndex];
-				for (uint32_t weightIndex = 0; weightIndex < bone->mNumWeights; weightIndex++) {
-					const auto& vertIndex = bone->mWeights[weightIndex].mVertexId;
-					const auto& vertWeight = bone->mWeights[weightIndex].mWeight;
+			for (uint32_t boneIndex = 0; boneIndex < mesh->mNumBones; boneIndex++)
+			{
+				const aiBone *bone = mesh->mBones[boneIndex];
+				for (uint32_t weightIndex = 0; weightIndex < bone->mNumWeights; weightIndex++)
+				{
+					const auto &vertIndex = bone->mWeights[weightIndex].mVertexId;
+					const auto &vertWeight = bone->mWeights[weightIndex].mWeight;
 					const std::string boneName = std::string(bone->mName.data);
 
 					auto boneID = spring::SafeCast<uint16_t>(model->FindPieceOffset(boneName));
@@ -363,16 +362,17 @@ namespace Impl {
 				}
 			}
 
-			for (auto& vertexWeight : vertexWeights) {
-				std::stable_sort(vertexWeight.begin(), vertexWeight.end(), [](const auto& lhs, const auto& rhs) {
-					return std::forward_as_tuple(lhs.second, lhs.first) > std::forward_as_tuple(rhs.second, rhs.first);
-				});
+			for (auto &vertexWeight : vertexWeights)
+			{
+				std::stable_sort(vertexWeight.begin(), vertexWeight.end(), [](const auto &lhs, const auto &rhs)
+								 { return std::forward_as_tuple(lhs.second, lhs.first) > std::forward_as_tuple(rhs.second, rhs.first); });
 				vertexWeight.resize(4, std::make_pair(SVertexData::INVALID_BONEID, 0.0f));
 			}
 
 			// extract vertex data per mesh
-			for (uint32_t vertexIndex = 0; vertexIndex < mesh->mNumVertices; ++vertexIndex) {
-				const aiVector3D& aiVertex = mesh->mVertices[vertexIndex];
+			for (uint32_t vertexIndex = 0; vertexIndex < mesh->mNumVertices; ++vertexIndex)
+			{
+				const aiVector3D &aiVertex = mesh->mVertices[vertexIndex];
 
 				SVertexData vertex;
 
@@ -382,40 +382,49 @@ namespace Impl {
 				// vertex coordinates
 				vertex.pos = aiVectorToFloat3(aiVertex);
 
-				if (mesh->HasNormals()) {
+				if (mesh->HasNormals())
+				{
 					// vertex normal
-					const aiVector3D& aiNormal = mesh->mNormals[vertexIndex];
+					const aiVector3D &aiNormal = mesh->mNormals[vertexIndex];
 
-					if (IS_QNAN(aiNormal)) {
+					if (IS_QNAN(aiNormal))
+					{
 						LOG_SL(LOG_SECTION_PIECE, L_DEBUG, "Malformed normal (model->name=\"%s\" meshName=\"%s\" vertexIndex=%d x=%f y=%f z=%f)", model->name.c_str(), mesh->mName.C_Str(), vertexIndex, aiNormal.x, aiNormal.y, aiNormal.z);
-						vertex.normal = float3{ 0.0f, 1.0f, 0.0f };
+						vertex.normal = float3{0.0f, 1.0f, 0.0f};
 					}
-					else {
+					else
+					{
 						vertex.normal = (aiVectorToFloat3(aiNormal)).SafeANormalize();
 					}
 				}
-				else {
-					vertex.normal = float3{ 0.0f, 1.0f, 0.0f };
+				else
+				{
+					vertex.normal = float3{0.0f, 1.0f, 0.0f};
 				}
 
 				// vertex tangent, x is positive in texture axis
-				if (mesh->HasTangentsAndBitangents()) {
-					const aiVector3D& aiTangent = mesh->mTangents[vertexIndex];
-					const aiVector3D& aiBitangent = mesh->mBitangents[vertexIndex];
+				if (mesh->HasTangentsAndBitangents())
+				{
+					const aiVector3D &aiTangent = mesh->mTangents[vertexIndex];
+					const aiVector3D &aiBitangent = mesh->mBitangents[vertexIndex];
 
-					if (IS_QNAN(aiTangent.x) || IS_QNAN(aiTangent.y) || IS_QNAN(aiTangent.z)) {
+					if (IS_QNAN(aiTangent.x) || IS_QNAN(aiTangent.y) || IS_QNAN(aiTangent.z))
+					{
 						LOG_SL(LOG_SECTION_PIECE, L_INFO, "Malformed tangent (model->name=\"%s\" meshName=\"%s\" vertexIndex=%d x=%f y=%f z=%f)", model->name.c_str(), mesh->mName.C_Str(), vertexIndex, aiTangent.x, aiTangent.y, aiTangent.z);
-						vertex.sTangent = float3{ 1.0f, 0.0f, 0.0f };
+						vertex.sTangent = float3{1.0f, 0.0f, 0.0f};
 					}
-					else {
+					else
+					{
 						vertex.sTangent = (aiVectorToFloat3(aiTangent)).SafeANormalize();
 					}
 
-					if (IS_QNAN(aiBitangent.x) || IS_QNAN(aiBitangent.y) || IS_QNAN(aiBitangent.z)) {
+					if (IS_QNAN(aiBitangent.x) || IS_QNAN(aiBitangent.y) || IS_QNAN(aiBitangent.z))
+					{
 						LOG_SL(LOG_SECTION_PIECE, L_INFO, "Malformed bitangent (model->name=\"%s\" meshName=\"%s\" vertexIndex=%d x=%f y=%f z=%f)", model->name.c_str(), mesh->mName.C_Str(), vertexIndex, aiBitangent.x, aiBitangent.y, aiBitangent.z);
 						vertex.tTangent = vertex.normal.cross(vertex.sTangent);
 					}
-					else {
+					else
+					{
 						vertex.tTangent = (aiVectorToFloat3(aiBitangent)).SafeANormalize();
 					}
 
@@ -423,7 +432,8 @@ namespace Impl {
 				}
 
 				// vertex tex-coords per channel
-				for (uint32_t uvChanIndex = 0; uvChanIndex < SVertexData::NUM_MODEL_UVCHANNS; uvChanIndex++) {
+				for (uint32_t uvChanIndex = 0; uvChanIndex < SVertexData::NUM_MODEL_UVCHANNS; uvChanIndex++)
+				{
 					if (!mesh->HasTextureCoords(uvChanIndex))
 						break;
 
@@ -431,10 +441,10 @@ namespace Impl {
 					vertex.texCoords[uvChanIndex].y = mesh->mTextureCoords[uvChanIndex][vertexIndex].y;
 				}
 
-				vertex.pos      = (boneTra * float4{ vertex.pos     , 1.0f }).xyz;
-				vertex.normal   = (boneTra * float4{ vertex.normal  , 0.0f }).xyz;
-				vertex.sTangent = (boneTra * float4{ vertex.sTangent, 0.0f }).xyz;
-				vertex.tTangent = (boneTra * float4{ vertex.tTangent, 0.0f }).xyz;
+				vertex.pos = (boneTra * float4{vertex.pos, 1.0f}).xyz;
+				vertex.normal = (boneTra * float4{vertex.normal, 0.0f}).xyz;
+				vertex.sTangent = (boneTra * float4{vertex.sTangent, 0.0f}).xyz;
+				vertex.tTangent = (boneTra * float4{vertex.tTangent, 0.0f}).xyz;
 
 				meshVertexMapping.push_back(verts.size());
 				verts.push_back(vertex);
@@ -450,15 +460,17 @@ namespace Impl {
 			 * anything more complex than triangles is
 			 * being split thanks to aiProcess_Triangulate
 			 */
-			for (unsigned faceIndex = 0; faceIndex < mesh->mNumFaces; ++faceIndex) {
-				const aiFace& face = mesh->mFaces[faceIndex];
+			for (unsigned faceIndex = 0; faceIndex < mesh->mNumFaces; ++faceIndex)
+			{
+				const aiFace &face = mesh->mFaces[faceIndex];
 
 				// some models contain lines (mNumIndices == 2) which
 				// we cannot render and they would need a 2nd drawcall)
 				if (face.mNumIndices != 3)
 					continue;
 
-				for (unsigned vertexListID = 0; vertexListID < face.mNumIndices; ++vertexListID) {
+				for (unsigned vertexListID = 0; vertexListID < face.mNumIndices; ++vertexListID)
+				{
 					const unsigned int vertexFaceIdx = face.mIndices[vertexListID];
 					const unsigned int vertexDrawIdx = meshVertexMapping[vertexFaceIdx];
 					indcs.push_back(vertexDrawIdx);
@@ -493,14 +505,15 @@ void CAssParser::Kill()
 
 	// reuse piece innards when reloading
 	// piecePool.clear();
-	for (unsigned int i = 0; i < numPoolPieces; i++) {
+	for (unsigned int i = 0; i < numPoolPieces; i++)
+	{
 		piecePool[i].Clear();
 	}
 
 	numPoolPieces = 0;
 }
 
-void CAssParser::Load(S3DModel& model, const std::string& modelFilePath)
+void CAssParser::Load(S3DModel &model, const std::string &modelFilePath)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	LOG_SL(LOG_SECTION_MODEL, L_INFO, "Loading model: %s", modelFilePath.c_str());
@@ -531,35 +544,37 @@ void CAssParser::Load(S3DModel& model, const std::string& modelFilePath)
 	if (!modelTable.IsValid())
 		LOG_SL(LOG_SECTION_MODEL, L_INFO, "No valid model metadata in '%s' or no meta-file", metaFileName.c_str());
 
-
 	Assimp::Importer importer;
 
 	// speed-up processing by skipping things we don't need
 	importer.SetPropertyInteger(AI_CONFIG_PP_RVC_FLAGS, ASS_IMPORTER_OPTIONS);
-	importer.SetPropertyInteger(AI_CONFIG_PP_SLM_VERTEX_LIMIT,   maxVertices);
+	importer.SetPropertyInteger(AI_CONFIG_PP_SLM_VERTEX_LIMIT, maxVertices);
 	importer.SetPropertyInteger(AI_CONFIG_PP_SLM_TRIANGLE_LIMIT, maxIndices / 3);
 
-	if (!file.IsBuffered()) {
+	if (!file.IsBuffered())
+	{
 		const auto fs = file.FileSize();
 		if (fs <= 0)
 			throw content_error("An assimp model has invalid size of " + std::to_string(fs));
 
 		fileBuf.resize(fs, 0);
 		file.Read(fileBuf.data(), fileBuf.size());
-	} else {
+	}
+	else
+	{
 		fileBuf = std::move(file.GetBuffer());
 	}
 
-	if (modelTable.GetBool("nodenamesfromids", false)) {
+	if (modelTable.GetBool("nodenamesfromids", false))
+	{
 		assert(FileSystem::GetExtension(modelFilePath) == "dae");
 		PreProcessFileBuffer(fileBuf);
 	}
 
-
 	// Read the model file to build a scene object
 	LOG_SL(LOG_SECTION_MODEL, L_INFO, "Importing model file: %s", modelFilePath.c_str());
 
-	const aiScene* scene = nullptr;
+	const aiScene *scene = nullptr;
 
 	{
 		// ASSIMP spams many SIGFPEs atm in normal & tangent generation
@@ -571,10 +586,9 @@ void CAssParser::Load(S3DModel& model, const std::string& modelFilePath)
 		throw content_error("[AssimpParser] Model Import: " + std::string(importer.GetErrorString()));
 
 	LOG_SL(LOG_SECTION_MODEL, L_INFO,
-		"Processing scene for model: %s (%d meshes / %d materials / %d textures)",
-		modelFilePath.c_str(), scene->mNumMeshes, scene->mNumMaterials,
-		scene->mNumTextures
-	);
+		   "Processing scene for model: %s (%d meshes / %d materials / %d textures)",
+		   modelFilePath.c_str(), scene->mNumMeshes, scene->mNumMaterials,
+		   scene->mNumTextures);
 
 	ModelPieceMap pieceMap;
 	ParentNameMap parentMap;
@@ -588,7 +602,7 @@ void CAssParser::Load(S3DModel& model, const std::string& modelFilePath)
 
 	textureHandlerS3O.PreloadTexture(
 		&model,
-		modelTable.GetBool("fliptextures", true),   // "true" is the incorrect default, but has to be retained to be compatible
+		modelTable.GetBool("fliptextures", true),	// "true" is the incorrect default, but has to be retained to be compatible
 		modelTable.GetBool("invertteamcolor", true) // "true" is the incorrect default, but has to be retained to be compatible
 	);
 
@@ -599,28 +613,33 @@ void CAssParser::Load(S3DModel& model, const std::string& modelFilePath)
 	// Load all pieces in the model
 	LOG_SL(LOG_SECTION_MODEL, L_INFO, "Loading pieces from root node '%s'", scene->mRootNode->mName.data);
 
-	if (modelTable.GetBool("s3ocompat", false)) {
+	if (modelTable.GetBool("s3ocompat", false))
+	{
 		const auto rootPieceRot = CQuaternion(0, 1, 0, 0); // rotate 180 around Y
 		LoadPiece(&model, scene->mRootNode, scene, modelTable, meshNames, pieceMap, parentMap, &rootPieceRot);
-	} else {
+	}
+	else
+	{
 		LoadPiece(&model, scene->mRootNode, scene, modelTable, meshNames, pieceMap, parentMap);
 	}
-
 
 	// Update piece hierarchy based on metadata
 	BuildPieceHierarchy(&model, pieceMap, parentMap);
 
 	// skinning support
-	if (!meshNames.empty()) {
+	if (!meshNames.empty())
+	{
 		// need matrices earlier than usual
 		model.SetPieceMatrices();
 		std::vector<SPseudoAssPiece> meshPseudoPieces(meshNames.size());
 		auto mppIt = meshPseudoPieces.begin();
-		for (const auto& meshName : meshNames) {
-			aiNode* meshNode = nullptr;
+		for (const auto &meshName : meshNames)
+		{
+			aiNode *meshNode = nullptr;
 			meshNode = Impl::FindNode(scene, scene->mRootNode, meshName);
 			mppIt->name = meshName;
-			if (!meshNode) {
+			if (!meshNode)
+			{
 				LOG_SL(LOG_SECTION_MODEL, L_ERROR, "An assimp model has invalid pieces hierarchy. Missing a mesh named: \"%s\" in model[\"%s\"] path: %s. Looking for a likely candidate", meshName.c_str(), modelName.c_str(), modelPath.c_str());
 
 				/* Try to salvage the model since such "invalid" ones can actually be
@@ -633,7 +652,7 @@ void CAssParser::Load(S3DModel& model, const std::string& modelFilePath)
 			}
 
 			std::string const parentName(meshNode->mParent->mName.C_Str());
-			auto* parentPiece = model.FindPiece(parentName);
+			auto *parentPiece = model.FindPiece(parentName);
 			assert(parentPiece);
 			mppIt->parent = parentPiece;
 
@@ -656,8 +675,7 @@ void CAssParser::Load(S3DModel& model, const std::string& modelFilePath)
 	ModelLog::LogModelProperties(model);
 }
 
-
-void CAssParser::PreProcessFileBuffer(std::vector<unsigned char>& fileBuffer)
+void CAssParser::PreProcessFileBuffer(std::vector<unsigned char> &fileBuffer)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	// the Collada specification requires node uid's to be unique
@@ -673,29 +691,30 @@ void CAssParser::PreProcessFileBuffer(std::vector<unsigned char>& fileBuffer)
 	std::array<unsigned char, 1024> lineBuffer;
 	std::cmatch matchGroups;
 
-	const char* beg = reinterpret_cast<const char*>(fileBuffer.data());
-	const char* end = reinterpret_cast<const char*>(fileBuffer.data() + fileBuffer.size());
+	const char *beg = reinterpret_cast<const char *>(fileBuffer.data());
+	const char *end = reinterpret_cast<const char *>(fileBuffer.data() + fileBuffer.size());
 
 	if (strstr(beg, "COLLADA") == nullptr)
 		return;
 
-	for (size_t i = 0, n = fileBuffer.size(); i < n; ) {
+	for (size_t i = 0, n = fileBuffer.size(); i < n;)
+	{
 		matchGroups = std::cmatch{};
 
 		if (!std::regex_search(beg + i, matchGroups, nodePattern))
 			break;
 
-		const std::string   id = matchGroups[1].str();
+		const std::string id = matchGroups[1].str();
 		const std::string name = matchGroups[2].str();
 		const std::string type = matchGroups[3].str();
 
-		assert(matchGroups[0].first  >= beg && matchGroups[0].first  < end);
+		assert(matchGroups[0].first >= beg && matchGroups[0].first < end);
 		assert(matchGroups[0].second >= beg && matchGroups[0].second < end);
 
 		// just swap id and name fields; preserves line length
 		memset(lineBuffer.data(), 0, lineBuffer.size());
-		snprintf(reinterpret_cast<char*>(lineBuffer.data()), lineBuffer.size(), "<node id=\"%s\" name=\"%s\" type=\"%s\">", name.c_str(), id.c_str(), type.c_str());
-		memcpy(const_cast<char*>(matchGroups[0].first), lineBuffer.data(), matchGroups[0].length());
+		snprintf(reinterpret_cast<char *>(lineBuffer.data()), lineBuffer.size(), "<node id=\"%s\" name=\"%s\" type=\"%s\">", name.c_str(), id.c_str(), type.c_str());
+		memcpy(const_cast<char *>(matchGroups[0].first), lineBuffer.data(), matchGroups[0].length());
 
 		i = matchGroups[0].second - beg;
 	}
@@ -731,42 +750,42 @@ void CAssParser::CalculateModelMeshBounds(S3DModel* model, const aiScene* scene)
 }
 */
 
-
-
 void CAssParser::LoadPieceTransformations(
-	SAssPiece* piece,
-	const S3DModel* model,
-	const aiNode* pieceNode,
-	const LuaTable& pieceTable,
-	const CQuaternion* optRotation
-) {
+	SAssPiece *piece,
+	const S3DModel *model,
+	const aiNode *pieceNode,
+	const LuaTable &pieceTable,
+	const CQuaternion *optRotation)
+{
 	RECOIL_DETAILED_TRACY_ZONE;
 	Impl::LoadPieceTransformations<SAssPiece>(piece, model, pieceNode, pieceTable, optRotation);
 }
 
 void CAssParser::LoadPieceTransformations(
-	SPseudoAssPiece* piece,
-	const S3DModel* model,
-	const aiNode* pieceNode,
-	const LuaTable& pieceTable,
-	const CQuaternion* optRotation
-) {
+	SPseudoAssPiece *piece,
+	const S3DModel *model,
+	const aiNode *pieceNode,
+	const LuaTable &pieceTable,
+	const CQuaternion *optRotation)
+{
 	RECOIL_DETAILED_TRACY_ZONE;
 	Impl::LoadPieceTransformations<SPseudoAssPiece>(piece, model, pieceNode, pieceTable, optRotation);
 }
 
 void CAssParser::SetPieceName(
-	SAssPiece* piece,
-	const S3DModel* model,
-	const aiNode* pieceNode,
-	ModelPieceMap& pieceMap
-) {
+	SAssPiece *piece,
+	const S3DModel *model,
+	const aiNode *pieceNode,
+	ModelPieceMap &pieceMap)
+{
 	RECOIL_DETAILED_TRACY_ZONE;
 	assert(piece->name.empty());
 	piece->name = std::string(pieceNode->mName.data);
 
-	if (piece->name.empty()) {
-		if (piece == model->GetRootPiece()) {
+	if (piece->name.empty())
+	{
+		if (piece == model->GetRootPiece())
+		{
 			// root is always the first piece created, so safe to assign this
 			piece->name = "$$root$$";
 			return;
@@ -778,11 +797,14 @@ void CAssParser::SetPieceName(
 	// find a new name if none given or if a piece with the same name already exists
 	ModelPieceMap::const_iterator it = pieceMap.find(piece->name);
 
-	for (unsigned int i = 0; it != pieceMap.end(); i++) {
+	for (unsigned int i = 0; it != pieceMap.end(); i++)
+	{
 		const std::string newPieceName = piece->name + IntToString(i, "%02i");
 
-		if ((it = pieceMap.find(newPieceName)) == pieceMap.end()) {
-			piece->name = newPieceName; break;
+		if ((it = pieceMap.find(newPieceName)) == pieceMap.end())
+		{
+			piece->name = newPieceName;
+			break;
 		}
 	}
 
@@ -791,19 +813,20 @@ void CAssParser::SetPieceName(
 }
 
 void CAssParser::SetPieceParentName(
-	SAssPiece* piece,
-	const S3DModel* model,
-	const aiNode* pieceNode,
-	const LuaTable& pieceTable,
-	ParentNameMap& parentMap
-) {
+	SAssPiece *piece,
+	const S3DModel *model,
+	const aiNode *pieceNode,
+	const LuaTable &pieceTable,
+	ParentNameMap &parentMap)
+{
 	RECOIL_DETAILED_TRACY_ZONE;
 	// parent was updated in GetPieceTableRecursively
 	if (parentMap.find(piece->name) != parentMap.end())
 		return;
 
 	// Get parent name from metadata or model
-	if (pieceTable.KeyExists("parent")) {
+	if (pieceTable.KeyExists("parent"))
+	{
 		parentMap[piece->name] = pieceTable.GetString("parent", "");
 		return;
 	}
@@ -811,35 +834,39 @@ void CAssParser::SetPieceParentName(
 	if (pieceNode->mParent == nullptr)
 		return;
 
-	if (pieceNode->mParent->mParent != nullptr) {
+	if (pieceNode->mParent->mParent != nullptr)
+	{
 		// parent is not the root
 		parentMap[piece->name] = std::string(pieceNode->mParent->mName.data);
-	} else {
+	}
+	else
+	{
 		// parent is the root (which must already exist)
 		assert(model->GetRootPiece() != nullptr);
 		parentMap[piece->name] = (model->GetRootPiece())->name;
 	}
 }
 
-void CAssParser::LoadPieceGeometry(SAssPiece* piece, const S3DModel* model, const aiNode* pieceNode, const aiScene* scene)
+void CAssParser::LoadPieceGeometry(SAssPiece *piece, const S3DModel *model, const aiNode *pieceNode, const aiScene *scene)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	std::vector<unsigned> meshVertexMapping;
 
 	// Get vertex data from node meshes
-	for (unsigned meshListIndex = 0; meshListIndex < pieceNode->mNumMeshes; ++meshListIndex) {
+	for (unsigned meshListIndex = 0; meshListIndex < pieceNode->mNumMeshes; ++meshListIndex)
+	{
 		const unsigned int meshIndex = pieceNode->mMeshes[meshListIndex];
-		const aiMesh* mesh = scene->mMeshes[meshIndex];
+		const aiMesh *mesh = scene->mMeshes[meshIndex];
 
 		LOG_SL(LOG_SECTION_PIECE, L_DEBUG, "Fetching mesh %d from scene", meshIndex);
 		LOG_SL(LOG_SECTION_PIECE, L_DEBUG,
-			"Processing vertices for mesh %d (%d vertices)",
-			meshIndex, mesh->mNumVertices);
+			   "Processing vertices for mesh %d (%d vertices)",
+			   meshIndex, mesh->mNumVertices);
 		LOG_SL(LOG_SECTION_PIECE, L_DEBUG,
-			"Normals: %s Tangents/Bitangents: %s TexCoords: %s",
-			(mesh->HasNormals() ? "Y" : "N"),
-			(mesh->HasTangentsAndBitangents() ? "Y" : "N"),
-			(mesh->HasTextureCoords(0) ? "Y" : "N"));
+			   "Normals: %s Tangents/Bitangents: %s TexCoords: %s",
+			   (mesh->HasNormals() ? "Y" : "N"),
+			   (mesh->HasTangentsAndBitangents() ? "Y" : "N"),
+			   (mesh->HasTextureCoords(0) ? "Y" : "N"));
 
 		piece->vertices.reserve(piece->vertices.size() + mesh->mNumVertices);
 		piece->indices.reserve(piece->indices.size() + mesh->mNumFaces * 3);
@@ -848,46 +875,58 @@ void CAssParser::LoadPieceGeometry(SAssPiece* piece, const S3DModel* model, cons
 		meshVertexMapping.reserve(mesh->mNumVertices);
 
 		// extract vertex data per mesh
-		for (unsigned vertexIndex = 0; vertexIndex < mesh->mNumVertices; ++vertexIndex) {
-			const aiVector3D& aiVertex = mesh->mVertices[vertexIndex];
+		for (unsigned vertexIndex = 0; vertexIndex < mesh->mNumVertices; ++vertexIndex)
+		{
+			const aiVector3D &aiVertex = mesh->mVertices[vertexIndex];
 
 			SVertexData vertex;
 
 			// vertex coordinates
 			vertex.pos = aiVectorToFloat3(aiVertex);
 
-			if (mesh->HasNormals()) {
+			if (mesh->HasNormals())
+			{
 				// vertex normal
-				const aiVector3D& aiNormal = mesh->mNormals[vertexIndex];
+				const aiVector3D &aiNormal = mesh->mNormals[vertexIndex];
 
-				if (IS_QNAN(aiNormal)) {
+				if (IS_QNAN(aiNormal))
+				{
 					LOG_SL(LOG_SECTION_PIECE, L_DEBUG, "Malformed normal (model->name=\"%s\" piece->name=\"%s\" vertexIndex=%d x=%f y=%f z=%f)", model->name.c_str(), piece->name.c_str(), vertexIndex, aiNormal.x, aiNormal.y, aiNormal.z);
-					vertex.normal = float3{ 0.0f, 1.0f, 0.0f };
+					vertex.normal = float3{0.0f, 1.0f, 0.0f};
 				}
-				else {
+				else
+				{
 					vertex.normal = (aiVectorToFloat3(aiNormal)).SafeANormalize();
 				}
 			}
-			else {
-				vertex.normal = float3{ 0.0f, 1.0f, 0.0f };
+			else
+			{
+				vertex.normal = float3{0.0f, 1.0f, 0.0f};
 			}
 
 			// vertex tangent, x is positive in texture axis
-			if (mesh->HasTangentsAndBitangents()) {
-				const aiVector3D& aiTangent = mesh->mTangents[vertexIndex];
-				const aiVector3D& aiBitangent = mesh->mBitangents[vertexIndex];
+			if (mesh->HasTangentsAndBitangents())
+			{
+				const aiVector3D &aiTangent = mesh->mTangents[vertexIndex];
+				const aiVector3D &aiBitangent = mesh->mBitangents[vertexIndex];
 
-				if (IS_QNAN(aiTangent.x) || IS_QNAN(aiTangent.y) || IS_QNAN(aiTangent.z)) {
+				if (IS_QNAN(aiTangent.x) || IS_QNAN(aiTangent.y) || IS_QNAN(aiTangent.z))
+				{
 					LOG_SL(LOG_SECTION_PIECE, L_INFO, "Malformed tangent (model->name=\"%s\" piece->name=\"%s\" vertexIndex=%d x=%f y=%f z=%f)", model->name.c_str(), piece->name.c_str(), vertexIndex, aiTangent.x, aiTangent.y, aiTangent.z);
 					vertex.sTangent = float3{1.0f, 0.0f, 0.0f};
-				} else {
+				}
+				else
+				{
 					vertex.sTangent = (aiVectorToFloat3(aiTangent)).SafeANormalize();
 				}
 
-				if (IS_QNAN(aiBitangent.x) || IS_QNAN(aiBitangent.y) || IS_QNAN(aiBitangent.z)) {
+				if (IS_QNAN(aiBitangent.x) || IS_QNAN(aiBitangent.y) || IS_QNAN(aiBitangent.z))
+				{
 					LOG_SL(LOG_SECTION_PIECE, L_INFO, "Malformed bitangent (model->name=\"%s\" piece->name=\"%s\" vertexIndex=%d x=%f y=%f z=%f)", model->name.c_str(), piece->name.c_str(), vertexIndex, aiBitangent.x, aiBitangent.y, aiBitangent.z);
 					vertex.tTangent = vertex.normal.cross(vertex.sTangent);
-				} else {
+				}
+				else
+				{
 					vertex.tTangent = (aiVectorToFloat3(aiBitangent)).SafeANormalize();
 				}
 
@@ -895,7 +934,8 @@ void CAssParser::LoadPieceGeometry(SAssPiece* piece, const S3DModel* model, cons
 			}
 
 			// vertex tex-coords per channel
-			for (unsigned int uvChanIndex = 0; uvChanIndex < SVertexData::NUM_MODEL_UVCHANNS; uvChanIndex++) {
+			for (unsigned int uvChanIndex = 0; uvChanIndex < SVertexData::NUM_MODEL_UVCHANNS; uvChanIndex++)
+			{
 				if (!mesh->HasTextureCoords(uvChanIndex))
 					break;
 
@@ -917,15 +957,17 @@ void CAssParser::LoadPieceGeometry(SAssPiece* piece, const S3DModel* model, cons
 		 * anything more complex than triangles is
 		 * being split thanks to aiProcess_Triangulate
 		 */
-		for (unsigned faceIndex = 0; faceIndex < mesh->mNumFaces; ++faceIndex) {
-			const aiFace& face = mesh->mFaces[faceIndex];
+		for (unsigned faceIndex = 0; faceIndex < mesh->mNumFaces; ++faceIndex)
+		{
+			const aiFace &face = mesh->mFaces[faceIndex];
 
 			// some models contain lines (mNumIndices == 2) which
 			// we cannot render and they would need a 2nd drawcall)
 			if (face.mNumIndices != 3)
 				continue;
 
-			for (unsigned vertexListID = 0; vertexListID < face.mNumIndices; ++vertexListID) {
+			for (unsigned vertexListID = 0; vertexListID < face.mNumIndices; ++vertexListID)
+			{
 				const unsigned int vertexFaceIdx = face.mIndices[vertexListID];
 				const unsigned int vertexDrawIdx = meshVertexMapping[vertexFaceIdx];
 				piece->indices.push_back(vertexDrawIdx);
@@ -937,14 +979,15 @@ void CAssParser::LoadPieceGeometry(SAssPiece* piece, const S3DModel* model, cons
 // Not efficient, but there aren't that many pieces
 // So fast anyway
 static LuaTable GetPieceTableRecursively(
-	const LuaTable& table,
-	const std::string& name,
-	const std::string& parentName,
-	CAssParser::ParentNameMap& parentMap)
+	const LuaTable &table,
+	const std::string &name,
+	const std::string &parentName,
+	CAssParser::ParentNameMap &parentMap)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	LuaTable ret = table.SubTable(name);
-	if (ret.IsValid()) {
+	if (ret.IsValid())
+	{
 		if (!parentName.empty())
 			parentMap[name] = parentName;
 		return ret;
@@ -952,7 +995,8 @@ static LuaTable GetPieceTableRecursively(
 
 	std::vector<std::string> keys;
 	table.GetKeys(keys);
-	for (const std::string& key: keys) {
+	for (const std::string &key : keys)
+	{
 		ret = GetPieceTableRecursively(table.SubTable(key), name, key, parentMap);
 		if (ret.IsValid())
 			break;
@@ -960,8 +1004,7 @@ static LuaTable GetPieceTableRecursively(
 	return ret;
 }
 
-
-SAssPiece* CAssParser::AllocPiece()
+SAssPiece *CAssParser::AllocPiece()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	std::lock_guard<spring::mutex> lock(poolMutex);
@@ -972,7 +1015,8 @@ SAssPiece* CAssParser::AllocPiece()
 	if (piecePool.empty())
 		piecePool.resize(MAX_MODEL_OBJECTS * AVG_MODEL_PIECES);
 
-	if (numPoolPieces >= piecePool.size()) {
+	if (numPoolPieces >= piecePool.size())
+	{
 		throw std::bad_alloc();
 		return nullptr;
 	}
@@ -980,25 +1024,26 @@ SAssPiece* CAssParser::AllocPiece()
 	return &piecePool[numPoolPieces++];
 }
 
-SAssPiece* CAssParser::LoadPiece(
-	S3DModel* model,
-	const aiNode* pieceNode,
-	const aiScene* scene,
-	const LuaTable& modelTable,
-	const std::vector<std::string>& skipList,
-	ModelPieceMap& pieceMap,
-	ParentNameMap& parentMap,
-	const CQuaternion* optRotation
-) {
+SAssPiece *CAssParser::LoadPiece(
+	S3DModel *model,
+	const aiNode *pieceNode,
+	const aiScene *scene,
+	const LuaTable &modelTable,
+	const std::vector<std::string> &skipList,
+	ModelPieceMap &pieceMap,
+	ParentNameMap &parentMap,
+	const CQuaternion *optRotation)
+{
 	RECOIL_DETAILED_TRACY_ZONE;
 	if (std::find(skipList.begin(), skipList.end(), std::string(pieceNode->mName.data)) != skipList.end())
 		return nullptr;
 
 	++model->numPieces;
 
-	SAssPiece* piece = AllocPiece();
+	SAssPiece *piece = AllocPiece();
 
-	if (pieceNode->mParent == nullptr) {
+	if (pieceNode->mParent == nullptr)
+	{
 		// set the model's root piece ASAP, needed in SetPiece*Name
 		assert(pieceNode == scene->mRootNode);
 		model->AddPiece(piece);
@@ -1010,7 +1055,7 @@ SAssPiece* CAssParser::LoadPiece(
 	LOG_SL(LOG_SECTION_PIECE, L_INFO, "Converting node '%s' to piece '%s' (%d meshes).", pieceNode->mName.data, piece->name.c_str(), pieceNode->mNumMeshes);
 
 	// Load additional piece properties from metadata
-	const LuaTable& pieceTable = GetPieceTableRecursively(modelTable.SubTable("pieces"), piece->name, "", parentMap);
+	const LuaTable &pieceTable = GetPieceTableRecursively(modelTable.SubTable("pieces"), piece->name, "", parentMap);
 
 	if (pieceTable.IsValid())
 		LOG_SL(LOG_SECTION_PIECE, L_INFO, "Found metadata for piece '%s'", piece->name.c_str());
@@ -1022,7 +1067,7 @@ SAssPiece* CAssParser::LoadPiece(
 	{
 		// operator[] creates an empty string if piece is not in map
 		const auto parentNameIt = parentMap.find(piece->name);
-		const std::string& parentName = (parentNameIt != parentMap.end())? (parentNameIt->second).c_str(): "[null]";
+		const std::string &parentName = (parentNameIt != parentMap.end()) ? (parentNameIt->second).c_str() : "[null]";
 
 		// Verbose logging of piece properties
 		LOG_SL(LOG_SECTION_PIECE, L_INFO, "Loaded model piece: %s with %d meshes", piece->name.c_str(), pieceNode->mNumMeshes);
@@ -1031,7 +1076,8 @@ SAssPiece* CAssParser::LoadPiece(
 	}
 
 	// Recursively process all child pieces
-	for (unsigned int i = 0; i < pieceNode->mNumChildren; ++i) {
+	for (unsigned int i = 0; i < pieceNode->mNumChildren; ++i)
+	{
 		LoadPiece(model, pieceNode->mChildren[i], scene, modelTable, skipList, pieceMap, parentMap);
 	}
 
@@ -1039,19 +1085,20 @@ SAssPiece* CAssParser::LoadPiece(
 	return piece;
 }
 
-
 // Because of metadata overrides we don't know the true hierarchy until all pieces have been loaded
-void CAssParser::BuildPieceHierarchy(S3DModel* model, ModelPieceMap& pieceMap, const ParentNameMap& parentMap)
+void CAssParser::BuildPieceHierarchy(S3DModel *model, ModelPieceMap &pieceMap, const ParentNameMap &parentMap)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	const char* fmt1 = "Missing piece '%s' declared as parent of '%s'.";
-	const char* fmt2 = "Missing root piece (parent of orphan '%s')";
+	const char *fmt1 = "Missing piece '%s' declared as parent of '%s'.";
+	const char *fmt2 = "Missing root piece (parent of orphan '%s')";
 
 	// loop through all pieces and create missing hierarchy info
-	for (auto it = pieceMap.cbegin(); it != pieceMap.cend(); ++it) {
-		SAssPiece* piece = static_cast<SAssPiece*>(it->second);
+	for (auto it = pieceMap.cbegin(); it != pieceMap.cend(); ++it)
+	{
+		SAssPiece *piece = static_cast<SAssPiece *>(it->second);
 
-		if (piece == model->GetRootPiece()) {
+		if (piece == model->GetRootPiece())
+		{
 			assert(piece->parent == nullptr);
 			assert(model->GetRootPiece() == piece);
 			continue;
@@ -1059,15 +1106,19 @@ void CAssParser::BuildPieceHierarchy(S3DModel* model, ModelPieceMap& pieceMap, c
 
 		const auto parentNameIt = parentMap.find(piece->name);
 
-		if (parentNameIt != parentMap.end()) {
-			const std::string& parentName = parentNameIt->second;
+		if (parentNameIt != parentMap.end())
+		{
+			const std::string &parentName = parentNameIt->second;
 			const auto pieceIt = pieceMap.find(parentName);
 
 			// re-assign this piece to a different parent
-			if (pieceIt != pieceMap.end()) {
+			if (pieceIt != pieceMap.end())
+			{
 				piece->parent = pieceIt->second;
 				piece->parent->children.push_back(piece);
-			} else {
+			}
+			else
+			{
 				LOG_SL(LOG_SECTION_PIECE, L_ERROR, fmt1, parentName.c_str(), piece->name.c_str());
 			}
 
@@ -1076,9 +1127,12 @@ void CAssParser::BuildPieceHierarchy(S3DModel* model, ModelPieceMap& pieceMap, c
 
 		// piece with no named parent that isn't the root (orphaned)
 		// link it to the root piece which has already been pre-added
-		if ((piece->parent = model->GetRootPiece()) == nullptr) {
+		if ((piece->parent = model->GetRootPiece()) == nullptr)
+		{
 			LOG_SL(LOG_SECTION_PIECE, L_ERROR, fmt2, piece->name.c_str());
-		} else {
+		}
+		else
+		{
 			piece->parent->children.push_back(piece);
 		}
 	}
@@ -1086,7 +1140,7 @@ void CAssParser::BuildPieceHierarchy(S3DModel* model, ModelPieceMap& pieceMap, c
 	model->FlattenPieceTree(model->GetRootPiece());
 }
 
-static std::string FindTexture(std::string testTextureFile, const std::string& modelPath, const std::string& fallback)
+static std::string FindTexture(std::string testTextureFile, const std::string &modelPath, const std::string &fallback)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	if (testTextureFile.empty())
@@ -1108,12 +1162,11 @@ static std::string FindTexture(std::string testTextureFile, const std::string& m
 	return fallback;
 }
 
-
-static std::string FindTextureByRegex(const std::string& regex_path, const std::string& regex)
+static std::string FindTextureByRegex(const std::string &regex_path, const std::string &regex)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	//FIXME instead of ".*" only check imagetypes!
-	const std::vector<std::string>& files = CFileHandler::FindFiles(regex_path, regex + ".*");
+	// FIXME instead of ".*" only check imagetypes!
+	const std::vector<std::string> &files = CFileHandler::FindFiles(regex_path, regex + ".*");
 
 	if (!files.empty())
 		return FindTexture(FileSystem::GetFilename(files[0]), "", "");
@@ -1121,27 +1174,33 @@ static std::string FindTextureByRegex(const std::string& regex_path, const std::
 	return "";
 }
 
-
 void CAssParser::FindTextures(
-	S3DModel* model,
-	const aiScene* scene,
-	const LuaTable& modelTable,
-	const std::string& modelPath,
-	const std::string& modelName
-) {
+	S3DModel *model,
+	const aiScene *scene,
+	const LuaTable &modelTable,
+	const std::string &modelPath,
+	const std::string &modelName)
+{
 	RECOIL_DETAILED_TRACY_ZONE;
 	// 1. try to find by name (lowest priority)
 	model->texs[0] = FindTextureByRegex("unittextures/", modelName);
 
-	if (model->texs[0].empty()) model->texs[0] = FindTextureByRegex("unittextures/", modelName + "1");
-	if (model->texs[1].empty()) model->texs[1] = FindTextureByRegex("unittextures/", modelName + "2");
-	if (model->texs[0].empty()) model->texs[0] = FindTextureByRegex(modelPath, "tex1");
-	if (model->texs[1].empty()) model->texs[1] = FindTextureByRegex(modelPath, "tex2");
-	if (model->texs[0].empty()) model->texs[0] = FindTextureByRegex(modelPath, "diffuse");
-	if (model->texs[1].empty()) model->texs[1] = FindTextureByRegex(modelPath, "glow"); // lowest-priority name
+	if (model->texs[0].empty())
+		model->texs[0] = FindTextureByRegex("unittextures/", modelName + "1");
+	if (model->texs[1].empty())
+		model->texs[1] = FindTextureByRegex("unittextures/", modelName + "2");
+	if (model->texs[0].empty())
+		model->texs[0] = FindTextureByRegex(modelPath, "tex1");
+	if (model->texs[1].empty())
+		model->texs[1] = FindTextureByRegex(modelPath, "tex2");
+	if (model->texs[0].empty())
+		model->texs[0] = FindTextureByRegex(modelPath, "diffuse");
+	if (model->texs[1].empty())
+		model->texs[1] = FindTextureByRegex(modelPath, "glow"); // lowest-priority name
 
 	// 2. gather model-defined textures of first material (medium priority)
-	if (scene->mNumMaterials > 0) {
+	if (scene->mNumMaterials > 0)
+	{
 		constexpr unsigned int texTypes[] = {
 			aiTextureType_SPECULAR,
 			aiTextureType_UNKNOWN,
@@ -1155,7 +1214,8 @@ void CAssParser::FindTextures(
 			aiTextureType_OPACITY,
 			*/
 		};
-		for (unsigned int texType: texTypes) {
+		for (unsigned int texType : texTypes)
+		{
 			aiString textureFile;
 			if (scene->mMaterials[0]->Get(AI_MATKEY_TEXTURE(texType, 0), textureFile) != aiReturn_SUCCESS)
 				continue;
@@ -1170,7 +1230,7 @@ void CAssParser::FindTextures(
 	model->texs[1] = FindTexture(modelTable.GetString("tex2", ""), modelPath, model->texs[1]);
 }
 
-Transform SPseudoAssPiece::ComposeTransform(const float3& t, const float3& r, float s) const
+Transform SPseudoAssPiece::ComposeTransform(const float3 &t, const float3 &r, float s) const
 {
 	// NOTE:
 	//   ORDER MATTERS (T(baked + script) * R(baked) * R(script) * S(baked))
@@ -1186,11 +1246,10 @@ Transform SPseudoAssPiece::ComposeTransform(const float3& t, const float3& r, fl
 	return tra;
 }
 
-void SPseudoAssPiece::SetPieceTransform(const Transform& tra)
+void SPseudoAssPiece::SetPieceTransform(const Transform &tra)
 {
 	bposeTransform = tra * Transform{
-		CQuaternion(),
-		offset,
-		scale
-	};
+							   CQuaternion(),
+							   offset,
+							   scale};
 }

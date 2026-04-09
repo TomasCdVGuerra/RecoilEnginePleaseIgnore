@@ -2,6 +2,8 @@
 
 #include "EFX.h"
 
+#if RECOIL_OPENAL_HAS_EFX
+
 #include "ALShared.h"
 #include "EFXPresets.h"
 #include "EFXfuncs.h"
@@ -10,12 +12,10 @@
 #include "System/Config/ConfigHandler.h"
 #include "System/SpringMath.h"
 
-
 /******************************************************************************/
 /******************************************************************************/
 
-static const std::string default_preset = "outdoors_valley";//"bathroom";
-
+static const std::string default_preset = "outdoors_valley"; //"bathroom";
 
 static constexpr ALuint effects[] = {
 	AL_EFFECT_REVERB,
@@ -30,23 +30,20 @@ static constexpr ALuint effects[] = {
 	AL_EFFECT_RING_MODULATOR,
 	AL_EFFECT_AUTOWAH,
 	AL_EFFECT_COMPRESSOR,
-	AL_EFFECT_EQUALIZER
-};
+	AL_EFFECT_EQUALIZER};
 
 static constexpr ALuint filters[] = {
 	AL_FILTER_LOWPASS,
 	AL_FILTER_HIGHPASS,
-	AL_FILTER_BANDPASS
-};
-
+	AL_FILTER_BANDPASS};
 
 /******************************************************************************/
 /******************************************************************************/
 
 CEFX efx;
 
-
-void CEFX::Init(ALCdevice* device) {
+void CEFX::Init(ALCdevice *device)
+{
 	SetAirAbsorptionFactor(configHandler->GetFloat("snd_airAbsorption"));
 
 	const bool hasExtension = alcIsExtensionPresent(device, "ALC_EXT_EFX");
@@ -55,10 +52,14 @@ void CEFX::Init(ALCdevice* device) {
 	eaxPresets["default"] = eaxPresets[default_preset];
 	sfxProperties = eaxPresets[default_preset];
 
-	if (!(supported = (hasExtension && alGenEffects && alDeleteEffects))) {
-		if (!hasExtension) {
+	if (!(supported = (hasExtension && alGenEffects && alDeleteEffects)))
+	{
+		if (!hasExtension)
+		{
 			LOG("  EFX Supported: no");
-		} else {
+		}
+		else
+		{
 			LOG("  EFX is supported but software does not seem to work properly");
 		}
 		return;
@@ -71,8 +72,10 @@ void CEFX::Init(ALCdevice* device) {
 	{
 		ALuint alFx;
 		alGenEffects(1, &alFx);
-		if (alGetError() == AL_NO_ERROR) {
-			for (size_t i = 0; i < sizeof(effects) / sizeof(effects[0]); i++) {
+		if (alGetError() == AL_NO_ERROR)
+		{
+			for (size_t i = 0; i < sizeof(effects) / sizeof(effects[0]); i++)
+			{
 				const ALuint fx = effects[i];
 				alEffecti(alFx, AL_EFFECT_TYPE, fx);
 				effectsSupported[fx] = (alGetError() == AL_NO_ERROR);
@@ -86,8 +89,10 @@ void CEFX::Init(ALCdevice* device) {
 		ALuint alFilter;
 		alGenFilters(1, &alFilter);
 
-		if (alGetError() == AL_NO_ERROR) {
-			for (size_t i = 0; i < sizeof(filters) / sizeof(filters[0]); i++) {
+		if (alGetError() == AL_NO_ERROR)
+		{
+			for (size_t i = 0; i < sizeof(filters) / sizeof(filters[0]); i++)
+			{
 				const ALuint filter = filters[i];
 				alFilteri(alFilter, AL_FILTER_TYPE, filter);
 				filtersSupported[filter] = (alGetError() == AL_NO_ERROR);
@@ -100,7 +105,8 @@ void CEFX::Init(ALCdevice* device) {
 	{
 		int n;
 		ALuint alFXSlots[128];
-		for (n = 0; n < 128; n++) {
+		for (n = 0; n < 128; n++)
+		{
 			alGenAuxiliaryEffectSlots(1, &alFXSlots[n]);
 			if (alGetError() != AL_NO_ERROR)
 				break;
@@ -111,22 +117,17 @@ void CEFX::Init(ALCdevice* device) {
 	}
 
 	// check max aux-FX slots per sound-source
-	alcGetIntegerv(device, ALC_MAX_AUXILIARY_SENDS, 1, (ALCint*)&maxSlotsPerSource);
-
+	alcGetIntegerv(device, ALC_MAX_AUXILIARY_SENDS, 1, (ALCint *)&maxSlotsPerSource);
 
 	// check requirements
-	if (!effectsSupported[AL_EFFECT_EAXREVERB]
-		|| !filtersSupported[AL_FILTER_LOWPASS]
-		|| (maxSlots < 1)
-		|| (maxSlotsPerSource < 1)
-	) {
+	if (!effectsSupported[AL_EFFECT_EAXREVERB] || !filtersSupported[AL_FILTER_LOWPASS] || (maxSlots < 1) || (maxSlotsPerSource < 1))
+	{
 		if (enabled)
 			LOG_L(L_WARNING, "  EFX Supported: no");
 
 		supported = false;
 		return;
 	}
-
 
 	// create our global sfx environment
 	alGenAuxiliaryEffectSlots(1, &sfxSlot);
@@ -137,7 +138,8 @@ void CEFX::Init(ALCdevice* device) {
 	alGenFilters(1, &sfxFilter);
 	alFilteri(sfxFilter, AL_FILTER_TYPE, AL_FILTER_LOWPASS);
 
-	if (!alIsAuxiliaryEffectSlot(sfxSlot) || !alIsEffect(sfxReverb) || !alIsFilter(sfxFilter)) {
+	if (!alIsAuxiliaryEffectSlot(sfxSlot) || !alIsEffect(sfxReverb) || !alIsFilter(sfxFilter))
+	{
 		LOG_L(L_ERROR, "  Initializing EFX failed!");
 		alDeleteFilters(1, &sfxFilter);
 		alDeleteEffects(1, &sfxReverb);
@@ -146,10 +148,10 @@ void CEFX::Init(ALCdevice* device) {
 		return;
 	}
 
-
 	// load defaults
 	CommitEffects();
-	if (!CheckError("  EFX")) {
+	if (!CheckError("  EFX"))
+	{
 		LOG_L(L_ERROR, "  Initializing EFX failed!");
 		alAuxiliaryEffectSloti(sfxSlot, AL_EFFECTSLOT_EFFECT, AL_EFFECT_NULL);
 		alDeleteFilters(1, &sfxFilter);
@@ -162,7 +164,8 @@ void CEFX::Init(ALCdevice* device) {
 	// user may disable it (performance reasons?)
 	enabled = configHandler->GetBool("UseEFX");
 	LOG("  EFX Enabled: %s", (enabled ? "yes" : "no"));
-	if (enabled) {
+	if (enabled)
+	{
 		LOG_L(L_DEBUG, "  EFX MaxSlots: %i", maxSlots);
 		LOG_L(L_DEBUG, "  EFX MaxSlotsPerSource: %i", maxSlotsPerSource);
 	}
@@ -170,12 +173,12 @@ void CEFX::Init(ALCdevice* device) {
 	configHandler->NotifyOnChange(this, {"snd_airAbsorption"});
 }
 
-
 void CEFX::Kill()
 {
 	configHandler->RemoveObserver(this);
 
-	if (supported) {
+	if (supported)
+	{
 		alAuxiliaryEffectSloti(sfxSlot, AL_EFFECTSLOT_EFFECT, AL_EFFECT_NULL);
 		alDeleteFilters(1, &sfxFilter);
 		alDeleteEffects(1, &sfxReverb);
@@ -183,10 +186,10 @@ void CEFX::Kill()
 	}
 }
 
-
 void CEFX::Enable()
 {
-	if (supported && !enabled) {
+	if (supported && !enabled)
+	{
 		enabled = true;
 		CommitEffects();
 		LOG("EAX enabled");
@@ -195,15 +198,15 @@ void CEFX::Enable()
 
 void CEFX::Disable()
 {
-	if (enabled) {
+	if (enabled)
+	{
 		enabled = false;
 		alAuxiliaryEffectSloti(sfxSlot, AL_EFFECTSLOT_EFFECT, AL_EFFECT_NULL);
 		LOG("EAX disabled");
 	}
 }
 
-
-void CEFX::SetPreset(const std::string& name, bool verbose, bool commit)
+void CEFX::SetPreset(const std::string &name, bool verbose, bool commit)
 {
 	if (!supported)
 		return;
@@ -221,7 +224,6 @@ void CEFX::SetPreset(const std::string& name, bool verbose, bool commit)
 		LOG("EAX Preset changed to: %s", name.c_str());
 }
 
-
 void CEFX::SetHeightRolloffModifer(float mod)
 {
 	heightRolloffModifier = mod;
@@ -233,8 +235,7 @@ void CEFX::SetHeightRolloffModifer(float mod)
 	alAuxiliaryEffectSloti(sfxSlot, AL_EFFECTSLOT_EFFECT, sfxReverb);
 }
 
-
-void CEFX::CommitEffects(const EAXSfxProps* sfxProps)
+void CEFX::CommitEffects(const EAXSfxProps *sfxProps)
 {
 	if (!supported)
 		return;
@@ -242,9 +243,12 @@ void CEFX::CommitEffects(const EAXSfxProps* sfxProps)
 		sfxProperties = *sfxProps;
 
 	// commit reverb properties
-	for (auto it = sfxProperties.reverb_props_f.begin(); it != sfxProperties.reverb_props_f.end(); ++it) alEffectf (sfxReverb, it->first, it->second);
-	for (auto it = sfxProperties.reverb_props_i.begin(); it != sfxProperties.reverb_props_i.end(); ++it) alEffecti (sfxReverb, it->first, it->second);
-	for (auto it = sfxProperties.reverb_props_v.begin(); it != sfxProperties.reverb_props_v.end(); ++it) alEffectfv(sfxReverb, it->first, (ALfloat*)&it->second[0]);
+	for (auto it = sfxProperties.reverb_props_f.begin(); it != sfxProperties.reverb_props_f.end(); ++it)
+		alEffectf(sfxReverb, it->first, it->second);
+	for (auto it = sfxProperties.reverb_props_i.begin(); it != sfxProperties.reverb_props_i.end(); ++it)
+		alEffecti(sfxReverb, it->first, it->second);
+	for (auto it = sfxProperties.reverb_props_v.begin(); it != sfxProperties.reverb_props_v.end(); ++it)
+		alEffectfv(sfxReverb, it->first, (ALfloat *)&it->second[0]);
 
 	alEffectf(sfxReverb, AL_EAXREVERB_ROOM_ROLLOFF_FACTOR, sfxProperties.reverb_props_f[AL_EAXREVERB_ROOM_ROLLOFF_FACTOR] * heightRolloffModifier);
 	alAuxiliaryEffectSloti(sfxSlot, AL_EFFECTSLOT_EFFECT, sfxReverb);
@@ -261,7 +265,21 @@ void CEFX::SetAirAbsorptionFactor(ALfloat value)
 	airAbsorptionFactor = std::clamp(value, AL_MIN_AIR_ABSORPTION_FACTOR, AL_MAX_AIR_ABSORPTION_FACTOR);
 }
 
-void CEFX::ConfigNotify(const std::string& key, const std::string& value)
+void CEFX::ConfigNotify(const std::string &key, const std::string &value)
 {
 	SetAirAbsorptionFactor(configHandler->GetFloat("snd_airAbsorption"));
 }
+
+#else
+
+spring::unsynced_map<std::string, EAXSfxProps> eaxPresets;
+
+spring::unsynced_map<ALuint, unsigned> alParamType;
+spring::unsynced_map<std::string, ALuint> nameToALParam;
+spring::unsynced_map<ALuint, std::string> alParamToName;
+spring::unsynced_map<std::string, ALuint> nameToALFilterParam;
+spring::unsynced_map<ALuint, std::string> alFilterParamToName;
+
+CEFX efx;
+
+#endif

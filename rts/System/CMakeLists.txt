@@ -203,14 +203,14 @@ set(sources_engine_System
 
 
 ### only use the target platform related directory
-if     (APPLE)
+if     (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 	make_global_var(sources_engine_System_Threading ${sources_engine_System_Threading} ${sources_engine_System_Threading_Mac})
 	make_global_var(sources_engine_System
 			${sources_engine_System}
 			${sources_engine_System_Platform_Mac}
 			${sources_engine_System_Threading}
 		)
-elseif (UNIX)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux")
 	make_global_var(sources_engine_System_Threading ${sources_engine_System_Threading} ${sources_engine_System_Threading_Linux})
 	make_global_var(sources_engine_System
 			${sources_engine_System}

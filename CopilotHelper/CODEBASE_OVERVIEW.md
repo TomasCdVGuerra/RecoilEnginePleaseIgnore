@@ -43,7 +43,47 @@ Important build graph anchors:
 - `rts/builds/` defines product variants (`legacy`, `dedicated`, `headless`).
 - `test/CMakeLists.txt` defines the CTest integration and per-target test binaries.
 
-## 3) Submodule Ecosystem (13 Entries)
+## 3) Rendering Architecture
+
+RecoilEngine rendering is now organized around a backend abstraction layer in `rts/Rendering/Gfx/`, replacing the prior monolithic OpenGL-only execution model.
+
+### Gfx abstraction (`rts/Rendering/Gfx/`)
+
+- `rts/Rendering/Gfx/IGraphicsBackend.h` defines the backend contract used by engine rendering systems.
+- Resource creation and frame lifecycle operations flow through `IGraphicsBackend` (buffers, textures, framebuffers, shaders/programs, frame begin/end, and presentation).
+- Backend implementations are provided by:
+  - `rts/Rendering/Gfx/GL/GLGraphicsBackend.h`
+  - `rts/Rendering/Gfx/Vulkan/VulkanGraphicsBackend.h`
+
+### Vulkan backend
+
+The Vulkan path is implemented under `rts/Rendering/Gfx/Vulkan/`, with `VulkanGraphicsBackend` coordinating Vulkan initialization and runtime execution.
+
+Key supporting classes include:
+
+- `rts/Rendering/Gfx/Vulkan/VulkanVertexBuffer.h`
+- `rts/Rendering/Gfx/Vulkan/VulkanTexture.h`
+- `rts/Rendering/Gfx/Vulkan/VulkanShaderProgram.h`
+
+These classes provide backend-specific implementations for the shared `gfx` interfaces while preserving backend-neutral call sites.
+
+### Migration state (GL + Vulkan)
+
+- The engine currently supports both OpenGL and Vulkan backends.
+- Backend compilation/selection is controlled by the `ENABLE_VULKAN` CMake option in `CMakeLists.txt`.
+- On macOS, Vulkan is the preferred path when enabled, using MoltenVK.
+
+### Initialization flow (`rts/Rendering/GlobalRendering.cpp`)
+
+- During window/context creation, the SDL window flag is selected conditionally:
+  - `SDL_WINDOW_VULKAN` when `ENABLE_VULKAN` is active.
+  - `SDL_WINDOW_OPENGL` otherwise.
+- Backend selection is conditional in the same flow:
+  - Vulkan builds instantiate `VulkanGraphicsBackend` (with the SDL window handle for surface/swapchain setup).
+  - Non-Vulkan builds instantiate `GLGraphicsBackend`.
+- Presentation follows the selected backend path (Vulkan swapchain presentation vs OpenGL swap-window flow).
+
+## 4) Submodule Ecosystem (13 Entries)
 
 The repository currently declares 13 top-level Git submodules in `.gitmodules`:
 
@@ -81,7 +121,7 @@ Operational notes:
   - `git submodule update --init --recursive`
 - Some dependencies are vendored directly in tree (for example Lua/minizip/glad/jsoncpp/7zip integrations) and are not all represented as top-level submodules.
 
-## 4) Build System And CI Strategy
+## 5) Build System And CI Strategy
 
 ### Build orchestration
 
@@ -143,7 +183,7 @@ macOS headless target behavior includes:
   - multithreaded platform-call checks,
   - repeated stress loop with RSS-growth guard (non-Windows path).
 
-## 5) Developer Environment Notes
+## 6) Developer Environment Notes
 
 ### Recommended bootstrap
 
