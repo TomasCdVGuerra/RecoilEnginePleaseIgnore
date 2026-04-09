@@ -24,8 +24,7 @@ namespace gfx
 {
 
     VulkanShaderProgram::VulkanShaderProgram(VkDevice device_, const ShaderProgramCreateInfo &ci)
-        : device(device_)
-        , debugName(ci.debugName)
+        : device(device_), debugName(ci.debugName)
     {
         InitDescriptorScaffold();
 

@@ -24,9 +24,7 @@ namespace gfx
 {
 
     VulkanShader::VulkanShader(VkDevice device_, const ShaderCreateInfo &ci)
-        : device(device_)
-        , stage(ci.stage)
-        , sourceFormat(ci.sourceFormat)
+        : device(device_), stage(ci.stage), sourceFormat(ci.sourceFormat)
     {
         if (device == VK_NULL_HANDLE)
         {
