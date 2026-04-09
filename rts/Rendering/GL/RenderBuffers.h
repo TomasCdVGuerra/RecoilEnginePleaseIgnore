@@ -34,40 +34,45 @@
 template <typename T>
 class TypedRenderBuffer;
 
-class RenderBuffer {
+class RenderBuffer
+{
 public:
 	static void InitStatic();
 	static void KillStatic();
 
 	RenderBuffer()
-		:initCapacity{ 0, 0 }
+		: initCapacity{0, 0}
 	{
 		allRenderBuffers.emplace_back(this);
 	}
 	RenderBuffer(std::array<size_t, 2> c)
-		:initCapacity{ c }
+		: initCapacity{c}
 	{
 		allRenderBuffers.emplace_back(this);
 	}
 
-	virtual ~RenderBuffer() {
+	virtual ~RenderBuffer()
+	{
 		bool result = spring::VectorErase(allRenderBuffers, this);
 		assert(result);
 	}
 
 	template <typename T>
-	static TypedRenderBuffer<T>& GetTypedRenderBuffer();
+	static TypedRenderBuffer<T> &GetTypedRenderBuffer();
 
-	static void SwapRenderBuffers() {
-		for (auto* rb : allRenderBuffers) {
-			if (rb) {
+	static void SwapRenderBuffers()
+	{
+		for (auto *rb : allRenderBuffers)
+		{
+			if (rb)
+			{
 				rb->SwapBuffer();
 			}
 		}
 	}
 
 	virtual void SwapBuffer() = 0;
-	virtual const char* GetBufferName() const = 0;
+	virtual const char *GetBufferName() const = 0;
 	virtual std::array<size_t, 2> GetBuffersCapacity() const = 0;
 
 	virtual size_t SumElems() const = 0;
@@ -75,35 +80,42 @@ public:
 	virtual size_t NumSubmits(bool indexed) const = 0;
 
 	std::array<size_t, 2> GetSubmitNum() const { return numSubmits; }
-	std::array<size_t, 2> GetMaxSize()   const { return maxSize;    }
-	std::array<size_t, 2> GetInitialCapacity()   const { return initCapacity; }
+	std::array<size_t, 2> GetMaxSize() const { return maxSize; }
+	std::array<size_t, 2> GetInitialCapacity() const { return initCapacity; }
+
 protected:
 	// [0] := non-indexed, [1] := indexed
-	std::array<size_t, 2> numSubmits = { 0, 0 };
+	std::array<size_t, 2> numSubmits = {0, 0};
 
 	// [0] := vertex, [1] := index
-	std::array<size_t, 2> maxSize = { 0, 0 };
+	std::array<size_t, 2> maxSize = {0, 0};
 
 	// [0] := vertex, [1] := index
-	std::array<size_t, 2> initCapacity = { 0, 0 };
+	std::array<size_t, 2> initCapacity = {0, 0};
+
 private:
-	static inline std::vector<RenderBuffer*> allRenderBuffers;
+	static inline std::vector<RenderBuffer *> allRenderBuffers;
 	static std::array<std::unique_ptr<RenderBuffer>, 15> typedRenderBuffers;
+
 public:
-	static auto GetAllStandardRenderBuffers() -> const decltype(typedRenderBuffers)& { return typedRenderBuffers; };
+	static auto GetAllStandardRenderBuffers() -> const decltype(typedRenderBuffers) & { return typedRenderBuffers; };
 };
 
 template <typename T>
-class RenderBufferShader {
+class RenderBufferShader
+{
 public:
-	static Shader::IProgramObject& GetShader() {
+	static Shader::IProgramObject &GetShader()
+	{
 
-		Shader::IProgramObject* shader = shaderHandler->GetProgramObject(poClass, typeName);
+		Shader::IProgramObject *shader = shaderHandler->GetProgramObject(poClass, typeName);
 
-		if (shader) {
+		if (shader)
+		{
 			if (!shader->IsReloadRequested())
 				return *shader;
-			else {
+			else
+			{
 				shaderHandler->ReleaseProgramObject(poClass, typeName);
 				shader = nullptr;
 			}
@@ -130,30 +142,30 @@ public:
 		GetShaderHeaders(vsHeader, fsHeader);
 		GetAttributesStrings(vsInputs, varyingsData, vsAssignment, vsPosVertex);
 
-		static const char* fmtString = "%s Data {%s%s};";
+		static const char *fmtString = "%s Data {%s%s};";
 		const std::string varyingsVS = (varyingsData.empty()) ? "" : fmt::sprintf(fmtString, "out", nl, varyingsData);
 		const std::string varyingsFS = (varyingsData.empty()) ? "" : fmt::sprintf(fmtString, "in", nl, varyingsData);
 
 		vertSrc = fmt::sprintf(vertSrc,
-			vsHeader,
-			vsInputs,
-			varyingsVS,
-			vsAssignment,
-			vsPosVertex
-		);
+							   vsHeader,
+							   vsInputs,
+							   varyingsVS,
+							   vsAssignment,
+							   vsPosVertex);
 
 		const std::string fragOutput = GetFragOutput();
 		fragSrc = fmt::sprintf(fragSrc,
-			fsHeader,
-			varyingsFS,
-			fragOutput
-		);
+							   fsHeader,
+							   varyingsFS,
+							   fragOutput);
 
 		shader->AttachShaderObject(shaderHandler->CreateShaderObject(vertSrc, "", GL_VERTEX_SHADER));
 		shader->AttachShaderObject(shaderHandler->CreateShaderObject(fragSrc, "", GL_FRAGMENT_SHADER));
 
-		if (!globalRendering->supportExplicitAttribLoc) {
-			for (const AttributeDef& ad : T::attributeDefs) {
+		if (!globalRendering->supportExplicitAttribLoc)
+		{
+			for (const AttributeDef &ad : T::attributeDefs)
+			{
 				shader->BindAttribLocation(fmt::format("a{}", ad.name), ad.index);
 			}
 		}
@@ -171,23 +183,29 @@ public:
 
 		return *shader;
 	}
+
 private:
-	static const std::string TypeToString(const AttributeDef& ad) {
-		static constexpr const char* fmtString = "{type}{count}";
+	static const std::string TypeToString(const AttributeDef &ad)
+	{
+		static constexpr const char *fmtString = "{type}{count}";
 
 		std::string type;
 
 		switch (ad.type)
 		{
-		case GL_FLOAT: {
+		case GL_FLOAT:
+		{
 			type = (ad.count == 1) ? "float" : "vec";
-		} break;
-		case GL_UNSIGNED_BYTE: {
+		}
+		break;
+		case GL_UNSIGNED_BYTE:
+		{
 			if (ad.normalize)
 				type = (ad.count == 1) ? "float" : "vec";
 			else
 				type = (ad.count == 1) ? "uint" : "uvec";
-		} break;
+		}
+		break;
 		default:
 			assert(false);
 			break;
@@ -199,22 +217,26 @@ private:
 
 	static const std::string GetFragOutput();
 
-	static void GetShaderHeaders(std::string& vsHeader, std::string& fsHeader) {
-		if (globalRendering->supportExplicitAttribLoc) {
+	static void GetShaderHeaders(std::string &vsHeader, std::string &fsHeader)
+	{
+		if (globalRendering->supportExplicitAttribLoc)
+		{
 			vsHeader = fmt::format("{}{}{}", "#version 150 compatibility", nl, "#extension GL_ARB_explicit_attrib_location : require");
 		}
-		else {
+		else
+		{
 			vsHeader = "#version 150 compatibility";
 		}
 
 		fsHeader = "#version 150";
 	}
 
-	static void GetAttributesStrings(std::string& vsInputs, std::string& varyings, std::string& vsAssignment, std::string& vsPosVertex) {
-		static constexpr const char* vsInputsFmtYLoc  = "layout(location = {indx}) in {type} a{name};";
-		static constexpr const char* vsInputsFmtNLoc = "in {type} a{name};";
-		static constexpr const char* varyingsFmt     = "\t{type} v{name};";
-		static constexpr const char* vsAssignmentFmt = "\tv{name} = a{name};";
+	static void GetAttributesStrings(std::string &vsInputs, std::string &varyings, std::string &vsAssignment, std::string &vsPosVertex)
+	{
+		static constexpr const char *vsInputsFmtYLoc = "layout(location = {indx}) in {type} a{name};";
+		static constexpr const char *vsInputsFmtNLoc = "in {type} a{name};";
+		static constexpr const char *varyingsFmt = "\t{type} v{name};";
+		static constexpr const char *vsAssignmentFmt = "\tv{name} = a{name};";
 
 		assert(T::attributeDefs[0].index == 0);
 		assert(T::attributeDefs[0].name == "pos");
@@ -226,33 +248,31 @@ private:
 		std::vector<std::string> varyingsVec;
 		std::vector<std::string> vsAssignmentVec;
 
-		for (const AttributeDef& ad : T::attributeDefs) {
+		for (const AttributeDef &ad : T::attributeDefs)
+		{
 			if (globalRendering->supportExplicitAttribLoc)
 				vsInputsVec.emplace_back(fmt::format(vsInputsFmtYLoc,
-					fmt::arg("indx", ad.index),
-					fmt::arg("type", TypeToString(ad)),
-					fmt::arg("name", ad.name)
-				));
+													 fmt::arg("indx", ad.index),
+													 fmt::arg("type", TypeToString(ad)),
+													 fmt::arg("name", ad.name)));
 			else
 				vsInputsVec.emplace_back(fmt::format(vsInputsFmtNLoc,
-					fmt::arg("type", TypeToString(ad)),
-					fmt::arg("name", ad.name)
-				));
+													 fmt::arg("type", TypeToString(ad)),
+													 fmt::arg("name", ad.name)));
 
 			if (ad.index == 0)
 				continue;
 
 			varyingsVec.emplace_back(fmt::format(varyingsFmt,
-				fmt::arg("type", TypeToString(ad)),
-				fmt::arg("name", ad.name)
-			));
+												 fmt::arg("type", TypeToString(ad)),
+												 fmt::arg("name", ad.name)));
 
 			vsAssignmentVec.emplace_back(fmt::format(vsAssignmentFmt,
-				fmt::arg("name", ad.name)
-			));
+													 fmt::arg("name", ad.name)));
 		}
 
-		const auto joinFunc = [](const std::vector<std::string>& vec) -> const std::string {
+		const auto joinFunc = [](const std::vector<std::string> &vec) -> const std::string
+		{
 			if (vec.empty())
 				return "";
 
@@ -265,138 +285,134 @@ private:
 		varyings = joinFunc(varyingsVec);
 		vsAssignment = joinFunc(vsAssignmentVec);
 	}
+
 private:
-	static constexpr const char* poClass = "[RenderBufferShader]";
-	static constexpr const char* typeName = spring::TypeToCStr<T>();
-	static constexpr const char* nl = "\r\n";
+	static constexpr const char *poClass = "[RenderBufferShader]";
+	static constexpr const char *typeName = spring::TypeToCStr<T>();
+	static constexpr const char *nl = "\r\n";
 };
 
-
-//member template specializations
-template<>
+// member template specializations
+template <>
 inline const std::string RenderBufferShader<VA_TYPE_0>::GetFragOutput()
 {
 	return "\toutColor = vec4(1.0);";
 }
 
-template<>
+template <>
 inline const std::string RenderBufferShader<VA_TYPE_C>::GetFragOutput()
 {
 	return "\toutColor = vcolor;";
 }
 
-template<>
+template <>
 inline const std::string RenderBufferShader<VA_TYPE_N>::GetFragOutput()
 {
 	return "\toutColor = vec4(1.0);";
 }
 
-template<>
+template <>
 inline const std::string RenderBufferShader<VA_TYPE_T>::GetFragOutput()
 {
 	return "\toutColor = texture(tex, vuv);";
 }
 
-template<>
+template <>
 inline const std::string RenderBufferShader<VA_TYPE_T4>::GetFragOutput()
 {
 	return "\toutColor = texture(tex, vuv.xy);";
 }
 
-template<>
+template <>
 inline const std::string RenderBufferShader<VA_TYPE_TN>::GetFragOutput()
 {
 	return "\toutColor = texture(tex, vuv);";
 }
 
-template<>
+template <>
 inline const std::string RenderBufferShader<VA_TYPE_TC>::GetFragOutput()
 {
 	return "\toutColor = vcolor * texture(tex, vuv);";
 }
 
-template<>
+template <>
 inline const std::string RenderBufferShader<VA_TYPE_TC3>::GetFragOutput()
 {
 	return "\toutColor = vcolor * texture(tex, vuv);";
 }
 
-template<>
+template <>
 inline const std::string RenderBufferShader<VA_TYPE_PROJ>::GetFragOutput()
 {
-	assert(false); //change tex type to sampler2darray
+	assert(false); // change tex type to sampler2darray
 	return "\toutColor = vcolor * texture(tex, vuvw);";
 }
 
-template<>
+template <>
 inline const std::string RenderBufferShader<VA_TYPE_TNT>::GetFragOutput()
 {
 	return "\toutColor = texture(tex, vuv);";
 }
 
-template<>
+template <>
 inline const std::string RenderBufferShader<VA_TYPE_2D0>::GetFragOutput()
 {
 	return "\toutColor = vec4(1.0);";
 }
 
-template<>
+template <>
 inline const std::string RenderBufferShader<VA_TYPE_2DC>::GetFragOutput()
 {
 	return "\toutColor = vcolor;";
 }
 
-template<>
+template <>
 inline const std::string RenderBufferShader<VA_TYPE_2DT>::GetFragOutput()
 {
 	return "\toutColor = texture(tex, vuv);";
 }
 
-template<>
+template <>
 inline const std::string RenderBufferShader<VA_TYPE_2DTC>::GetFragOutput()
 {
 	return "\toutColor = vcolor * texture(tex, vuv);";
 }
 
-template<>
+template <>
 inline const std::string RenderBufferShader<VA_TYPE_2DTC3>::GetFragOutput()
 {
 	return "\toutColor = vcolor * texture(tex, vuv);";
 }
 
 template <typename T>
-class TypedRenderBuffer : public RenderBuffer {
+class TypedRenderBuffer : public RenderBuffer
+{
 public:
 	using VertType = T;
 	using IndcType = uint32_t;
 
 	TypedRenderBuffer()
-		: RenderBuffer()
-		, vertCount0{ 0 }
-		, elemCount0{ 0 }
-		, bufferType{ bufferTypeDefault }
-		, optimizeForStreaming{ true }
-	{}
+		: RenderBuffer(), vertCount0{0}, elemCount0{0}, bufferType{bufferTypeDefault}, optimizeForStreaming{true}
+	{
+	}
 	TypedRenderBuffer(size_t vertCount0_, size_t elemCount0_, IStreamBufferConcept::Types bufferType_ = bufferTypeDefault, bool optimizeForStreaming_ = true)
-		: RenderBuffer({ vertCount0_, elemCount0_ })
-		, vertCount0 { vertCount0_ }
-		, elemCount0 { elemCount0_ }
-		, bufferType { bufferType_ }
-		, optimizeForStreaming{ optimizeForStreaming_ }
+		: RenderBuffer({vertCount0_, elemCount0_}), vertCount0{vertCount0_}, elemCount0{elemCount0_}, bufferType{bufferType_}, optimizeForStreaming{optimizeForStreaming_}
 	{
 		verts.reserve(vertCount0);
 		indcs.reserve(elemCount0);
 	}
 
-	~TypedRenderBuffer() override {
+	~TypedRenderBuffer() override
+	{
 		verts = {};
 		indcs = {};
 		vbo = {};
 		ebo = {};
 	}
 
-	void Clear() {
-		maxSize = std::max(maxSize, { verts.size(), indcs.size() });
+	void Clear()
+	{
+		maxSize = std::max(maxSize, {verts.size(), indcs.size()});
 
 		// clear
 		verts.clear();
@@ -408,10 +424,11 @@ public:
 		vboUploadIndex = 0;
 		eboUploadIndex = 0;
 
-		numSubmits = { 0, 0 };
+		numSubmits = {0, 0};
 	}
 
-	void SwapBuffer() override {
+	void SwapBuffer() override
+	{
 		if (readOnly)
 			return;
 
@@ -423,19 +440,22 @@ public:
 		Clear();
 	}
 
-	const char* GetBufferName() const override {
+	const char *GetBufferName() const override
+	{
 		return vboTypeName;
 	}
 
-	std::array<size_t, 2> GetBuffersCapacity() const override {
-		return std::array{ verts.capacity(), indcs.capacity() };
+	std::array<size_t, 2> GetBuffersCapacity() const override
+	{
+		return std::array{verts.capacity(), indcs.capacity()};
 	}
 
-	TypedRenderBuffer(const TypedRenderBuffer<T>& trdb) = delete;
-	TypedRenderBuffer(TypedRenderBuffer<T>&& trdb) noexcept { *this = std::move(trdb); }
+	TypedRenderBuffer(const TypedRenderBuffer<T> &trdb) = delete;
+	TypedRenderBuffer(TypedRenderBuffer<T> &&trdb) noexcept { *this = std::move(trdb); }
 
-	TypedRenderBuffer<T>& operator = (const TypedRenderBuffer<T>& rhs) = delete;
-	TypedRenderBuffer<T>& operator = (TypedRenderBuffer<T>&& rhs) noexcept {
+	TypedRenderBuffer<T> &operator=(const TypedRenderBuffer<T> &rhs) = delete;
+	TypedRenderBuffer<T> &operator=(TypedRenderBuffer<T> &&rhs) noexcept
+	{
 		vertCount0 = rhs.vertCount0;
 		elemCount0 = rhs.elemCount0;
 		bufferType = rhs.bufferType;
@@ -464,132 +484,154 @@ public:
 		return *this;
 	}
 
-	IndcType GetBaseVertex() const {
+	IndcType GetBaseVertex() const
+	{
 		return static_cast<IndcType>(verts.size());
 	}
 
-	void AddVertex(VertType&& v) {
+	void AddVertex(VertType &&v)
+	{
 		if (readOnly)
 			return;
 
 		verts.emplace_back(v);
 	}
-	template<typename Iterator>
-	void AddVertices(Iterator begin, Iterator end) {
+	template <typename Iterator>
+	void AddVertices(Iterator begin, Iterator end)
+	{
 		if (readOnly)
 			return;
 
 		verts.insert(verts.end(), begin, end);
 	}
-	void AddVertices(std::initializer_list<VertType>&& vertices) {
+	void AddVertices(std::initializer_list<VertType> &&vertices)
+	{
 		AddVertices(vertices.begin(), vertices.end());
 	}
-	void AddVertices(const std::vector<VertType>& vertices) {
+	void AddVertices(const std::vector<VertType> &vertices)
+	{
 		AddVertices(vertices.begin(), vertices.end());
 	}
-	//106.0 compat
-	void SafeAppend(VertType&& v) { AddVertex(std::forward<VertType&&>(v)); }
+	// 106.0 compat
+	void SafeAppend(VertType &&v) { AddVertex(std::forward<VertType &&>(v)); }
 
-	void UpdateVertex(VertType&& v, size_t at) {
+	void UpdateVertex(VertType &&v, size_t at)
+	{
 		if (readOnly)
 			return;
 
 		assert(at < verts.size());
 		verts.emplace(at, v);
 	}
-	void UpdateVertices(const std::vector<VertType>& vs, size_t at) {
+	void UpdateVertices(const std::vector<VertType> &vs, size_t at)
+	{
 		if (readOnly)
 			return;
 
 		size_t cnt = 0;
-		for (auto&& v : vs) {
+		for (auto &&v : vs)
+		{
 			assert(cnt + at < verts.size());
 			verts.emplace(cnt + at, v);
 			++cnt;
 		}
 	}
-	void UpdateVertices(std::initializer_list<VertType>&& vs, size_t at) {
+	void UpdateVertices(std::initializer_list<VertType> &&vs, size_t at)
+	{
 		if (readOnly)
 			return;
 
 		size_t cnt = 0;
-		for (auto&& v : vs) {
+		for (auto &&v : vs)
+		{
 			assert(cnt + at < verts.size());
 			verts.emplace(cnt + at, v);
 			++cnt;
 		}
 	}
 
-	template<typename Iterator>
-	void AddIndices(Iterator begin, Iterator end, int32_t vertBias = 0) {
+	template <typename Iterator>
+	void AddIndices(Iterator begin, Iterator end, int32_t vertBias = 0)
+	{
 		if (readOnly)
 			return;
 
-		const auto transformFunc = [vertBias](IndcType origIndex) { return origIndex + vertBias; };
+		const auto transformFunc = [vertBias](IndcType origIndex)
+		{ return origIndex + vertBias; };
 		std::transform(begin, end, std::back_inserter(indcs), transformFunc);
 	}
-	void AddIndices(const std::vector<IndcType>& indices, int32_t vertBias = 0) {
+	void AddIndices(const std::vector<IndcType> &indices, int32_t vertBias = 0)
+	{
 		AddIndices(indices.begin(), indices.end(), vertBias);
 	}
-	void AddIndices(std::initializer_list<IndcType>& indices, int32_t vertBias = 0) {
+	void AddIndices(std::initializer_list<IndcType> &indices, int32_t vertBias = 0)
+	{
 		AddIndices(indices.begin(), indices.end(), vertBias);
 	}
 
 	void SetReadonly() { readOnly = true; }
 
 	// render with DrawElements(GL_TRIANGLES)
-	void AddQuadTriangles(const std::vector<VertType>& vs) {
+	void AddQuadTriangles(const std::vector<VertType> &vs)
+	{
 		if (vs.empty())
 			return;
 
 		assert(vs.size() % 4 == 0);
-		for (size_t i = 0; i < vs.size(); i += 4) {
+		for (size_t i = 0; i < vs.size(); i += 4)
+		{
 			AddQuadTrianglesImpl(vs[i + 0], vs[i + 1], vs[i + 2], vs[i + 3]);
 		}
 	}
-	template<std::size_t N>
-	void AddQuadTriangles(const VertType(&vs)[N]) {
+	template <std::size_t N>
+	void AddQuadTriangles(const VertType (&vs)[N])
+	{
 		static_assert(N == 4);
 		AddQuadTrianglesImpl(vs[0], vs[1], vs[2], vs[3]);
 	}
-	void AddQuadTriangles(VertType&& tl, VertType&& tr, VertType&& br, VertType&& bl) { AddQuadTrianglesImpl(tl, tr, br, bl); }
-	void AddQuadTriangles(const VertType& tl, const VertType& tr, const VertType& br, const VertType& bl) { AddQuadTrianglesImpl(std::move(tl), std::move(tr), std::move(br), std::move(bl)); }
+	void AddQuadTriangles(VertType &&tl, VertType &&tr, VertType &&br, VertType &&bl) { AddQuadTrianglesImpl(tl, tr, br, bl); }
+	void AddQuadTriangles(const VertType &tl, const VertType &tr, const VertType &br, const VertType &bl) { AddQuadTrianglesImpl(std::move(tl), std::move(tr), std::move(br), std::move(bl)); }
 
 	// render with DrawElements(GL_LINES)
-	void AddQuadLines(const std::vector<VertType>& vs) {
+	void AddQuadLines(const std::vector<VertType> &vs)
+	{
 		if (vs.empty())
 			return;
 
 		assert(vs.size() % 4 == 0);
-		for (size_t i = 0; i < vs.size(); i += 4) {
+		for (size_t i = 0; i < vs.size(); i += 4)
+		{
 			AddQuadLinesImpl(vs[i + 0], vs[i + 1], vs[i + 2], vs[i + 3]);
 		}
 	}
-	template<std::size_t N>
-	void AddQuadLines(const VertType(&vs)[N]) {
+	template <std::size_t N>
+	void AddQuadLines(const VertType (&vs)[N])
+	{
 		static_assert(N == 4);
 		AddQuadLinesImpl(vs[0], vs[1], vs[2], vs[3]);
 	}
-	void AddQuadLines(VertType&& tl, VertType&& tr, VertType&& br, VertType&& bl) { AddQuadLinesImpl(tl, tr, br, bl); }
-	void AddQuadLines(const VertType& tl, const VertType& tr, const VertType& br, const VertType& bl) { AddQuadLinesImpl(std::move(tl), std::move(tr), std::move(br), std::move(bl)); }
+	void AddQuadLines(VertType &&tl, VertType &&tr, VertType &&br, VertType &&bl) { AddQuadLinesImpl(tl, tr, br, bl); }
+	void AddQuadLines(const VertType &tl, const VertType &tr, const VertType &br, const VertType &bl) { AddQuadLinesImpl(std::move(tl), std::move(tr), std::move(br), std::move(bl)); }
 
 	// render with DrawElements(GL_TRIANGLES)
-	template<std::size_t N>
-	void MakeQuadsTriangles(const VertType(&vs)[N], int xDiv, int yDiv) {
+	template <std::size_t N>
+	void MakeQuadsTriangles(const VertType (&vs)[N], int xDiv, int yDiv)
+	{
 		static_assert(N == 4);
 		MakeQuadsTrianglesImpl(vs[0], vs[1], vs[2], vs[3], xDiv, yDiv);
 	}
-	void MakeQuadsTriangles(VertType&& tl, VertType&& tr, VertType&& br, VertType&& bl, int xDiv, int yDiv) { MakeQuadsTrianglesImpl(tl, tr, br, bl, xDiv, yDiv); }
-	void MakeQuadsTriangles(const VertType& tl, const VertType& tr, const VertType& br, const VertType& bl, int xDiv, int yDiv) { MakeQuadsTrianglesImpl(std::move(tl), std::move(tr), std::move(br), std::move(bl), xDiv, yDiv); }
+	void MakeQuadsTriangles(VertType &&tl, VertType &&tr, VertType &&br, VertType &&bl, int xDiv, int yDiv) { MakeQuadsTrianglesImpl(tl, tr, br, bl, xDiv, yDiv); }
+	void MakeQuadsTriangles(const VertType &tl, const VertType &tr, const VertType &br, const VertType &bl, int xDiv, int yDiv) { MakeQuadsTrianglesImpl(std::move(tl), std::move(tr), std::move(br), std::move(bl), xDiv, yDiv); }
 
 	// render with DrawArrays(GL_LINE_LOOP)
-	template<std::size_t N>
-	void MakeQuadsLines(const VertType(&vs)[N], int xDiv, int yDiv) {
+	template <std::size_t N>
+	void MakeQuadsLines(const VertType (&vs)[N], int xDiv, int yDiv)
+	{
 		static_assert(N == 4);
 		MakeQuadsLinesImpl(vs[0], vs[1], vs[2], vs[3], xDiv, yDiv);
 	}
-	void MakeQuadsLines(VertType&& tl, VertType&& tr, VertType&& br, VertType&& bl, int xDiv, int yDiv) { MakeQuadsLinesImpl(tl, tr, br, bl, xDiv, yDiv); }
-	void MakeQuadsLines(const VertType& tl, const VertType& tr, const VertType& br, const VertType& bl, int xDiv, int yDiv) { MakeQuadsLinesImpl(std::move(tl), std::move(tr), std::move(br), std::move(bl), xDiv, yDiv); }
+	void MakeQuadsLines(VertType &&tl, VertType &&tr, VertType &&br, VertType &&bl, int xDiv, int yDiv) { MakeQuadsLinesImpl(tl, tr, br, bl, xDiv, yDiv); }
+	void MakeQuadsLines(const VertType &tl, const VertType &tr, const VertType &br, const VertType &bl, int xDiv, int yDiv) { MakeQuadsLinesImpl(std::move(tl), std::move(tr), std::move(br), std::move(bl), xDiv, yDiv); }
 
 	void UploadVBO();
 	void UploadEBO();
@@ -601,18 +643,21 @@ public:
 
 	TypedRenderBuffer<T> CopyCurrent(bool readOnly) const;
 
-	bool ShouldSubmit(bool indexed) const {
+	bool ShouldSubmit(bool indexed) const
+	{
 		if (indexed)
 			return ((indcs.size() - eboUploadIndex) > 0 || (indcs.size() - eboStartIndex) > 0);
 		else
 			return ((verts.size() - vboUploadIndex) > 0 || (verts.size() - vboStartIndex) > 0);
 	}
-	bool ShouldSubmit() const {
+	bool ShouldSubmit() const
+	{
 		return ShouldSubmit(false) || ShouldSubmit(true);
 	}
 
-	//develop compat
-	void Submit(uint32_t mode) {
+	// develop compat
+	void Submit(uint32_t mode)
+	{
 		DrawElements(mode);
 		DrawArrays(mode);
 	}
@@ -620,65 +665,66 @@ public:
 	size_t SumElems() const override { return verts.size(); }
 	size_t SumIndcs() const override { return indcs.size(); }
 
-	const std::vector<VertType>& GetElems() const { return verts; }
-	      std::vector<VertType>& GetElems()       { return verts; }
-	const std::vector<IndcType>& GetIndcs() const { return indcs; }
-	      std::vector<IndcType>& GetIndcs()       { return indcs; }
+	const std::vector<VertType> &GetElems() const { return verts; }
+	std::vector<VertType> &GetElems() { return verts; }
+	const std::vector<IndcType> &GetIndcs() const { return indcs; }
+	std::vector<IndcType> &GetIndcs() { return indcs; }
 
 	size_t NumSubmits(bool indexed) const override { return numSubmits[indexed]; }
 
-	//check everything is uploaded and submitted
-	void AssertSubmission() const {
+	// check everything is uploaded and submitted
+	void AssertSubmission() const
+	{
 		assert(
 			(indcs.size() - eboUploadIndex == 0) &&
 			(verts.size() - vboUploadIndex == 0) &&
-			(indcs.size() - eboStartIndex  == 0) &&
-			(verts.size() - vboStartIndex  == 0)
-		);
+			(indcs.size() - eboStartIndex == 0) &&
+			(verts.size() - vboStartIndex == 0));
 	}
 
-	static Shader::IProgramObject& GetShader() { return shader.GetShader(); }
+	static Shader::IProgramObject &GetShader() { return shader.GetShader(); }
+
 private:
-	template<
+	template <
 		typename TT = VertType,
-		typename = typename std::enable_if_t<std::is_same_v<VertType, typename std::decay_t<T>>>
-	>
-	void AddQuadTrianglesImpl(TT&& tl, TT&& tr, TT&& br, TT&& bl) {
+		typename = typename std::enable_if_t<std::is_same_v<VertType, typename std::decay_t<T>>>>
+	void AddQuadTrianglesImpl(TT &&tl, TT &&tr, TT &&br, TT &&bl)
+	{
 		if (readOnly)
 			return;
 
 		const IndcType baseIndex = static_cast<IndcType>(verts.size());
 
-		verts.emplace_back(tl); //0
-		verts.emplace_back(tr); //1
-		verts.emplace_back(br); //2
-		verts.emplace_back(bl); //3
+		verts.emplace_back(tl); // 0
+		verts.emplace_back(tr); // 1
+		verts.emplace_back(br); // 2
+		verts.emplace_back(bl); // 3
 
-		//triangle 1 {tl, tr, bl}
+		// triangle 1 {tl, tr, bl}
 		indcs.emplace_back(baseIndex + 3);
 		indcs.emplace_back(baseIndex + 0);
 		indcs.emplace_back(baseIndex + 1);
 
-		//triangle 2 {bl, tr, br}
+		// triangle 2 {bl, tr, br}
 		indcs.emplace_back(baseIndex + 3);
 		indcs.emplace_back(baseIndex + 1);
 		indcs.emplace_back(baseIndex + 2);
 	}
 
-	template<
+	template <
 		typename TT = VertType,
-		typename = typename std::enable_if_t<std::is_same_v<VertType, typename std::decay_t<T>>>
-	>
-	void AddQuadLinesImpl(TT&& tl, TT&& tr, TT&& br, TT&& bl) {
+		typename = typename std::enable_if_t<std::is_same_v<VertType, typename std::decay_t<T>>>>
+	void AddQuadLinesImpl(TT &&tl, TT &&tr, TT &&br, TT &&bl)
+	{
 		if (readOnly)
 			return;
 
 		const IndcType baseIndex = static_cast<IndcType>(verts.size());
 
-		verts.emplace_back(tl); //0
-		verts.emplace_back(tr); //1
-		verts.emplace_back(br); //2
-		verts.emplace_back(bl); //3
+		verts.emplace_back(tl); // 0
+		verts.emplace_back(tr); // 1
+		verts.emplace_back(br); // 2
+		verts.emplace_back(bl); // 3
 
 		indcs.emplace_back(baseIndex + 0);
 		indcs.emplace_back(baseIndex + 1);
@@ -690,23 +736,24 @@ private:
 		indcs.emplace_back(baseIndex + 0);
 	}
 
-
-	template<
+	template <
 		typename TT = VertType,
-		typename = typename std::enable_if_t<std::is_same_v<VertType, typename std::decay_t<T>>>
-	>
-	void MakeQuadsTrianglesImpl(TT&& tl, TT&& tr, TT&& br, TT&& bl, int xDiv, int yDiv) {
+		typename = typename std::enable_if_t<std::is_same_v<VertType, typename std::decay_t<T>>>>
+	void MakeQuadsTrianglesImpl(TT &&tl, TT &&tr, TT &&br, TT &&bl, int xDiv, int yDiv)
+	{
 		if (readOnly)
 			return;
 
 		const IndcType baseIndex = static_cast<IndcType>(verts.size());
 		float ratio;
 
-		for (int y = 0; y <= yDiv; ++y) {
+		for (int y = 0; y <= yDiv; ++y)
+		{
 			ratio = static_cast<float>(y) / static_cast<float>(yDiv);
 			const VertType ml = mix(tl, bl, ratio);
 			const VertType mr = mix(tr, br, ratio);
-			for (int x = 0; x <= xDiv; ++x) {
+			for (int x = 0; x <= xDiv; ++x)
+			{
 				ratio = static_cast<float>(x) / static_cast<float>(xDiv);
 
 				verts.emplace_back(mix(ml, mr, ratio));
@@ -714,7 +761,8 @@ private:
 		}
 
 		for (int y = 0; y <= yDiv - 1; ++y)
-			for (int x = 0; x <= xDiv - 1; ++x) {
+			for (int x = 0; x <= xDiv - 1; ++x)
+			{
 				const IndcType tli = (xDiv + 1) * (y + 0) + (x + 0) + baseIndex;
 				const IndcType tri = (xDiv + 1) * (y + 0) + (x + 1) + baseIndex;
 				const IndcType bli = (xDiv + 1) * (y + 1) + (x + 0) + baseIndex;
@@ -732,35 +780,37 @@ private:
 				indcs.emplace_back(tri);
 				indcs.emplace_back(bri);
 				*/
-				//triangle 1 {tl, bl, tr}
+				// triangle 1 {tl, bl, tr}
 				indcs.emplace_back(tli);
 				indcs.emplace_back(bli);
 				indcs.emplace_back(tri);
 
-				//triangle 2 {tr, bl, br}
+				// triangle 2 {tr, bl, br}
 				indcs.emplace_back(tri);
 				indcs.emplace_back(bli);
 				indcs.emplace_back(bri);
 			}
 	}
 
-	template<
+	template <
 		typename TT = VertType,
-		typename = typename std::enable_if_t<std::is_same_v<VertType, typename std::decay_t<T>>>
-	>
-	void MakeQuadsLinesImpl(TT&& tl, TT&& tr, TT&& br, TT&& bl, int xDiv, int yDiv) {
+		typename = typename std::enable_if_t<std::is_same_v<VertType, typename std::decay_t<T>>>>
+	void MakeQuadsLinesImpl(TT &&tl, TT &&tr, TT &&br, TT &&bl, int xDiv, int yDiv)
+	{
 		if (readOnly)
 			return;
 
 		float ratio;
 
-		for (int x = 0; x < yDiv; ++x) {
+		for (int x = 0; x < yDiv; ++x)
+		{
 			ratio = static_cast<float>(x) / static_cast<float>(xDiv);
 			verts.emplace_back(mix(tl, tr, ratio));
 			verts.emplace_back(mix(bl, br, ratio));
 		}
 
-		for (int y = 0; y < yDiv; ++y) {
+		for (int y = 0; y < yDiv; ++y)
+		{
 			ratio = static_cast<float>(y) / static_cast<float>(yDiv);
 			verts.emplace_back(mix(tl, bl, ratio));
 			verts.emplace_back(mix(tr, br, ratio));
@@ -775,6 +825,7 @@ private:
 	void UploadProjectileVertexBuffer();
 	void UploadProjectileIndexBuffer();
 	static gfx::PrimitiveTopology ToPrimitiveTopology(uint32_t mode);
+
 private:
 	size_t vertCount0;
 	size_t elemCount0;
@@ -802,14 +853,13 @@ private:
 
 	inline static RenderBufferShader<T> shader;
 
-	static constexpr const char* vboTypeName = spring::TypeToCStr<VertType>();
+	static constexpr const char *vboTypeName = spring::TypeToCStr<VertType>();
 	static constexpr IStreamBufferConcept::Types bufferTypeDefault = IStreamBufferConcept::Types::SB_BUFFERSUBDATA;
 };
 
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-template<typename T>
+template <typename T>
 inline void TypedRenderBuffer<T>::UploadVBO()
 {
 	size_t elemsCount = (verts.size() - vboUploadIndex);
@@ -818,15 +868,16 @@ inline void TypedRenderBuffer<T>::UploadVBO()
 
 	CondInit();
 
-	if (verts.size() > vertCount0) {
+	if (verts.size() > vertCount0)
+	{
 		LOG_L(L_DEBUG, "[TypedRenderBuffer<%s>::%s] Increase the number of elements here!", vboTypeName, __func__);
 		vbo->Resize(static_cast<uint32_t>(verts.capacity()));
 		vertCount0 = verts.capacity();
 	}
 
-	//update on the GPU
-	const VertType* clientPtr = verts.data();
-	VertType* mappedPtr = vbo->Map(clientPtr, static_cast<uint32_t>(vboUploadIndex), static_cast<uint32_t>(elemsCount));
+	// update on the GPU
+	const VertType *clientPtr = verts.data();
+	VertType *mappedPtr = vbo->Map(clientPtr, static_cast<uint32_t>(vboUploadIndex), static_cast<uint32_t>(elemsCount));
 
 	if (!vbo->HasClientPtr())
 		memcpy(mappedPtr, clientPtr + vboUploadIndex, elemsCount * sizeof(VertType));
@@ -835,7 +886,7 @@ inline void TypedRenderBuffer<T>::UploadVBO()
 	vboUploadIndex += elemsCount;
 }
 
-template<typename T>
+template <typename T>
 inline void TypedRenderBuffer<T>::UploadEBO()
 {
 	size_t elemsCount = (indcs.size() - eboUploadIndex);
@@ -844,15 +895,16 @@ inline void TypedRenderBuffer<T>::UploadEBO()
 
 	CondInit();
 
-	if (indcs.size() > elemCount0) {
+	if (indcs.size() > elemCount0)
+	{
 		LOG_L(L_DEBUG, "[TypedRenderBuffer<%s>::%s] Increase the number of elements here!", vboTypeName, __func__);
 		ebo->Resize(static_cast<uint32_t>(indcs.capacity()));
 		elemCount0 = indcs.capacity();
 	}
 
-	//update on the GPU
-	const IndcType* clientPtr = indcs.data();
-	IndcType* mappedPtr = ebo->Map(clientPtr, static_cast<uint32_t>(eboUploadIndex), static_cast<uint32_t>(elemsCount));
+	// update on the GPU
+	const IndcType *clientPtr = indcs.data();
+	IndcType *mappedPtr = ebo->Map(clientPtr, static_cast<uint32_t>(eboUploadIndex), static_cast<uint32_t>(elemsCount));
 
 	if (!ebo->HasClientPtr())
 		memcpy(mappedPtr, clientPtr + eboUploadIndex, elemsCount * sizeof(IndcType));
@@ -863,20 +915,20 @@ inline void TypedRenderBuffer<T>::UploadEBO()
 	return;
 }
 
-template<typename T>
+template <typename T>
 inline void TypedRenderBuffer<T>::AssertBoundShader() const
 {
 #if defined(DEBUG) && !defined(HEADLESS)
-	auto* shader = shaderHandler->GetCurrentlyBoundProgram();
+	auto *shader = shaderHandler->GetCurrentlyBoundProgram();
 	assert(shader);
 	assert(shader->IsValid());
 #endif
 }
 
-template<typename T>
+template <typename T>
 inline void TypedRenderBuffer<T>::DrawArrays(uint32_t mode, bool rewind)
 {
-	assert((indcs.size() - eboStartIndex) == 0); //otherwise DrawArrays is an invalid submission type
+	assert((indcs.size() - eboStartIndex) == 0); // otherwise DrawArrays is an invalid submission type
 	AssertBoundShader();
 
 	UploadVBO();
@@ -897,12 +949,13 @@ inline void TypedRenderBuffer<T>::DrawArrays(uint32_t mode, bool rewind)
 	numSubmits[0] += 1;
 }
 
-template<typename T>
+template <typename T>
 inline void TypedRenderBuffer<T>::DrawElements(uint32_t mode, bool rewind)
 {
 	AssertBoundShader();
 
-	if constexpr (std::is_same_v<VertType, VA_TYPE_PROJ>) {
+	if constexpr (std::is_same_v<VertType, VA_TYPE_PROJ>)
+	{
 		if (DrawElementsBackend(mode, rewind))
 			return;
 	}
@@ -912,20 +965,22 @@ inline void TypedRenderBuffer<T>::DrawElements(uint32_t mode, bool rewind)
 
 	size_t indcsCount = (indcs.size() - eboStartIndex);
 	size_t vertsCount = (verts.size() - vboStartIndex);
-	if (indcsCount == 0) {
+	if (indcsCount == 0)
+	{
 		return;
 	}
 
-	#define BUFFER_OFFSET(T, n) (reinterpret_cast<void*>(sizeof(T) * (n)))
+#define BUFFER_OFFSET(T, n) (reinterpret_cast<void *>(sizeof(T) * (n)))
 #ifndef HEADLESS
 	assert(vao.GetIdRaw() > 0);
 #endif
 	vao.Bind();
 	glDrawElements(mode, static_cast<GLsizei>(indcsCount), GL_UNSIGNED_INT, BUFFER_OFFSET(uint32_t, ebo->BufferElemOffset() + eboStartIndex));
 	vao.Unbind();
-	#undef BUFFER_OFFSET
+#undef BUFFER_OFFSET
 
-	if (rewind && !readOnly) {
+	if (rewind && !readOnly)
+	{
 		eboStartIndex += indcsCount;
 		vboStartIndex += vertsCount;
 	}
@@ -935,30 +990,35 @@ inline void TypedRenderBuffer<T>::DrawElements(uint32_t mode, bool rewind)
 	numSubmits[1] += 1;
 }
 
-template<typename T>
+template <typename T>
 inline gfx::PrimitiveTopology TypedRenderBuffer<T>::ToPrimitiveTopology(uint32_t mode)
 {
-	switch (mode) {
-		case GL_LINES: return gfx::PrimitiveTopology::Lines;
-		case GL_LINE_STRIP: return gfx::PrimitiveTopology::LineStrip;
-		case GL_TRIANGLES:
-		default:
-			return gfx::PrimitiveTopology::Triangles;
+	switch (mode)
+	{
+	case GL_LINES:
+		return gfx::PrimitiveTopology::Lines;
+	case GL_LINE_STRIP:
+		return gfx::PrimitiveTopology::LineStrip;
+	case GL_TRIANGLES:
+	default:
+		return gfx::PrimitiveTopology::Triangles;
 	}
 }
 
-template<typename T>
+template <typename T>
 inline bool TypedRenderBuffer<T>::EnsureProjectileBackendObjects()
 {
-	if constexpr (!std::is_same_v<VertType, VA_TYPE_PROJ>) {
+	if constexpr (!std::is_same_v<VertType, VA_TYPE_PROJ>)
+	{
 		return false;
 	}
 
-	auto* backend = (globalRendering != nullptr) ? globalRendering->graphicsBackend.get() : nullptr;
+	auto *backend = (globalRendering != nullptr) ? globalRendering->graphicsBackend.get() : nullptr;
 	if (backend == nullptr)
 		return false;
 
-	if (projectileVBO == nullptr) {
+	if (projectileVBO == nullptr)
+	{
 		gfx::BufferCreateInfo vbCI;
 		vbCI.sizeBytes = vertCount0 * sizeof(VertType);
 		vbCI.usage = gfx::BufferUsage::Stream;
@@ -968,7 +1028,8 @@ inline bool TypedRenderBuffer<T>::EnsureProjectileBackendObjects()
 		projectileVBO = backend->CreateVertexBuffer(vbCI);
 	}
 
-	if (projectileIBO == nullptr) {
+	if (projectileIBO == nullptr)
+	{
 		gfx::BufferCreateInfo ibCI;
 		ibCI.sizeBytes = elemCount0 * sizeof(IndcType);
 		ibCI.usage = gfx::BufferUsage::Stream;
@@ -981,7 +1042,8 @@ inline bool TypedRenderBuffer<T>::EnsureProjectileBackendObjects()
 	if ((projectileVBO == nullptr) || (projectileIBO == nullptr))
 		return false;
 
-	if (projectileVAO == nullptr) {
+	if (projectileVAO == nullptr)
+	{
 		gfx::VertexLayoutDesc layout;
 		layout.bindings = {
 			gfx::VertexBufferBindingDesc{
@@ -1010,17 +1072,19 @@ inline bool TypedRenderBuffer<T>::EnsureProjectileBackendObjects()
 	return (projectileVAO != nullptr);
 }
 
-template<typename T>
+template <typename T>
 inline void TypedRenderBuffer<T>::UploadProjectileVertexBuffer()
 {
-	if constexpr (!std::is_same_v<VertType, VA_TYPE_PROJ>) {
+	if constexpr (!std::is_same_v<VertType, VA_TYPE_PROJ>)
+	{
 		return;
 	}
 
 	if (!EnsureProjectileBackendObjects())
 		return;
 
-	if (verts.size() > vertCount0) {
+	if (verts.size() > vertCount0)
+	{
 		LOG_L(L_DEBUG, "[TypedRenderBuffer<%s>::%s] Increase the number of elements here!", vboTypeName, __func__);
 		vertCount0 = verts.capacity();
 		projectileVBO->Resize(vertCount0 * sizeof(VertType), true);
@@ -1034,35 +1098,41 @@ inline void TypedRenderBuffer<T>::UploadProjectileVertexBuffer()
 	const size_t dstOffsetBytes = vboUploadIndex * sizeof(VertType);
 	const size_t updateSizeBytes = elemsCount * sizeof(VertType);
 
-	if (projectileVBO->IsMappable()) {
+	if (projectileVBO->IsMappable())
+	{
 		auto mappedBytes = projectileVBO->MapWrite(dstOffsetBytes, updateSizeBytes);
 
-		if (!mappedBytes.empty()) {
+		if (!mappedBytes.empty())
+		{
 			std::memcpy(mappedBytes.data(), uploadData.data(), updateSizeBytes);
 			projectileVBO->UnmapWrite();
 		}
-		else {
+		else
+		{
 			projectileVBO->Update(std::as_bytes(uploadData), dstOffsetBytes);
 		}
 	}
-	else {
+	else
+	{
 		projectileVBO->Update(std::as_bytes(uploadData), dstOffsetBytes);
 	}
 
 	vboUploadIndex += elemsCount;
 }
 
-template<typename T>
+template <typename T>
 inline void TypedRenderBuffer<T>::UploadProjectileIndexBuffer()
 {
-	if constexpr (!std::is_same_v<VertType, VA_TYPE_PROJ>) {
+	if constexpr (!std::is_same_v<VertType, VA_TYPE_PROJ>)
+	{
 		return;
 	}
 
 	if (!EnsureProjectileBackendObjects())
 		return;
 
-	if (indcs.size() > elemCount0) {
+	if (indcs.size() > elemCount0)
+	{
 		LOG_L(L_DEBUG, "[TypedRenderBuffer<%s>::%s] Increase the number of elements here!", vboTypeName, __func__);
 		elemCount0 = indcs.capacity();
 		projectileIBO->Resize(elemCount0 * sizeof(IndcType), true);
@@ -1079,14 +1149,15 @@ inline void TypedRenderBuffer<T>::UploadProjectileIndexBuffer()
 	eboUploadIndex += elemsCount;
 }
 
-template<typename T>
+template <typename T>
 inline bool TypedRenderBuffer<T>::DrawElementsBackend(uint32_t mode, bool rewind)
 {
-	if constexpr (!std::is_same_v<VertType, VA_TYPE_PROJ>) {
+	if constexpr (!std::is_same_v<VertType, VA_TYPE_PROJ>)
+	{
 		return false;
 	}
 
-	auto* backend = (globalRendering != nullptr) ? globalRendering->graphicsBackend.get() : nullptr;
+	auto *backend = (globalRendering != nullptr) ? globalRendering->graphicsBackend.get() : nullptr;
 	if ((backend == nullptr) || !EnsureProjectileBackendObjects())
 		return false;
 
@@ -1100,15 +1171,15 @@ inline bool TypedRenderBuffer<T>::DrawElementsBackend(uint32_t mode, bool rewind
 		return true;
 
 	constexpr size_t maxIndexableCount = static_cast<size_t>(std::numeric_limits<std::uint32_t>::max());
-	if ((indcsCount > maxIndexableCount) || (eboStartIndex > maxIndexableCount)) {
+	if ((indcsCount > maxIndexableCount) || (eboStartIndex > maxIndexableCount))
+	{
 		LOG_L(
 			L_WARNING,
 			"[TypedRenderBuffer<%s>::%s] Draw range exceeds uint32: indexCount=%zu firstIndex=%zu",
 			vboTypeName,
 			__func__,
 			indcsCount,
-			eboStartIndex
-		);
+			eboStartIndex);
 		return true;
 	}
 
@@ -1120,10 +1191,10 @@ inline bool TypedRenderBuffer<T>::DrawElementsBackend(uint32_t mode, bool rewind
 			.firstIndex = static_cast<std::uint32_t>(eboStartIndex),
 			.baseVertex = 0,
 		},
-		gfx::IndexElementType::UInt32
-	);
+		gfx::IndexElementType::UInt32);
 
-	if (rewind && !readOnly) {
+	if (rewind && !readOnly)
+	{
 		eboStartIndex += indcsCount;
 		vboStartIndex += vertsCount;
 	}
@@ -1134,7 +1205,7 @@ inline bool TypedRenderBuffer<T>::DrawElementsBackend(uint32_t mode, bool rewind
 	return true;
 }
 
-template<typename T>
+template <typename T>
 inline void TypedRenderBuffer<T>::DropCurrent()
 {
 	if (readOnly)
@@ -1142,29 +1213,31 @@ inline void TypedRenderBuffer<T>::DropCurrent()
 
 	{
 		vboUploadIndex = verts.size();
-		vboStartIndex  = verts.size();
+		vboStartIndex = verts.size();
 	}
 	{
 		eboUploadIndex = indcs.size();
-		eboStartIndex  = indcs.size();
+		eboStartIndex = indcs.size();
 	}
 }
 
-template<typename T>
+template <typename T>
 inline TypedRenderBuffer<T> TypedRenderBuffer<T>::CopyCurrent(bool readOnly) const
 {
 	size_t vertsCount = (verts.size() - vboUploadIndex);
 	size_t elemsCount = (indcs.size() - eboUploadIndex);
 
-	//TODO make readonly buffer with 1 buffer chunk
-	TypedRenderBuffer<T> newRB { vertsCount, elemsCount, bufferType };
+	// TODO make readonly buffer with 1 buffer chunk
+	TypedRenderBuffer<T> newRB{vertsCount, elemsCount, bufferType};
 	{
-		auto b = verts.begin(); std::advance(b, vboUploadIndex);
+		auto b = verts.begin();
+		std::advance(b, vboUploadIndex);
 		auto e = verts.end();
 		newRB.AddVertices(b, e);
 	}
 	{
-		auto b = indcs.begin(); std::advance(b, eboUploadIndex);
+		auto b = indcs.begin();
+		std::advance(b, eboUploadIndex);
 		auto e = indcs.end();
 		newRB.AddIndices(b, e, static_cast<int32_t>(vboUploadIndex));
 	}
@@ -1174,14 +1247,14 @@ inline TypedRenderBuffer<T> TypedRenderBuffer<T>::CopyCurrent(bool readOnly) con
 	return newRB;
 }
 
-
-template<typename T>
+template <typename T>
 inline void TypedRenderBuffer<T>::CondInit()
 {
 	if (vao.GetIdRaw() > 0)
 		return;
 
-	if (vertCount0 > 0) {
+	if (vertCount0 > 0)
+	{
 		IStreamBufferConcept::StreamBufferCreationParams p;
 		p.target = GL_ARRAY_BUFFER;
 		p.numElems = static_cast<uint32_t>(vertCount0);
@@ -1192,7 +1265,8 @@ inline void TypedRenderBuffer<T>::CondInit()
 		vbo = IStreamBuffer<VertType>::CreateInstance(p);
 	}
 
-	if (elemCount0 > 0) {
+	if (elemCount0 > 0)
+	{
 		IStreamBufferConcept::StreamBufferCreationParams p;
 		p.target = GL_ELEMENT_ARRAY_BUFFER;
 		p.numElems = static_cast<uint32_t>(elemCount0);
@@ -1206,23 +1280,24 @@ inline void TypedRenderBuffer<T>::CondInit()
 	InitVAO();
 }
 
-template<typename T>
+template <typename T>
 inline void TypedRenderBuffer<T>::InitVAO() const
 {
 	assert(vbo);
 
-	vao.Bind(); //will instantiate
+	vao.Bind(); // will instantiate
 
 	vbo->Bind();
 
 	if (ebo)
 		ebo->Bind();
 
-	for (const AttributeDef& ad : T::attributeDefs) {
+	for (const AttributeDef &ad : T::attributeDefs)
+	{
 		glEnableVertexAttribArray(ad.index);
 		glVertexAttribDivisor(ad.index, 0);
 
-		//assume only float or float convertible values
+		// assume only float or float convertible values
 		glVertexAttribPointer(ad.index, ad.count, ad.type, ad.normalize, ad.stride, ad.data);
 	}
 
@@ -1233,36 +1308,37 @@ inline void TypedRenderBuffer<T>::InitVAO() const
 	if (ebo)
 		ebo->Unbind();
 
-	//restore default state
-	for (const AttributeDef& ad : T::attributeDefs) {
+	// restore default state
+	for (const AttributeDef &ad : T::attributeDefs)
+	{
 		glDisableVertexAttribArray(ad.index);
 	}
 }
 
-//member template specializations
+// member template specializations
 
-#define GET_TYPED_RENDER_BUFFER(T, idx) \
-template<> \
-inline TypedRenderBuffer<T>& RenderBuffer::GetTypedRenderBuffer<T>() \
-{ \
-	assert(dynamic_cast<TypedRenderBuffer<T>*>(typedRenderBuffers[idx].get())); \
-	return *static_cast<TypedRenderBuffer<T>*>(typedRenderBuffers[idx].get()); \
-}
+#define GET_TYPED_RENDER_BUFFER(T, idx)                                              \
+	template <>                                                                      \
+	inline TypedRenderBuffer<T> &RenderBuffer::GetTypedRenderBuffer<T>()             \
+	{                                                                                \
+		assert(dynamic_cast<TypedRenderBuffer<T> *>(typedRenderBuffers[idx].get())); \
+		return *static_cast<TypedRenderBuffer<T> *>(typedRenderBuffers[idx].get());  \
+	}
 
-GET_TYPED_RENDER_BUFFER(VA_TYPE_0    , 0)
-GET_TYPED_RENDER_BUFFER(VA_TYPE_C    , 1)
-GET_TYPED_RENDER_BUFFER(VA_TYPE_N    , 2)
-GET_TYPED_RENDER_BUFFER(VA_TYPE_T    , 3)
-GET_TYPED_RENDER_BUFFER(VA_TYPE_T4   , 4)
-GET_TYPED_RENDER_BUFFER(VA_TYPE_TN   , 5)
-GET_TYPED_RENDER_BUFFER(VA_TYPE_TC   , 6)
-GET_TYPED_RENDER_BUFFER(VA_TYPE_TC3  , 7)
-GET_TYPED_RENDER_BUFFER(VA_TYPE_PROJ , 8)
-GET_TYPED_RENDER_BUFFER(VA_TYPE_TNT  , 9)
-GET_TYPED_RENDER_BUFFER(VA_TYPE_2D0  , 10)
-GET_TYPED_RENDER_BUFFER(VA_TYPE_2DC  , 11)
-GET_TYPED_RENDER_BUFFER(VA_TYPE_2DT  , 12)
-GET_TYPED_RENDER_BUFFER(VA_TYPE_2DTC , 13)
+GET_TYPED_RENDER_BUFFER(VA_TYPE_0, 0)
+GET_TYPED_RENDER_BUFFER(VA_TYPE_C, 1)
+GET_TYPED_RENDER_BUFFER(VA_TYPE_N, 2)
+GET_TYPED_RENDER_BUFFER(VA_TYPE_T, 3)
+GET_TYPED_RENDER_BUFFER(VA_TYPE_T4, 4)
+GET_TYPED_RENDER_BUFFER(VA_TYPE_TN, 5)
+GET_TYPED_RENDER_BUFFER(VA_TYPE_TC, 6)
+GET_TYPED_RENDER_BUFFER(VA_TYPE_TC3, 7)
+GET_TYPED_RENDER_BUFFER(VA_TYPE_PROJ, 8)
+GET_TYPED_RENDER_BUFFER(VA_TYPE_TNT, 9)
+GET_TYPED_RENDER_BUFFER(VA_TYPE_2D0, 10)
+GET_TYPED_RENDER_BUFFER(VA_TYPE_2DC, 11)
+GET_TYPED_RENDER_BUFFER(VA_TYPE_2DT, 12)
+GET_TYPED_RENDER_BUFFER(VA_TYPE_2DTC, 13)
 GET_TYPED_RENDER_BUFFER(VA_TYPE_2DTC3, 14)
 
 #undef GET_TYPED_RENDER_BUFFER
