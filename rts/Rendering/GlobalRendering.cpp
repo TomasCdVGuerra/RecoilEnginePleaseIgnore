@@ -506,8 +506,8 @@ bool CGlobalRendering::CreateWindowAndContext(const char *title)
 		return false;
 	}
 
-	// should be set to "3.0" (non-core Mesa is stuck there), see below
-	#ifndef ENABLE_VULKAN
+// should be set to "3.0" (non-core Mesa is stuck there), see below
+#ifndef ENABLE_VULKAN
 	const char *mesaGL = getenv("MESA_GL_VERSION_OVERRIDE");
 	const char *softGL = getenv("LIBGL_ALWAYS_SOFTWARE");
 
@@ -544,7 +544,7 @@ bool CGlobalRendering::CreateWindowAndContext(const char *title)
 		if (msaaLevel % 2 == 1)
 			++msaaLevel;
 	}
-	#endif
+#endif
 
 	if ((sdlWindow = CreateSDLWindow(title)) == nullptr)
 		return false;
