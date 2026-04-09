@@ -38,6 +38,8 @@ option(PREFER_STATIC_LIBS "Prefer static libraries when linking deps" $ENV{PREFE
 
 option(ENABLE_VULKAN "Enable Vulkan rendering backend (MoltenVK on macOS)" OFF)
 if (ENABLE_VULKAN)
+	add_compile_definitions(ENABLE_VULKAN)
+
 	if (APPLE)
 		set(_MOLTENVK_ICD_CANDIDATES
 			"$ENV{VULKAN_SDK}/share/vulkan/icd.d/MoltenVK_icd.json"

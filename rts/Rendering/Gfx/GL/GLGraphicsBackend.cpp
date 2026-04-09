@@ -702,6 +702,10 @@ namespace gfx
     {
     }
 
+    void GLGraphicsBackend::SwapBuffers()
+    {
+    }
+
     void GLGraphicsBackend::DeviceWaitIdle()
     {
         glFinish();

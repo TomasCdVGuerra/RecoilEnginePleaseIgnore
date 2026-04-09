@@ -558,6 +558,9 @@ Implementation strategy:
 ### [PENDING] Phase 8: Build System Flip and Validation
 Goal: Make Vulkan the primary rendering path on Apple Silicon while keeping rollback-safe behavior.
 
+Sub-status:
+1. `[COMPLETE]` Phase 8.1: Window System and Swapchain.
+
 1. Wire `ENABLE_VULKAN=ON` path to instantiate `VulkanGraphicsBackend` in `GlobalRendering`.
 2. Validate headless and CI compliance under Vulkan-enabled configurations.
 3. Benchmark performance and frame pacing against OpenGL baseline.

@@ -169,6 +169,7 @@ namespace gfx
 
         virtual void BeginFrame() = 0;
         virtual void EndFrame() = 0;
+        virtual void SwapBuffers() = 0;
         virtual void DeviceWaitIdle() = 0;
     };
 

@@ -9,6 +9,9 @@
 #include "GlobalRendering.h"
 #include "GlobalRenderingInfo.h"
 #include "Rendering/Gfx/GL/GLGraphicsBackend.h"
+#ifdef ENABLE_VULKAN
+#include "Rendering/Gfx/Vulkan/VulkanGraphicsBackend.h"
+#endif
 #include "Rendering/VerticalSync.h"
 #include "Rendering/GL/StreamBuffer.h"
 #include "Rendering/GL/RenderBuffers.h"
@@ -350,16 +353,6 @@ SDL_Window *CGlobalRendering::CreateSDLWindow(const char *title) const
 {
 	SDL_Window *newWindow = nullptr;
 
-	const std::array aaLvls = {msaaLevel, msaaLevel / 2, msaaLevel / 4, msaaLevel / 8, msaaLevel / 16, msaaLevel / 32, 0};
-	const std::array zbBits = {24, 32, 16};
-
-	const char *wpfName = "";
-
-	const char *frmts[2] = {
-		"[GR::%s] error \"%s\" using %dx anti-aliasing and %d-bit depth-buffer for main window",
-		"[GR::%s] using %dx anti-aliasing and %d-bit depth-buffer (PF=\"%s\") for main window",
-	};
-
 	bool borderless_ = configHandler->GetBool("WindowBorderless");
 	bool fullScreen_ = configHandler->GetBool("Fullscreen");
 	int winPosX_ = configHandler->GetInt("WindowPosX");
@@ -376,9 +369,30 @@ SDL_Window *CGlobalRendering::CreateSDLWindow(const char *title) const
 	//   SDL_WINDOW_FULLSCREEN_DESKTOP for "fake" fullscreen that takes the size of the desktop;
 	//   and 0 for windowed mode.
 
-	uint32_t sdlFlags = (SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+	uint32_t sdlFlags = SDL_WINDOW_RESIZABLE;
+#ifdef ENABLE_VULKAN
+	sdlFlags |= SDL_WINDOW_VULKAN;
+#else
+	sdlFlags |= SDL_WINDOW_OPENGL;
+#endif
 	sdlFlags |= (borderless_ ? SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_WINDOW_FULLSCREEN) * fullScreen_;
 	sdlFlags |= (SDL_WINDOW_BORDERLESS * borderless_);
+
+#ifdef ENABLE_VULKAN
+	if ((newWindow = SDL_CreateWindow(title, winPosX_, winPosY_, newRes.x, newRes.y, sdlFlags)) == nullptr)
+	{
+		LOG_L(L_WARNING, "[GR::%s] error \"%s\" creating Vulkan SDL window", __func__, SDL_GetError());
+	}
+#else
+	const std::array aaLvls = {msaaLevel, msaaLevel / 2, msaaLevel / 4, msaaLevel / 8, msaaLevel / 16, msaaLevel / 32, 0};
+	const std::array zbBits = {24, 32, 16};
+
+	const char *wpfName = "";
+
+	const char *frmts[2] = {
+		"[GR::%s] error \"%s\" using %dx anti-aliasing and %d-bit depth-buffer for main window",
+		"[GR::%s] using %dx anti-aliasing and %d-bit depth-buffer (PF=\"%s\") for main window",
+	};
 
 	for (size_t i = 0; i < (aaLvls.size()) && (newWindow == nullptr); i++)
 	{
@@ -401,6 +415,7 @@ SDL_Window *CGlobalRendering::CreateSDLWindow(const char *title) const
 			LOG(frmts[1], __func__, aaLvls[i], zbBits[j], wpfName = SDL_GetPixelFormatName(SDL_GetWindowPixelFormat(newWindow)));
 		}
 	}
+#endif
 
 	if (newWindow == nullptr)
 	{
@@ -492,6 +507,7 @@ bool CGlobalRendering::CreateWindowAndContext(const char *title)
 	}
 
 	// should be set to "3.0" (non-core Mesa is stuck there), see below
+	#ifndef ENABLE_VULKAN
 	const char *mesaGL = getenv("MESA_GL_VERSION_OVERRIDE");
 	const char *softGL = getenv("LIBGL_ALWAYS_SOFTWARE");
 
@@ -528,6 +544,7 @@ bool CGlobalRendering::CreateWindowAndContext(const char *title)
 		if (msaaLevel % 2 == 1)
 			++msaaLevel;
 	}
+	#endif
 
 	if ((sdlWindow = CreateSDLWindow(title)) == nullptr)
 		return false;
@@ -546,6 +563,11 @@ bool CGlobalRendering::CreateWindowAndContext(const char *title)
 		WindowManagerHelper::BlockCompositing(sdlWindow);
 #endif
 
+#ifdef ENABLE_VULKAN
+	globalRendering->graphicsBackend = std::make_unique<gfx::VulkanGraphicsBackend>(sdlWindow);
+	SDL_DisableScreenSaver();
+	return true;
+#else
 	if ((glContext = CreateGLContext(minCtx)) == nullptr)
 		return false;
 
@@ -570,6 +592,7 @@ bool CGlobalRendering::CreateWindowAndContext(const char *title)
 	MakeCurrentContext(false);
 	SDL_DisableScreenSaver();
 	return true;
+#endif
 }
 
 void CGlobalRendering::MakeCurrentContext(bool clear) const
@@ -653,34 +676,44 @@ void CGlobalRendering::SwapBuffers(bool allowSwapBuffers, bool clearErrors)
 
 		pre = spring_now();
 
-		RenderBuffer::SwapRenderBuffers(); // all RBs are swapped here
-		IStreamBufferConcept::PutBufferLocks();
+#ifdef ENABLE_VULKAN
+		if ((graphicsBackend != nullptr) && (graphicsBackend->Type() == gfx::BackendType::Vulkan))
+		{
+			graphicsBackend->SwapBuffers();
+			FrameMark;
+		}
+		else
+#endif
+		{
+			RenderBuffer::SwapRenderBuffers(); // all RBs are swapped here
+			IStreamBufferConcept::PutBufferLocks();
 
-		// https://stackoverflow.com/questions/68480028/supporting-opengl-screen-capture-by-third-party-applications
-		glBindFramebuffer(GL_READ_FRAMEBUFFER_EXT, 0);
+			// https://stackoverflow.com/questions/68480028/supporting-opengl-screen-capture-by-third-party-applications
+			glBindFramebuffer(GL_READ_FRAMEBUFFER_EXT, 0);
 
 #ifdef _WIN32
-		using DwmFlushT = HRESULT(WINAPI *)();
-		if (forceDWMFlush == 1)
-		{
-			ZoneScopedN("CGlobalRendering::SwapBuffers::DWMFlushPre");
-			if (DwmFlush)
-				reinterpret_cast<DwmFlushT>(DwmFlush)();
-		}
+			using DwmFlushT = HRESULT(WINAPI *)();
+			if (forceDWMFlush == 1)
+			{
+				ZoneScopedN("CGlobalRendering::SwapBuffers::DWMFlushPre");
+				if (DwmFlush)
+					reinterpret_cast<DwmFlushT>(DwmFlush)();
+			}
 #endif
 
-		SDL_GL_SwapWindow(sdlWindow);
+			SDL_GL_SwapWindow(sdlWindow);
 
 #ifdef _WIN32
-		if (forceDWMFlush == 2)
-		{
-			ZoneScopedN("CGlobalRendering::SwapBuffers::DWMFlushPost");
-			if (DwmFlush)
-				reinterpret_cast<DwmFlushT>(DwmFlush)();
-		}
+			if (forceDWMFlush == 2)
+			{
+				ZoneScopedN("CGlobalRendering::SwapBuffers::DWMFlushPost");
+				if (DwmFlush)
+					reinterpret_cast<DwmFlushT>(DwmFlush)();
+			}
 #endif
 
-		FrameMark;
+			FrameMark;
+		}
 	}
 	// exclude debug from SCOPED_TIMER("Misc::SwapBuffers");
 	eventHandler.DbgTimingInfo(TIMING_SWAP, pre, spring_now());

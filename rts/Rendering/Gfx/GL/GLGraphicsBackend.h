@@ -62,6 +62,7 @@ namespace gfx
 
         void BeginFrame() override;
         void EndFrame() override;
+        void SwapBuffers() override;
         void DeviceWaitIdle() override;
     };
 

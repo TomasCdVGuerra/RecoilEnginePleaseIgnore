@@ -11,6 +11,9 @@
 #include <memory>
 #include <span>
 #include <string_view>
+#include <vector>
+
+struct SDL_Window;
 
 namespace gfx
 {
@@ -20,7 +23,7 @@ namespace gfx
     class VulkanGraphicsBackend final : public IGraphicsBackend
     {
     public:
-        VulkanGraphicsBackend();
+        explicit VulkanGraphicsBackend(SDL_Window *window = nullptr);
         ~VulkanGraphicsBackend() override;
 
         [[nodiscard]] BackendType Type() const noexcept override;
@@ -73,6 +76,7 @@ namespace gfx
 
         void BeginFrame() override;
         void EndFrame() override;
+        void SwapBuffers() override;
         void DeviceWaitIdle() override;
 
     private:
@@ -80,21 +84,38 @@ namespace gfx
         void Cleanup() noexcept;
 
         void CreateInstance();
+        void CreateSurface();
         void SelectPhysicalDevice();
         void SelectGraphicsQueueFamily();
+        void SelectPresentQueueFamily();
         void CreateLogicalDevice();
         void CreateCommandPool();
         void CreatePrimaryCommandBuffer();
+        void CreateSwapchain();
+        void CreateSwapchainImageViews();
+        void DestroySwapchain() noexcept;
 
         static constexpr std::uint32_t InvalidQueueFamilyIndex = std::numeric_limits<std::uint32_t>::max();
 
+        SDL_Window *window = nullptr;
+
         VkInstance instance = VK_NULL_HANDLE;
+        VkSurfaceKHR surface = VK_NULL_HANDLE;
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         std::uint32_t graphicsQueueFamilyIndex = InvalidQueueFamilyIndex;
+        std::uint32_t presentQueueFamilyIndex = InvalidQueueFamilyIndex;
         VkDevice device = VK_NULL_HANDLE;
         VkQueue graphicsQueue = VK_NULL_HANDLE;
+        VkQueue presentQueue = VK_NULL_HANDLE;
         VkCommandPool commandPool = VK_NULL_HANDLE;
         VkCommandBuffer primaryCommandBuffer = VK_NULL_HANDLE;
+        VkSwapchainKHR swapchain = VK_NULL_HANDLE;
+        VkFormat swapchainImageFormat = VK_FORMAT_UNDEFINED;
+        VkExtent2D swapchainExtent = {0u, 0u};
+        std::vector<VkImage> swapchainImages;
+        std::vector<VkImageView> swapchainImageViews;
+        VkFence swapchainAcquireFence = VK_NULL_HANDLE;
+        std::uint32_t currentSwapchainImageIndex = 0;
         bool frameRecording = false;
         bool renderPassActive = false;
         VulkanFramebuffer *boundFramebuffer = nullptr;
