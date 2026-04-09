@@ -2,6 +2,8 @@
 
 #include "VulkanGraphicsBackend.h"
 
+#include "VulkanFramebuffer.h"
+#include "VulkanTexture.h"
 #include "VulkanVertexArray.h"
 #include "VulkanVertexBuffer.h"
 
@@ -67,14 +69,12 @@ namespace gfx
 
     std::unique_ptr<ITexture> VulkanGraphicsBackend::CreateTexture(const TextureCreateInfo &ci)
     {
-        (void)ci;
-        return nullptr;
+        return std::make_unique<VulkanTexture>(device, physicalDevice, commandPool, graphicsQueue, ci);
     }
 
     std::unique_ptr<IFramebuffer> VulkanGraphicsBackend::CreateFramebuffer(const RenderTargetDesc &desc)
     {
-        (void)desc;
-        return nullptr;
+        return std::make_unique<VulkanFramebuffer>(device, desc);
     }
 
     std::unique_ptr<IShader> VulkanGraphicsBackend::CreateShader(const ShaderCreateInfo &ci)
@@ -196,6 +196,7 @@ namespace gfx
             SelectPhysicalDevice();
             SelectGraphicsQueueFamily();
             CreateLogicalDevice();
+            CreateCommandPool();
         }
         catch (...)
         {
@@ -206,6 +207,12 @@ namespace gfx
 
     void VulkanGraphicsBackend::Cleanup() noexcept
     {
+        if (commandPool != VK_NULL_HANDLE)
+        {
+            vkDestroyCommandPool(device, commandPool, nullptr);
+            commandPool = VK_NULL_HANDLE;
+        }
+
         if (device != VK_NULL_HANDLE)
         {
             (void)vkDeviceWaitIdle(device);
@@ -363,6 +370,16 @@ namespace gfx
         CheckVkResult(vkCreateDevice(physicalDevice, &createInfo, nullptr, &device), "vkCreateDevice");
 
         vkGetDeviceQueue(device, graphicsQueueFamilyIndex, 0u, &graphicsQueue);
+    }
+
+    void VulkanGraphicsBackend::CreateCommandPool()
+    {
+        VkCommandPoolCreateInfo commandPoolCreateInfo{};
+        commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        commandPoolCreateInfo.queueFamilyIndex = graphicsQueueFamilyIndex;
+
+        CheckVkResult(vkCreateCommandPool(device, &commandPoolCreateInfo, nullptr, &commandPool), "vkCreateCommandPool");
     }
 
 } // namespace gfx

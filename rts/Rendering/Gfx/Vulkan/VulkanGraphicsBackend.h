@@ -81,6 +81,7 @@ namespace gfx
         void SelectPhysicalDevice();
         void SelectGraphicsQueueFamily();
         void CreateLogicalDevice();
+        void CreateCommandPool();
 
         static constexpr std::uint32_t InvalidQueueFamilyIndex = std::numeric_limits<std::uint32_t>::max();
 
@@ -89,6 +90,7 @@ namespace gfx
         std::uint32_t graphicsQueueFamilyIndex = InvalidQueueFamilyIndex;
         VkDevice device = VK_NULL_HANDLE;
         VkQueue graphicsQueue = VK_NULL_HANDLE;
+        VkCommandPool commandPool = VK_NULL_HANDLE;
     };
 
 } // namespace gfx
