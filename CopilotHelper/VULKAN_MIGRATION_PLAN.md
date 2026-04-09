@@ -341,7 +341,7 @@ Phase 4.3 implication summary:
 Goal: Migrate complex geometry, texture streaming, and particle systems.
 
 Sub-status:
-1. `[IN PROGRESS]` Phase 5.3: Particle System Scouting.
+1. `[COMPLETE]` Phase 5.3: Particle System Scouting.
 
 Coupling observed:
 1. Textures (`Texture.cpp`, `Bitmap.cpp`, `AtlasedTexture.cpp`): heavy usage of `glGenerateMipmap`, `glTexParameteri`, and PBO-based upload paths.
@@ -423,7 +423,7 @@ Phase 5.2 implication summary:
 2. Existing `S3DModelVAO` already centralizes geometry ownership, making it a practical pivot point for introducing backend-neutral vertex-layout and draw-command abstractions.
 3. Legacy fixed-function helpers (`BindLegacyAttrVBOs`, matrix stack usage in piece draw calls, display-list LOD fallback) must be staged behind backend-compatible compatibility paths during migration.
 
-#### [IN PROGRESS] Phase 5.3: Particle System Scouting
+#### [COMPLETE] Phase 5.3: Particle System Scouting
 Target files:
 1. `rts/Rendering/Env/Particles/ProjectileDrawer.h`
 2. `rts/Rendering/Env/Particles/ProjectileDrawer.cpp`

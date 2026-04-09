@@ -5,6 +5,10 @@
 #include "VertexArrayTypes.h"
 #include "VAO.h"
 
+#include "Rendering/Gfx/IGraphicsBackend.h"
+#include "Rendering/Gfx/IVertexArray.h"
+#include "Rendering/Gfx/IVertexBuffer.h"
+
 #include "System/TypeToStr.h"
 #include "System/ContainerUtil.h"
 #include "System/Log/ILog.h"
@@ -20,6 +24,9 @@
 #include <memory>
 #include <array>
 #include <vector>
+#include <span>
+#include <limits>
+#include <cstring>
 #include <iterator>
 #include <algorithm>
 #include <type_traits>
@@ -435,6 +442,9 @@ public:
 
 		std::swap(vbo, rhs.vbo);
 		std::swap(ebo, rhs.ebo);
+		std::swap(projectileVAO, rhs.projectileVAO);
+		std::swap(projectileVBO, rhs.projectileVBO);
+		std::swap(projectileIBO, rhs.projectileIBO);
 
 		std::swap(vao, rhs.vao);
 
@@ -759,6 +769,12 @@ private:
 
 	void CondInit();
 	void InitVAO() const;
+
+	bool DrawElementsBackend(uint32_t mode, bool rewind);
+	bool EnsureProjectileBackendObjects();
+	void UploadProjectileVertexBuffer();
+	void UploadProjectileIndexBuffer();
+	static gfx::PrimitiveTopology ToPrimitiveTopology(uint32_t mode);
 private:
 	size_t vertCount0;
 	size_t elemCount0;
@@ -766,6 +782,9 @@ private:
 
 	std::unique_ptr<IStreamBuffer<VertType>> vbo;
 	std::unique_ptr<IStreamBuffer<IndcType>> ebo;
+	std::unique_ptr<gfx::IVertexArray> projectileVAO;
+	std::unique_ptr<gfx::IVertexBuffer> projectileVBO;
+	std::unique_ptr<gfx::IVertexBuffer> projectileIBO;
 
 	VAO vao;
 
@@ -883,6 +902,11 @@ inline void TypedRenderBuffer<T>::DrawElements(uint32_t mode, bool rewind)
 {
 	AssertBoundShader();
 
+	if constexpr (std::is_same_v<VertType, VA_TYPE_PROJ>) {
+		if (DrawElementsBackend(mode, rewind))
+			return;
+	}
+
 	UploadVBO();
 	UploadEBO();
 
@@ -909,6 +933,205 @@ inline void TypedRenderBuffer<T>::DrawElements(uint32_t mode, bool rewind)
 	vboStartIndex = verts.size();
 
 	numSubmits[1] += 1;
+}
+
+template<typename T>
+inline gfx::PrimitiveTopology TypedRenderBuffer<T>::ToPrimitiveTopology(uint32_t mode)
+{
+	switch (mode) {
+		case GL_LINES: return gfx::PrimitiveTopology::Lines;
+		case GL_LINE_STRIP: return gfx::PrimitiveTopology::LineStrip;
+		case GL_TRIANGLES:
+		default:
+			return gfx::PrimitiveTopology::Triangles;
+	}
+}
+
+template<typename T>
+inline bool TypedRenderBuffer<T>::EnsureProjectileBackendObjects()
+{
+	if constexpr (!std::is_same_v<VertType, VA_TYPE_PROJ>) {
+		return false;
+	}
+
+	auto* backend = (globalRendering != nullptr) ? globalRendering->graphicsBackend.get() : nullptr;
+	if (backend == nullptr)
+		return false;
+
+	if (projectileVBO == nullptr) {
+		gfx::BufferCreateInfo vbCI;
+		vbCI.sizeBytes = vertCount0 * sizeof(VertType);
+		vbCI.usage = gfx::BufferUsage::Stream;
+		vbCI.memoryAccess = gfx::MemoryAccess::CpuToGpu;
+		vbCI.readable = false;
+		vbCI.debugName = std::string(vboTypeName) + "::projectileVBO";
+		projectileVBO = backend->CreateVertexBuffer(vbCI);
+	}
+
+	if (projectileIBO == nullptr) {
+		gfx::BufferCreateInfo ibCI;
+		ibCI.sizeBytes = elemCount0 * sizeof(IndcType);
+		ibCI.usage = gfx::BufferUsage::Stream;
+		ibCI.memoryAccess = gfx::MemoryAccess::CpuToGpu;
+		ibCI.readable = false;
+		ibCI.debugName = std::string(vboTypeName) + "::projectileIBO";
+		projectileIBO = backend->CreateVertexBuffer(ibCI);
+	}
+
+	if ((projectileVBO == nullptr) || (projectileIBO == nullptr))
+		return false;
+
+	if (projectileVAO == nullptr) {
+		gfx::VertexLayoutDesc layout;
+		layout.bindings = {
+			gfx::VertexBufferBindingDesc{
+				0u,
+				static_cast<std::uint32_t>(sizeof(VertType)),
+				0u,
+				gfx::VertexInputRate::PerVertex,
+			},
+		};
+
+		layout.attributes = {
+			gfx::VertexAttributeDesc{0u, 0u, gfx::VertexFormat::Float3, static_cast<std::uint32_t>(offsetof(VertType, pos))},
+			gfx::VertexAttributeDesc{1u, 0u, gfx::VertexFormat::Float3, static_cast<std::uint32_t>(offsetof(VertType, uvw))},
+			gfx::VertexAttributeDesc{2u, 0u, gfx::VertexFormat::Float4, static_cast<std::uint32_t>(offsetof(VertType, uvInfo))},
+			gfx::VertexAttributeDesc{3u, 0u, gfx::VertexFormat::Float3, static_cast<std::uint32_t>(offsetof(VertType, aparams))},
+			gfx::VertexAttributeDesc{4u, 0u, gfx::VertexFormat::UByte4_UNorm, static_cast<std::uint32_t>(offsetof(VertType, c))},
+		};
+
+		const std::array<gfx::VertexArrayBufferBinding, 1> vertexBuffers = {{
+			{0u, projectileVBO.get()},
+		}};
+
+		projectileVAO = backend->CreateVertexArray(layout, vertexBuffers, projectileIBO.get());
+	}
+
+	return (projectileVAO != nullptr);
+}
+
+template<typename T>
+inline void TypedRenderBuffer<T>::UploadProjectileVertexBuffer()
+{
+	if constexpr (!std::is_same_v<VertType, VA_TYPE_PROJ>) {
+		return;
+	}
+
+	if (!EnsureProjectileBackendObjects())
+		return;
+
+	if (verts.size() > vertCount0) {
+		LOG_L(L_DEBUG, "[TypedRenderBuffer<%s>::%s] Increase the number of elements here!", vboTypeName, __func__);
+		vertCount0 = verts.capacity();
+		projectileVBO->Resize(vertCount0 * sizeof(VertType), true);
+	}
+
+	const size_t elemsCount = (verts.size() - vboUploadIndex);
+	if (elemsCount == 0)
+		return;
+
+	const std::span<const VertType> uploadData(verts.data() + vboUploadIndex, elemsCount);
+	const size_t dstOffsetBytes = vboUploadIndex * sizeof(VertType);
+	const size_t updateSizeBytes = elemsCount * sizeof(VertType);
+
+	if (projectileVBO->IsMappable()) {
+		auto mappedBytes = projectileVBO->MapWrite(dstOffsetBytes, updateSizeBytes);
+
+		if (!mappedBytes.empty()) {
+			std::memcpy(mappedBytes.data(), uploadData.data(), updateSizeBytes);
+			projectileVBO->UnmapWrite();
+		}
+		else {
+			projectileVBO->Update(std::as_bytes(uploadData), dstOffsetBytes);
+		}
+	}
+	else {
+		projectileVBO->Update(std::as_bytes(uploadData), dstOffsetBytes);
+	}
+
+	vboUploadIndex += elemsCount;
+}
+
+template<typename T>
+inline void TypedRenderBuffer<T>::UploadProjectileIndexBuffer()
+{
+	if constexpr (!std::is_same_v<VertType, VA_TYPE_PROJ>) {
+		return;
+	}
+
+	if (!EnsureProjectileBackendObjects())
+		return;
+
+	if (indcs.size() > elemCount0) {
+		LOG_L(L_DEBUG, "[TypedRenderBuffer<%s>::%s] Increase the number of elements here!", vboTypeName, __func__);
+		elemCount0 = indcs.capacity();
+		projectileIBO->Resize(elemCount0 * sizeof(IndcType), true);
+	}
+
+	const size_t elemsCount = (indcs.size() - eboUploadIndex);
+	if (elemsCount == 0)
+		return;
+
+	const std::span<const IndcType> uploadData(indcs.data() + eboUploadIndex, elemsCount);
+	const size_t dstOffsetBytes = eboUploadIndex * sizeof(IndcType);
+
+	projectileIBO->Update(std::as_bytes(uploadData), dstOffsetBytes);
+	eboUploadIndex += elemsCount;
+}
+
+template<typename T>
+inline bool TypedRenderBuffer<T>::DrawElementsBackend(uint32_t mode, bool rewind)
+{
+	if constexpr (!std::is_same_v<VertType, VA_TYPE_PROJ>) {
+		return false;
+	}
+
+	auto* backend = (globalRendering != nullptr) ? globalRendering->graphicsBackend.get() : nullptr;
+	if ((backend == nullptr) || !EnsureProjectileBackendObjects())
+		return false;
+
+	UploadProjectileVertexBuffer();
+	UploadProjectileIndexBuffer();
+
+	const size_t indcsCount = (indcs.size() - eboStartIndex);
+	const size_t vertsCount = (verts.size() - vboStartIndex);
+
+	if (indcsCount == 0)
+		return true;
+
+	constexpr size_t maxIndexableCount = static_cast<size_t>(std::numeric_limits<std::uint32_t>::max());
+	if ((indcsCount > maxIndexableCount) || (eboStartIndex > maxIndexableCount)) {
+		LOG_L(
+			L_WARNING,
+			"[TypedRenderBuffer<%s>::%s] Draw range exceeds uint32: indexCount=%zu firstIndex=%zu",
+			vboTypeName,
+			__func__,
+			indcsCount,
+			eboStartIndex
+		);
+		return true;
+	}
+
+	backend->DrawIndexed(
+		*projectileVAO,
+		ToPrimitiveTopology(mode),
+		gfx::IndexedDrawDesc{
+			.indexCount = static_cast<std::uint32_t>(indcsCount),
+			.firstIndex = static_cast<std::uint32_t>(eboStartIndex),
+			.baseVertex = 0,
+		},
+		gfx::IndexElementType::UInt32
+	);
+
+	if (rewind && !readOnly) {
+		eboStartIndex += indcsCount;
+		vboStartIndex += vertsCount;
+	}
+
+	vboStartIndex = verts.size();
+	numSubmits[1] += 1;
+
+	return true;
 }
 
 template<typename T>
