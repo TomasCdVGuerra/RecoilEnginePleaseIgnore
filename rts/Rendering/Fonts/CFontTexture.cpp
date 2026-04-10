@@ -7,9 +7,14 @@
 #include "Rendering/Gfx/GL/GLTexture.h"
 #include "Rendering/Gfx/IGraphicsBackend.h"
 #include "Rendering/Gfx/ITexture.h"
+#ifdef ENABLE_VULKAN
+#include "Rendering/Gfx/Vulkan/VulkanGraphicsBackend.h"
+#include "Rendering/Gfx/Vulkan/VulkanTexture.h"
+#endif
 
 #include <cstring> // for memset, memcpy
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <sstream>
@@ -1040,6 +1045,9 @@ void CFontTexture::Update()
 	for (const auto &font : allFonts)
 	{
 		auto lf = font.lock();
+		if (!lf)
+			continue;
+
 		if (lf->GlyphAtlasTextureNeedsUpdate())
 			fontsToUpdate.emplace_back(std::move(lf));
 	}
@@ -1052,6 +1060,9 @@ void CFontTexture::Update()
 	for (const auto &font : allFonts)
 	{
 		auto lf = font.lock();
+		if (!lf)
+			continue;
+
 		if (lf->needsColor && !lf->isColor)
 			needsNotify = true;
 		if (lf->GlyphAtlasTextureNeedsUpload())
@@ -1078,6 +1089,21 @@ int CFontTexture::GetTexture() const
 #ifndef HEADLESS
 	if (auto *texture = dynamic_cast<gfx::GLTexture *>(glyphAtlasTexture.get()); texture != nullptr)
 		return static_cast<int>(texture->GetTextureId());
+
+#ifdef ENABLE_VULKAN
+	if (
+		(globalRendering != nullptr) &&
+		(globalRendering->graphicsBackend != nullptr) &&
+		(globalRendering->graphicsBackend->Type() == gfx::BackendType::Vulkan))
+	{
+		if (auto *texture = dynamic_cast<gfx::VulkanTexture *>(glyphAtlasTexture.get()); texture != nullptr)
+		{
+			const std::uintptr_t nativeHandle = texture->GetNativeHandle();
+			if (nativeHandle != 0u)
+				return static_cast<int>(nativeHandle & static_cast<std::uintptr_t>(0x7fffffff));
+		}
+	}
+#endif
 #endif
 
 	return 0;
@@ -1413,7 +1439,8 @@ void CFontTexture::CreateTexture(const int width, const int height, const bool i
 
 	gfx::TextureCreateInfo textureCI;
 	textureCI.dimension = gfx::TextureDimension::Tex2D;
-	textureCI.format = needsColor ? gfx::PixelFormat::BGRA8_UNorm : gfx::PixelFormat::R8_UNorm;
+	const bool usingVulkanBackend = (backend->Type() == gfx::BackendType::Vulkan);
+	textureCI.format = (needsColor || usingVulkanBackend) ? gfx::PixelFormat::BGRA8_UNorm : gfx::PixelFormat::R8_UNorm;
 	textureCI.extent.width = std::max(width, 1);
 	textureCI.extent.height = std::max(height, 1);
 	textureCI.extent.depth = 1;
@@ -1597,6 +1624,18 @@ void CFontTexture::UpdateGlyphAtlasTexture()
 void CFontTexture::UploadGlyphAtlasTexture()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+
+#ifndef HEADLESS
+	auto *backend = (globalRendering != nullptr) ? globalRendering->graphicsBackend.get() : nullptr;
+#ifdef ENABLE_VULKAN
+	if ((backend != nullptr) && (backend->Type() == gfx::BackendType::Vulkan))
+	{
+		UploadGlyphAtlasTextureImpl();
+		return;
+	}
+#endif
+#endif
+
 	fontRenderer->HandleTextureUpdate(*this, true);
 }
 
@@ -1615,7 +1654,10 @@ void CFontTexture::UploadGlyphAtlasTextureImpl()
 
 	const int uploadWidth = std::max(texWidth, 1);
 	const int uploadHeight = std::max(texHeight, 1);
-	const gfx::PixelFormat expectedFormat = needsColor ? gfx::PixelFormat::BGRA8_UNorm : gfx::PixelFormat::R8_UNorm;
+	auto *backend = (globalRendering != nullptr) ? globalRendering->graphicsBackend.get() : nullptr;
+	const bool usingVulkanBackend = (backend != nullptr) && (backend->Type() == gfx::BackendType::Vulkan);
+	const bool expandToColorAtlas = (!needsColor && usingVulkanBackend);
+	const gfx::PixelFormat expectedFormat = (needsColor || expandToColorAtlas) ? gfx::PixelFormat::BGRA8_UNorm : gfx::PixelFormat::R8_UNorm;
 
 	if (glyphAtlasTexture == nullptr || glyphAtlasTexture->Format() != expectedFormat)
 	{
@@ -1632,20 +1674,60 @@ void CFontTexture::UploadGlyphAtlasTextureImpl()
 	if (glyphAtlasTexture == nullptr || atlasUpdate.Empty())
 		return;
 
-	const std::size_t rowPitchBytes = static_cast<std::size_t>(uploadWidth) * static_cast<std::size_t>(needsColor ? 4 : 1);
-	const auto pixels = std::span<const std::byte>(
-		reinterpret_cast<const std::byte *>(atlasUpdate.GetRawMem()),
-		atlasUpdate.GetMemSize());
+	if (expandToColorAtlas)
+	{
+		std::vector<std::byte> expandedPixels;
+		expandedPixels.resize(static_cast<std::size_t>(uploadWidth) * static_cast<std::size_t>(uploadHeight) * 4u);
 
-	glyphAtlasTexture->UploadSubRegion(
-		0,
-		0,
-		0,
-		0,
-		static_cast<std::uint32_t>(uploadWidth),
-		static_cast<std::uint32_t>(uploadHeight),
-		pixels,
-		rowPitchBytes);
+		const auto *src = reinterpret_cast<const std::uint8_t *>(atlasUpdate.GetRawMem());
+		auto *dst = reinterpret_cast<std::uint8_t *>(expandedPixels.data());
+		const std::size_t pixelCount = static_cast<std::size_t>(uploadWidth) * static_cast<std::size_t>(uploadHeight);
+
+		for (std::size_t i = 0u; i < pixelCount; ++i)
+		{
+			const std::uint8_t alpha = src[i];
+			dst[(i * 4u) + 0u] = 255u;
+			dst[(i * 4u) + 1u] = 255u;
+			dst[(i * 4u) + 2u] = 255u;
+			dst[(i * 4u) + 3u] = alpha;
+		}
+
+		const std::size_t rowPitchBytes = static_cast<std::size_t>(uploadWidth) * 4u;
+		glyphAtlasTexture->UploadSubRegion(
+			0,
+			0,
+			0,
+			0,
+			static_cast<std::uint32_t>(uploadWidth),
+			static_cast<std::uint32_t>(uploadHeight),
+			std::span<const std::byte>(expandedPixels.data(), expandedPixels.size()),
+			rowPitchBytes);
+	}
+	else
+	{
+		const std::size_t rowPitchBytes = static_cast<std::size_t>(uploadWidth) * static_cast<std::size_t>(needsColor ? 4 : 1);
+		const auto pixels = std::span<const std::byte>(
+			reinterpret_cast<const std::byte *>(atlasUpdate.GetRawMem()),
+			atlasUpdate.GetMemSize());
+
+		glyphAtlasTexture->UploadSubRegion(
+			0,
+			0,
+			0,
+			0,
+			static_cast<std::uint32_t>(uploadWidth),
+			static_cast<std::uint32_t>(uploadHeight),
+			pixels,
+			rowPitchBytes);
+	}
+
+#ifdef ENABLE_VULKAN
+	if (usingVulkanBackend)
+	{
+		if (auto *vulkanBackend = dynamic_cast<gfx::VulkanGraphicsBackend *>(backend); vulkanBackend != nullptr)
+			vulkanBackend->UploadSwapchainTriangleTexture(glyphAtlasTexture.get());
+	}
+#endif
 
 	needsTextureUpload = false;
 #endif

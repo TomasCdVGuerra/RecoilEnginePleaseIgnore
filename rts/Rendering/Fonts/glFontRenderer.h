@@ -100,6 +100,7 @@ private:
 	std::array<std::vector<uint16_t>, 2> indcs;	  // OL, PM
 
 	uint32_t textureSpaceMatrix = 0u;
+	bool useOpenGLState = false;
 
 	std::unique_ptr<gfx::IVertexBuffer> textVertexBuffer;
 	std::unique_ptr<gfx::IVertexBuffer> textIndexBuffer;

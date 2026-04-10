@@ -290,20 +290,29 @@ void CglShaderFontRenderer::GetStats(std::array<size_t, 8> &stats) const
 CglNoShaderFontRenderer::CglNoShaderFontRenderer()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	useOpenGLState =
+		(globalRendering != nullptr) &&
+		(globalRendering->graphicsBackend != nullptr) &&
+		(globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL);
+
 	for (auto &v : verts)
 		v.reserve(NUM_TRI_BUFFER_VERTS);
 	for (auto &i : indcs)
 		i.reserve(NUM_TRI_BUFFER_ELEMS);
 
-	textureSpaceMatrix = glGenLists(1);
-	glNewList(textureSpaceMatrix, GL_COMPILE);
-	glEndList();
+	if (useOpenGLState)
+	{
+		textureSpaceMatrix = glGenLists(1);
+		glNewList(textureSpaceMatrix, GL_COMPILE);
+		glEndList();
+	}
 }
 
 CglNoShaderFontRenderer::~CglNoShaderFontRenderer()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	glDeleteLists(textureSpaceMatrix, 1);
+	if (useOpenGLState && (textureSpaceMatrix != 0u))
+		glDeleteLists(textureSpaceMatrix, 1);
 }
 
 void CglNoShaderFontRenderer::AddQuadTrianglesImpl(bool primary, VA_TYPE_TC &&tl, VA_TYPE_TC &&tr, VA_TYPE_TC &&br, VA_TYPE_TC &&bl)
@@ -401,12 +410,41 @@ void CglNoShaderFontRenderer::DrawTraingleElements()
 	state.premultipliedAlpha = false;
 	state.useDefaultBlendFunc = !userDefinedBlending;
 
+	const bool normalizeTexCoords = !useOpenGLState && (activeTexture != nullptr);
+	float invTextureWidth = 1.0f;
+	float invTextureHeight = 1.0f;
+	if (normalizeTexCoords)
+	{
+		const gfx::Extent3D textureExtent = activeTexture->GetExtent();
+		if ((textureExtent.width > 0u) && (textureExtent.height > 0u))
+		{
+			invTextureWidth = 1.0f / static_cast<float>(textureExtent.width);
+			invTextureHeight = 1.0f / static_cast<float>(textureExtent.height);
+		}
+	}
+
+	std::vector<VA_TYPE_TC> uploadVertices;
+
 	for (size_t idx = 0; idx < 2; ++idx)
 	{
 		if (verts[idx].empty() || indcs[idx].empty())
 			continue;
 
-		const std::size_t vertexSizeBytes = verts[idx].size() * sizeof(VA_TYPE_TC);
+		const VA_TYPE_TC *uploadVerticesData = verts[idx].data();
+		const std::size_t uploadVertexCount = verts[idx].size();
+		if (normalizeTexCoords)
+		{
+			uploadVertices = verts[idx];
+			for (VA_TYPE_TC &vertex : uploadVertices)
+			{
+				vertex.s *= invTextureWidth;
+				vertex.t *= invTextureHeight;
+			}
+
+			uploadVerticesData = uploadVertices.data();
+		}
+
+		const std::size_t vertexSizeBytes = uploadVertexCount * sizeof(VA_TYPE_TC);
 		const std::size_t indexSizeBytes = indcs[idx].size() * sizeof(uint16_t);
 
 		if (textVertexBuffer->SizeBytes() < vertexSizeBytes)
@@ -415,7 +453,7 @@ void CglNoShaderFontRenderer::DrawTraingleElements()
 			textIndexBuffer->Resize(indexSizeBytes, false);
 
 		const auto vertexData = std::span<const std::byte>(
-			reinterpret_cast<const std::byte *>(verts[idx].data()),
+			reinterpret_cast<const std::byte *>(uploadVerticesData),
 			vertexSizeBytes);
 		const auto indexData = std::span<const std::byte>(
 			reinterpret_cast<const std::byte *>(indcs[idx].data()),
@@ -450,6 +488,12 @@ void CglNoShaderFontRenderer::HandleTextureUpdate(CFontTexture &fnt, bool onlyUp
 	if (!onlyUpload)
 		fnt.UpdateGlyphAtlasTexture();
 
+	if (!useOpenGLState)
+	{
+		fnt.UploadGlyphAtlasTextureImpl();
+		return;
+	}
+
 	GLint dl = 0;
 	glGetIntegerv(GL_LIST_INDEX, &dl);
 	if (dl == 0)
@@ -466,6 +510,11 @@ void CglNoShaderFontRenderer::HandleTextureUpdate(CFontTexture &fnt, bool onlyUp
 void CglNoShaderFontRenderer::PushGLState(const CglFont &fnt)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	activeTexture = fnt.GetBackendTexture();
+
+	if (!useOpenGLState)
+		return;
+
 	glPushAttrib(GL_ENABLE_BIT | GL_CURRENT_BIT);
 	glDisable(GL_LIGHTING);
 	glDisable(GL_DEPTH_TEST);
@@ -475,8 +524,6 @@ void CglNoShaderFontRenderer::PushGLState(const CglFont &fnt)
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable(GL_TEXTURE_2D);
 
-	activeTexture = fnt.GetBackendTexture();
-
 	glMatrixMode(GL_TEXTURE);
 	glPushMatrix();
 	glCallList(textureSpaceMatrix);
@@ -485,6 +532,12 @@ void CglNoShaderFontRenderer::PushGLState(const CglFont &fnt)
 void CglNoShaderFontRenderer::PopGLState(const CglFont &)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (!useOpenGLState)
+	{
+		activeTexture = nullptr;
+		return;
+	}
+
 	glPopMatrix();
 	glMatrixMode(GL_MODELVIEW);
 
@@ -524,14 +577,14 @@ std::unique_ptr<CglFontRenderer> CglFontRenderer::CreateInstance()
 		if (!warnedNonOpenGLBackend)
 		{
 			LOG_L(
-				L_WARNING,
-				"[CglFontRenderer::%s] backend type %d is not OpenGL, using dummy font renderer",
+				L_NOTICE,
+				"[CglFontRenderer::%s] backend type %d is not OpenGL, using no-shader font renderer",
 				__func__,
 				static_cast<int>(globalRendering->graphicsBackend->Type()));
 			warnedNonOpenGLBackend = true;
 		}
 
-		return std::make_unique<CglDummyFontRenderer>();
+		return std::make_unique<CglNoShaderFontRenderer>();
 	}
 
 	// return std::make_unique<CglNoShaderFontRenderer>();

@@ -6,6 +6,7 @@
 
 #include <vulkan/vulkan.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -81,6 +82,8 @@ namespace gfx
 
         // Binds the sampled texture used by the swapchain demo draw.
         void SetSwapchainTriangleTexture(ITexture *texture);
+        // Explicit descriptor refresh hook for textures updated outside the draw path.
+        void UploadSwapchainTriangleTexture(ITexture *texture);
 
     private:
         void Init();
@@ -101,8 +104,17 @@ namespace gfx
         void CreateSwapchainFramebuffers();
         void CreateSwapchainTriangleResources();
         void CreateSwapchainTrianglePipeline();
+        void CreateSwapchainTexturedBatchPipeline();
         void UpdateSwapchainTriangleProjection();
         void UpdateSwapchainTriangleTextureDescriptor(ITexture *texture);
+        void UpdateSwapchainTriangleTextureDescriptor(const VkDescriptorImageInfo &textureImageInfo);
+        bool ResolveSwapchainTriangleTextureDescriptorInfo(ITexture *texture, VkDescriptorImageInfo &textureImageInfo) const;
+        void EnsureTransientBuffer(
+            VkDeviceSize requiredSize,
+            VkBufferUsageFlags usage,
+            VkBuffer &buffer,
+            VkDeviceMemory &memory,
+            VkDeviceSize &capacity);
         void DestroySwapchainTriangleResources() noexcept;
         void CreateBuffer(
             VkDeviceSize size,
@@ -155,8 +167,15 @@ namespace gfx
         VkDeviceMemory swapchainTriangleIndexBufferMemory = VK_NULL_HANDLE;
         VkPipelineLayout swapchainTrianglePipelineLayout = VK_NULL_HANDLE;
         VkPipeline swapchainTrianglePipeline = VK_NULL_HANDLE;
+        VkPipeline swapchainTexturedBatchPipeline = VK_NULL_HANDLE;
         ITexture *swapchainTriangleTexture = nullptr;
         std::unique_ptr<ITexture> swapchainTriangleFallbackTexture;
+        VkBuffer texturedBatchVertexBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory texturedBatchVertexBufferMemory = VK_NULL_HANDLE;
+        VkDeviceSize texturedBatchVertexBufferCapacity = 0;
+        VkBuffer texturedBatchIndexBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory texturedBatchIndexBufferMemory = VK_NULL_HANDLE;
+        VkDeviceSize texturedBatchIndexBufferCapacity = 0;
         VkFormat swapchainDepthFormat = VK_FORMAT_UNDEFINED;
         VkImage swapchainDepthImage = VK_NULL_HANDLE;
         VkDeviceMemory swapchainDepthImageMemory = VK_NULL_HANDLE;
@@ -166,6 +185,17 @@ namespace gfx
         bool frameRecording = false;
         bool renderPassActive = false;
         VulkanFramebuffer *boundFramebuffer = nullptr;
+
+        struct PendingTexturedBatchDraw
+        {
+            bool hasTextureImageInfo = false;
+            VkDescriptorImageInfo textureImageInfo{};
+            std::vector<std::byte> vertexData;
+            std::vector<std::uint32_t> indices;
+            std::vector<TexturedIndexedBatchDesc> batches;
+        };
+
+        std::vector<PendingTexturedBatchDraw> pendingTexturedBatchDraws;
     };
 
 } // namespace gfx

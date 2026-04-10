@@ -5,9 +5,11 @@
 #include "VulkanFramebuffer.h"
 #include "VulkanShader.h"
 #include "VulkanShaderProgram.h"
+#include "VulkanTexturedBatchShaders.h"
 #include "VulkanTexture.h"
 #include "VulkanVertexArray.h"
 #include "VulkanVertexBuffer.h"
+#include "Rendering/GlobalRendering.h"
 
 #if !defined(HEADLESS)
 #include <SDL.h>
@@ -40,6 +42,9 @@
 namespace
 {
 
+    static constexpr bool EnableVulkanTraceLogs = false;
+    static constexpr bool EnableVulkanInstanceDebugLogs = false;
+
     [[noreturn]] void ThrowNotImplemented(const char *method)
     {
         throw std::runtime_error(std::string("VulkanGraphicsBackend::") + method + " is not implemented yet");
@@ -58,12 +63,19 @@ namespace
 
     void VulkanTrace(const char *format, ...)
     {
+        if (!EnableVulkanTraceLogs)
+            return;
+
         va_list args;
         va_start(args, format);
         std::vfprintf(stderr, format, args);
         va_end(args);
         std::fflush(stderr);
     }
+
+    // Temporary debug toggle to isolate UI rendering while the hardcoded demo draw still exists.
+    static constexpr bool EnableSwapchainDebugIslandDraw = true;
+    static constexpr bool EnableVulkanUiDebugLogs = false;
 
     struct VulkanVertex
     {
@@ -75,6 +87,18 @@ namespace
         float nz;
         float u;
         float v;
+    };
+
+    struct VulkanTexturedBatchVertex
+    {
+        float x;
+        float y;
+        float u;
+        float v;
+        std::uint8_t r;
+        std::uint8_t g;
+        std::uint8_t b;
+        std::uint8_t a;
     };
 
     static constexpr std::array<VulkanVertex, 24> SwapchainTriangleVertices = {{
@@ -352,6 +376,38 @@ namespace
         return matrix;
     }
 
+    std::array<float, 16> BuildOrthographicProjectionMatrix(const VkExtent2D extent)
+    {
+        std::uint32_t orthoWidth = (extent.width == 0u) ? 1u : extent.width;
+        std::uint32_t orthoHeight = (extent.height == 0u) ? 1u : extent.height;
+
+        if ((globalRendering != nullptr) && (globalRendering->viewSizeX > 0) && (globalRendering->viewSizeY > 0))
+        {
+            orthoWidth = static_cast<std::uint32_t>(globalRendering->viewSizeX);
+            orthoHeight = static_cast<std::uint32_t>(globalRendering->viewSizeY);
+        }
+
+        const float width = static_cast<float>(orthoWidth);
+        const float height = static_cast<float>(orthoHeight);
+
+        const float left = 0.0f;
+        const float right = width;
+        const float top = 0.0f;
+        const float bottom = height;
+        const float nearPlane = 0.0f;
+        const float farPlane = 1.0f;
+
+        std::array<float, 16> matrix{};
+        matrix[0] = 2.0f / (right - left);
+        matrix[5] = 2.0f / (top - bottom);
+        matrix[10] = 1.0f / (farPlane - nearPlane);
+        matrix[12] = -(right + left) / (right - left);
+        matrix[13] = -(top + bottom) / (top - bottom);
+        matrix[14] = -nearPlane / (farPlane - nearPlane);
+        matrix[15] = 1.0f;
+        return matrix;
+    }
+
     std::array<float, 16> BuildSwapchainTriangleModelMatrix(float elapsedSeconds)
     {
         const std::array<float, 16> rotationY = BuildRotationYMatrix(elapsedSeconds * 0.9f);
@@ -598,14 +654,432 @@ namespace gfx
         IndexElementType indexType,
         const TexturedBatchState &state)
     {
-        (void)vertexBuffer;
-        (void)indexBuffer;
-        (void)texture;
-        (void)batches;
-        (void)vertexLayout;
-        (void)indexType;
         (void)state;
-        ThrowNotImplemented("DrawTexturedIndexedBatches");
+
+        static std::uint64_t uiBatchDrawCallCount = 0u;
+        const std::uint64_t drawCallIndex = ++uiBatchDrawCallCount;
+        const bool shouldLogThisCall = EnableVulkanUiDebugLogs && ((drawCallIndex <= 120u) || ((drawCallIndex % 300u) == 0u));
+
+        if (shouldLogThisCall)
+        {
+            VulkanTrace(
+                "[Vulkan][UI2D] DrawTexturedIndexedBatches call=%llu incomingBatches=%zu stride=%u posOff=%u uvOff=%u colorOff=%u frameRecording=%d renderPassActive=%d\\n",
+                static_cast<unsigned long long>(drawCallIndex),
+                batches.size(),
+                vertexLayout.strideBytes,
+                vertexLayout.positionOffsetBytes,
+                vertexLayout.texCoordOffsetBytes,
+                vertexLayout.colorOffsetBytes,
+                frameRecording ? 1 : 0,
+                renderPassActive ? 1 : 0);
+        }
+
+        const bool canSubmitNow = frameRecording && renderPassActive && (primaryCommandBuffer != VK_NULL_HANDLE);
+
+        if (batches.empty())
+        {
+            if (shouldLogThisCall)
+                VulkanTrace("[Vulkan][UI2D] skipped: incoming batch list is empty\\n");
+            return;
+        }
+
+        if (!canSubmitNow)
+        {
+            if (shouldLogThisCall)
+            {
+                VulkanTrace(
+                    "[Vulkan][UI2D] deferred: invalid command state (frameRecording=%d renderPassActive=%d cmdBufferNull=%d)\\n",
+                    frameRecording ? 1 : 0,
+                    renderPassActive ? 1 : 0,
+                    (primaryCommandBuffer == VK_NULL_HANDLE) ? 1 : 0);
+            }
+        }
+
+        if (vertexLayout.strideBytes == 0u)
+        {
+            if (shouldLogThisCall)
+                VulkanTrace("[Vulkan][UI2D] skipped: vertexLayout.strideBytes is zero\\n");
+            return;
+        }
+
+        auto *sourceVertexBuffer = dynamic_cast<VulkanVertexBuffer *>(&vertexBuffer);
+        auto *sourceIndexBuffer = dynamic_cast<VulkanVertexBuffer *>(&indexBuffer);
+        if ((sourceVertexBuffer == nullptr) || (sourceIndexBuffer == nullptr))
+        {
+            if (shouldLogThisCall)
+                VulkanTrace("[Vulkan][UI2D] skipped: unsupported vertex/index buffer implementation\\n");
+            return;
+        }
+
+        if ((sourceVertexBuffer->GetBuffer() == VK_NULL_HANDLE) || (sourceIndexBuffer->GetBuffer() == VK_NULL_HANDLE))
+        {
+            if (shouldLogThisCall)
+                VulkanTrace("[Vulkan][UI2D] skipped: source Vulkan buffer handle is null\\n");
+            return;
+        }
+
+        if (
+            (swapchainTexturedBatchPipeline == VK_NULL_HANDLE) ||
+            (swapchainTrianglePipelineLayout == VK_NULL_HANDLE) ||
+            (swapchainTriangleDescriptorSet == VK_NULL_HANDLE))
+        {
+            if (shouldLogThisCall)
+                VulkanTrace("[Vulkan][UI2D] skipped: pipeline/layout/descriptor set is not ready\\n");
+            return;
+        }
+
+        const std::size_t indexElementSizeBytes = (indexType == IndexElementType::UInt16)   ? sizeof(std::uint16_t)
+                                                  : (indexType == IndexElementType::UInt32) ? sizeof(std::uint32_t)
+                                                                                            : 0u;
+        if (indexElementSizeBytes == 0u)
+        {
+            if (shouldLogThisCall)
+                VulkanTrace("[Vulkan][UI2D] skipped: unsupported index element type\\n");
+            return;
+        }
+
+        const std::size_t sourceVertexBufferSizeBytes = sourceVertexBuffer->SizeBytes();
+        const std::size_t sourceIndexBufferSizeBytes = sourceIndexBuffer->SizeBytes();
+        const std::size_t sourceVertexCount = sourceVertexBufferSizeBytes / vertexLayout.strideBytes;
+        const std::size_t sourceIndexCount = sourceIndexBufferSizeBytes / indexElementSizeBytes;
+
+        if (shouldLogThisCall)
+        {
+            VulkanTrace(
+                "[Vulkan][UI2D] sourceVertexBytes=%zu sourceIndexBytes=%zu sourceVertexCount=%zu sourceIndexCount=%zu\\n",
+                sourceVertexBufferSizeBytes,
+                sourceIndexBufferSizeBytes,
+                sourceVertexCount,
+                sourceIndexCount);
+        }
+
+        if ((sourceVertexCount == 0u) || (sourceIndexCount == 0u))
+        {
+            if (shouldLogThisCall)
+                VulkanTrace("[Vulkan][UI2D] skipped: source buffer has zero vertices or indices\\n");
+            return;
+        }
+
+        if ((vertexLayout.positionOffsetBytes + (sizeof(float) * 2u)) > vertexLayout.strideBytes)
+        {
+            if (shouldLogThisCall)
+                VulkanTrace("[Vulkan][UI2D] skipped: position offset exceeds source vertex stride\\n");
+            return;
+        }
+
+        if ((vertexLayout.texCoordOffsetBytes + (sizeof(float) * 2u)) > vertexLayout.strideBytes)
+        {
+            if (shouldLogThisCall)
+                VulkanTrace("[Vulkan][UI2D] skipped: uv offset exceeds source vertex stride\\n");
+            return;
+        }
+
+        const bool hasColor = ((vertexLayout.colorOffsetBytes + sizeof(std::uint32_t)) <= vertexLayout.strideBytes);
+
+        std::span<std::byte> mappedSourceVertexBytes;
+        std::span<std::byte> mappedSourceIndexBytes;
+
+        struct ScopedBufferUnmap
+        {
+            VulkanVertexBuffer *buffer = nullptr;
+
+            ~ScopedBufferUnmap()
+            {
+                if (buffer != nullptr)
+                    buffer->UnmapWrite();
+            }
+        };
+
+        ScopedBufferUnmap scopedVertexUnmap{};
+        ScopedBufferUnmap scopedIndexUnmap{};
+
+        try
+        {
+            mappedSourceVertexBytes = sourceVertexBuffer->MapWrite(0u, sourceVertexBufferSizeBytes);
+            scopedVertexUnmap.buffer = sourceVertexBuffer;
+
+            mappedSourceIndexBytes = sourceIndexBuffer->MapWrite(0u, sourceIndexBufferSizeBytes);
+            scopedIndexUnmap.buffer = sourceIndexBuffer;
+        }
+        catch (...)
+        {
+            return;
+        }
+
+        const auto ReadSourceIndex = [&](std::size_t sourceIndex) -> std::uint32_t
+        {
+            if (indexType == IndexElementType::UInt16)
+            {
+                const auto *sourceIndices = reinterpret_cast<const std::uint16_t *>(mappedSourceIndexBytes.data());
+                return static_cast<std::uint32_t>(sourceIndices[sourceIndex]);
+            }
+
+            const auto *sourceIndices = reinterpret_cast<const std::uint32_t *>(mappedSourceIndexBytes.data());
+            return sourceIndices[sourceIndex];
+        };
+
+        struct EffectiveBatchDraw
+        {
+            std::uint32_t firstIndex = 0u;
+            std::uint32_t indexCount = 0u;
+        };
+
+        std::vector<EffectiveBatchDraw> effectiveBatches;
+        effectiveBatches.reserve(batches.size());
+
+        std::vector<std::uint32_t> transientIndices;
+        transientIndices.reserve(sourceIndexCount);
+
+        std::uint32_t maxReferencedVertex = 0u;
+        bool hasReferencedVertices = false;
+
+        for (const TexturedIndexedBatchDesc &batch : batches)
+        {
+            if (batch.indexCount == 0u)
+                continue;
+
+            const std::size_t sourceFirstIndex = static_cast<std::size_t>(batch.firstIndex);
+            if (sourceFirstIndex >= sourceIndexCount)
+                continue;
+
+            const std::size_t sourceBatchEndExclusive = std::min<std::size_t>(
+                sourceIndexCount,
+                sourceFirstIndex + static_cast<std::size_t>(batch.indexCount));
+
+            if (sourceBatchEndExclusive <= sourceFirstIndex)
+                continue;
+
+            const std::uint32_t transientFirstIndex = static_cast<std::uint32_t>(transientIndices.size());
+            bool batchValid = true;
+
+            for (std::size_t sourceIndex = sourceFirstIndex; sourceIndex < sourceBatchEndExclusive; ++sourceIndex)
+            {
+                const std::uint32_t vertexIndex = ReadSourceIndex(sourceIndex);
+                if (vertexIndex >= sourceVertexCount)
+                {
+                    batchValid = false;
+                    break;
+                }
+
+                transientIndices.push_back(vertexIndex);
+                maxReferencedVertex = std::max(maxReferencedVertex, vertexIndex);
+                hasReferencedVertices = true;
+            }
+
+            if (!batchValid)
+            {
+                transientIndices.resize(transientFirstIndex);
+                continue;
+            }
+
+            const std::uint32_t transientBatchIndexCount = static_cast<std::uint32_t>(transientIndices.size() - transientFirstIndex);
+            if (transientBatchIndexCount == 0u)
+                continue;
+
+            effectiveBatches.push_back({
+                transientFirstIndex,
+                transientBatchIndexCount,
+            });
+        }
+
+        if (!hasReferencedVertices || transientIndices.empty() || effectiveBatches.empty())
+        {
+            if (shouldLogThisCall)
+                VulkanTrace("[Vulkan][UI2D] skipped: no valid referenced vertices after batch validation\\n");
+            return;
+        }
+
+        if (shouldLogThisCall)
+        {
+            VulkanTrace(
+                "[Vulkan][UI2D] effectiveBatches=%zu transientIndices=%zu maxReferencedVertex=%u hasColor=%d\\n",
+                effectiveBatches.size(),
+                transientIndices.size(),
+                maxReferencedVertex,
+                hasColor ? 1 : 0);
+        }
+
+        std::vector<VulkanTexturedBatchVertex> transientVertices;
+        transientVertices.resize(static_cast<std::size_t>(maxReferencedVertex) + 1u);
+
+        const std::byte *sourceVertexBaseBytes = mappedSourceVertexBytes.data();
+        for (std::uint32_t vertexIndex = 0u; vertexIndex <= maxReferencedVertex; ++vertexIndex)
+        {
+            VulkanTexturedBatchVertex &dstVertex = transientVertices[vertexIndex];
+            const std::byte *sourceVertexBytes = sourceVertexBaseBytes + (static_cast<std::size_t>(vertexIndex) * vertexLayout.strideBytes);
+
+            std::memcpy(&dstVertex.x, sourceVertexBytes + vertexLayout.positionOffsetBytes, sizeof(float) * 2u);
+
+            std::memcpy(&dstVertex.u, sourceVertexBytes + vertexLayout.texCoordOffsetBytes, sizeof(float) * 2u);
+
+            if (hasColor)
+            {
+                std::memcpy(&dstVertex.r, sourceVertexBytes + vertexLayout.colorOffsetBytes, sizeof(std::uint32_t));
+            }
+            else
+            {
+                dstVertex.r = 255u;
+                dstVertex.g = 255u;
+                dstVertex.b = 255u;
+                dstVertex.a = 255u;
+            }
+        }
+
+        if (!canSubmitNow)
+        {
+            PendingTexturedBatchDraw deferredDraw{};
+            deferredDraw.hasTextureImageInfo = ResolveSwapchainTriangleTextureDescriptorInfo(&texture, deferredDraw.textureImageInfo);
+            deferredDraw.vertexData.resize(transientVertices.size() * sizeof(VulkanTexturedBatchVertex));
+            if (!deferredDraw.vertexData.empty())
+            {
+                std::memcpy(
+                    deferredDraw.vertexData.data(),
+                    transientVertices.data(),
+                    deferredDraw.vertexData.size());
+            }
+
+            deferredDraw.indices = transientIndices;
+            deferredDraw.batches.reserve(effectiveBatches.size());
+            for (const EffectiveBatchDraw &batch : effectiveBatches)
+            {
+                deferredDraw.batches.push_back({
+                    batch.firstIndex,
+                    batch.indexCount,
+                });
+            }
+
+            pendingTexturedBatchDraws.push_back(std::move(deferredDraw));
+
+            if (shouldLogThisCall)
+            {
+                VulkanTrace(
+                    "[Vulkan][UI2D] queued deferred draw: queuedBatches=%zu totalQueuedDraws=%zu\\n",
+                    effectiveBatches.size(),
+                    pendingTexturedBatchDraws.size());
+            }
+
+            return;
+        }
+
+        const VkDeviceSize transientVertexUploadSize = static_cast<VkDeviceSize>(transientVertices.size() * sizeof(VulkanTexturedBatchVertex));
+        const VkDeviceSize transientIndexUploadSize = static_cast<VkDeviceSize>(transientIndices.size() * indexElementSizeBytes);
+
+        EnsureTransientBuffer(
+            transientVertexUploadSize,
+            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            texturedBatchVertexBuffer,
+            texturedBatchVertexBufferMemory,
+            texturedBatchVertexBufferCapacity);
+
+        EnsureTransientBuffer(
+            transientIndexUploadSize,
+            VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+            texturedBatchIndexBuffer,
+            texturedBatchIndexBufferMemory,
+            texturedBatchIndexBufferCapacity);
+
+        void *mappedTransientVertexData = nullptr;
+        CheckVkResult(
+            vkMapMemory(device, texturedBatchVertexBufferMemory, 0, transientVertexUploadSize, 0, &mappedTransientVertexData),
+            "vkMapMemory(texturedBatchVertexBuffer)");
+        std::memcpy(mappedTransientVertexData, transientVertices.data(), static_cast<std::size_t>(transientVertexUploadSize));
+        vkUnmapMemory(device, texturedBatchVertexBufferMemory);
+
+        void *mappedTransientIndexData = nullptr;
+        CheckVkResult(
+            vkMapMemory(device, texturedBatchIndexBufferMemory, 0, transientIndexUploadSize, 0, &mappedTransientIndexData),
+            "vkMapMemory(texturedBatchIndexBuffer)");
+
+        if (indexType == IndexElementType::UInt16)
+        {
+            auto *destinationIndices = static_cast<std::uint16_t *>(mappedTransientIndexData);
+            for (std::size_t i = 0u; i < transientIndices.size(); ++i)
+                destinationIndices[i] = static_cast<std::uint16_t>(transientIndices[i]);
+        }
+        else
+        {
+            std::memcpy(mappedTransientIndexData, transientIndices.data(), static_cast<std::size_t>(transientIndexUploadSize));
+        }
+
+        vkUnmapMemory(device, texturedBatchIndexBufferMemory);
+
+        const std::array<float, 16> orthographicProjection = BuildOrthographicProjectionMatrix(swapchainExtent);
+        const std::array<float, 16> identityModel = BuildIdentityMatrix();
+
+        struct SwapchainTriangleUniformData
+        {
+            std::array<float, 16> mvp;
+            std::array<float, 16> model;
+        };
+
+        if (swapchainTriangleUniformBufferMemory != VK_NULL_HANDLE)
+        {
+            const SwapchainTriangleUniformData uniformData = {
+                orthographicProjection,
+                identityModel,
+            };
+
+            void *mappedUniformData = nullptr;
+            CheckVkResult(
+                vkMapMemory(device, swapchainTriangleUniformBufferMemory, 0, static_cast<VkDeviceSize>(sizeof(uniformData)), 0, &mappedUniformData),
+                "vkMapMemory(texturedBatchUniform)");
+
+            std::memcpy(mappedUniformData, &uniformData, sizeof(uniformData));
+            vkUnmapMemory(device, swapchainTriangleUniformBufferMemory);
+        }
+
+        vkCmdBindPipeline(primaryCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, swapchainTexturedBatchPipeline);
+
+        UpdateSwapchainTriangleTextureDescriptor(&texture);
+        vkCmdBindDescriptorSets(
+            primaryCommandBuffer,
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            swapchainTrianglePipelineLayout,
+            0u,
+            1u,
+            &swapchainTriangleDescriptorSet,
+            0u,
+            nullptr);
+
+        const float viewportWidth = static_cast<float>((swapchainExtent.width == 0u) ? 1u : swapchainExtent.width);
+        const float viewportHeight = static_cast<float>((swapchainExtent.height == 0u) ? 1u : swapchainExtent.height);
+
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = viewportWidth;
+        viewport.height = viewportHeight;
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+
+        VkRect2D scissor{};
+        scissor.offset = {0, 0};
+        scissor.extent.width = (swapchainExtent.width == 0u) ? 1u : swapchainExtent.width;
+        scissor.extent.height = (swapchainExtent.height == 0u) ? 1u : swapchainExtent.height;
+
+        vkCmdSetViewport(primaryCommandBuffer, 0u, 1u, &viewport);
+        vkCmdSetScissor(primaryCommandBuffer, 0u, 1u, &scissor);
+
+        const VkDeviceSize vertexOffset = 0u;
+        vkCmdBindVertexBuffers(primaryCommandBuffer, 0u, 1u, &texturedBatchVertexBuffer, &vertexOffset);
+        vkCmdBindIndexBuffer(primaryCommandBuffer, texturedBatchIndexBuffer, 0u, TranslateIndexElementType(indexType));
+
+        for (const EffectiveBatchDraw &batch : effectiveBatches)
+        {
+            if (batch.indexCount == 0u)
+                continue;
+
+            vkCmdDrawIndexed(primaryCommandBuffer, batch.indexCount, 1u, batch.firstIndex, 0, 0u);
+        }
+
+        if (shouldLogThisCall)
+        {
+            VulkanTrace(
+                "[Vulkan][UI2D] submitted: drawCalls=%zu uploadedVertices=%zu uploadedIndices=%zu\\n",
+                effectiveBatches.size(),
+                transientVertices.size(),
+                transientIndices.size());
+        }
     }
 
     void VulkanGraphicsBackend::DrawIndexed(
@@ -812,8 +1286,11 @@ namespace gfx
                 renderPassBeginInfo.pClearValues = clearValues.data();
 
                 vkCmdBeginRenderPass(primaryCommandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+                renderPassActive = true;
+                boundFramebuffer = nullptr;
 
                 if (
+                    EnableSwapchainDebugIslandDraw &&
                     (swapchainTrianglePipeline != VK_NULL_HANDLE) &&
                     (swapchainTriangleVertexBuffer != VK_NULL_HANDLE) &&
                     (swapchainTriangleIndexBuffer != VK_NULL_HANDLE))
@@ -858,8 +1335,166 @@ namespace gfx
                     vkCmdSetScissor(primaryCommandBuffer, 0u, 1u, &scissor);
                     vkCmdDrawIndexed(primaryCommandBuffer, static_cast<std::uint32_t>(SwapchainTriangleIndices.size()), 1u, 0u, 0, 0u);
                 }
+                else if (!EnableSwapchainDebugIslandDraw)
+                {
+                    static bool loggedIslandDisable = false;
+                    if (!loggedIslandDisable)
+                    {
+                        VulkanTrace("[Vulkan][UI2D] swapchain debug island draw is temporarily disabled\\n");
+                        loggedIslandDisable = true;
+                    }
+                }
+
+                if (!pendingTexturedBatchDraws.empty())
+                {
+                    if (
+                        (swapchainTexturedBatchPipeline == VK_NULL_HANDLE) ||
+                        (swapchainTrianglePipelineLayout == VK_NULL_HANDLE) ||
+                        (swapchainTriangleDescriptorSet == VK_NULL_HANDLE))
+                    {
+                        if (EnableVulkanUiDebugLogs)
+                        {
+                            VulkanTrace(
+                                "[Vulkan][UI2D] dropping deferred draws (%zu): pipeline/layout/descriptor not ready\\n",
+                                pendingTexturedBatchDraws.size());
+                        }
+                        pendingTexturedBatchDraws.clear();
+                    }
+                    else
+                    {
+                        const std::array<float, 16> orthographicProjection = BuildOrthographicProjectionMatrix(swapchainExtent);
+                        const std::array<float, 16> identityModel = BuildIdentityMatrix();
+
+                        struct SwapchainTriangleUniformData
+                        {
+                            std::array<float, 16> mvp;
+                            std::array<float, 16> model;
+                        };
+
+                        if (swapchainTriangleUniformBufferMemory != VK_NULL_HANDLE)
+                        {
+                            const SwapchainTriangleUniformData uniformData = {
+                                orthographicProjection,
+                                identityModel,
+                            };
+
+                            void *mappedUniformData = nullptr;
+                            CheckVkResult(
+                                vkMapMemory(device, swapchainTriangleUniformBufferMemory, 0, static_cast<VkDeviceSize>(sizeof(uniformData)), 0, &mappedUniformData),
+                                "vkMapMemory(flushTexturedBatchUniform)");
+
+                            std::memcpy(mappedUniformData, &uniformData, sizeof(uniformData));
+                            vkUnmapMemory(device, swapchainTriangleUniformBufferMemory);
+                        }
+
+                        const float viewportWidth = static_cast<float>((swapchainExtent.width == 0u) ? 1u : swapchainExtent.width);
+                        const float viewportHeight = static_cast<float>((swapchainExtent.height == 0u) ? 1u : swapchainExtent.height);
+
+                        VkViewport viewport{};
+                        viewport.x = 0.0f;
+                        viewport.y = 0.0f;
+                        viewport.width = viewportWidth;
+                        viewport.height = viewportHeight;
+                        viewport.minDepth = 0.0f;
+                        viewport.maxDepth = 1.0f;
+
+                        VkRect2D scissor{};
+                        scissor.offset = {0, 0};
+                        scissor.extent.width = (swapchainExtent.width == 0u) ? 1u : swapchainExtent.width;
+                        scissor.extent.height = (swapchainExtent.height == 0u) ? 1u : swapchainExtent.height;
+
+                        vkCmdSetViewport(primaryCommandBuffer, 0u, 1u, &viewport);
+                        vkCmdSetScissor(primaryCommandBuffer, 0u, 1u, &scissor);
+
+                        vkCmdBindPipeline(primaryCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, swapchainTexturedBatchPipeline);
+
+                        std::size_t submittedDeferredDrawCalls = 0u;
+                        for (const PendingTexturedBatchDraw &pendingDraw : pendingTexturedBatchDraws)
+                        {
+                            if (
+                                (!pendingDraw.hasTextureImageInfo) ||
+                                pendingDraw.vertexData.empty() ||
+                                pendingDraw.indices.empty() ||
+                                pendingDraw.batches.empty())
+                                continue;
+
+                            const VkDeviceSize transientVertexUploadSize = static_cast<VkDeviceSize>(pendingDraw.vertexData.size());
+                            const VkDeviceSize transientIndexUploadSize = static_cast<VkDeviceSize>(pendingDraw.indices.size() * sizeof(std::uint32_t));
+
+                            EnsureTransientBuffer(
+                                transientVertexUploadSize,
+                                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                                texturedBatchVertexBuffer,
+                                texturedBatchVertexBufferMemory,
+                                texturedBatchVertexBufferCapacity);
+
+                            EnsureTransientBuffer(
+                                transientIndexUploadSize,
+                                VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                                texturedBatchIndexBuffer,
+                                texturedBatchIndexBufferMemory,
+                                texturedBatchIndexBufferCapacity);
+
+                            void *mappedTransientVertexData = nullptr;
+                            CheckVkResult(
+                                vkMapMemory(device, texturedBatchVertexBufferMemory, 0, transientVertexUploadSize, 0, &mappedTransientVertexData),
+                                "vkMapMemory(flushTexturedBatchVertexBuffer)");
+
+                            std::memcpy(mappedTransientVertexData, pendingDraw.vertexData.data(), pendingDraw.vertexData.size());
+                            vkUnmapMemory(device, texturedBatchVertexBufferMemory);
+
+                            void *mappedTransientIndexData = nullptr;
+                            CheckVkResult(
+                                vkMapMemory(device, texturedBatchIndexBufferMemory, 0, transientIndexUploadSize, 0, &mappedTransientIndexData),
+                                "vkMapMemory(flushTexturedBatchIndexBuffer)");
+
+                            std::memcpy(mappedTransientIndexData, pendingDraw.indices.data(), static_cast<std::size_t>(transientIndexUploadSize));
+                            vkUnmapMemory(device, texturedBatchIndexBufferMemory);
+
+                            UpdateSwapchainTriangleTextureDescriptor(pendingDraw.textureImageInfo);
+                            vkCmdBindDescriptorSets(
+                                primaryCommandBuffer,
+                                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                swapchainTrianglePipelineLayout,
+                                0u,
+                                1u,
+                                &swapchainTriangleDescriptorSet,
+                                0u,
+                                nullptr);
+
+                            const VkDeviceSize vertexOffset = 0u;
+                            vkCmdBindVertexBuffers(primaryCommandBuffer, 0u, 1u, &texturedBatchVertexBuffer, &vertexOffset);
+                            vkCmdBindIndexBuffer(primaryCommandBuffer, texturedBatchIndexBuffer, 0u, VK_INDEX_TYPE_UINT32);
+
+                            for (const TexturedIndexedBatchDesc &batch : pendingDraw.batches)
+                            {
+                                if (batch.indexCount == 0u)
+                                    continue;
+
+                                vkCmdDrawIndexed(primaryCommandBuffer, batch.indexCount, 1u, batch.firstIndex, 0, 0u);
+                                submittedDeferredDrawCalls += 1u;
+                            }
+                        }
+
+                        if (EnableVulkanUiDebugLogs)
+                        {
+                            static std::uint64_t deferredFlushLogCounter = 0u;
+                            deferredFlushLogCounter += 1u;
+                            if ((deferredFlushLogCounter <= 30u) || ((deferredFlushLogCounter % 240u) == 0u))
+                            {
+                                VulkanTrace(
+                                    "[Vulkan][UI2D] flushed deferred draws: queued=%zu submittedDrawCalls=%zu\\n",
+                                    pendingTexturedBatchDraws.size(),
+                                    submittedDeferredDrawCalls);
+                            }
+                        }
+
+                        pendingTexturedBatchDraws.clear();
+                    }
+                }
 
                 vkCmdEndRenderPass(primaryCommandBuffer);
+                renderPassActive = false;
             }
 
             EndFrame();
@@ -892,27 +1527,31 @@ namespace gfx
             (void)vkDeviceWaitIdle(device);
     }
 
-    void VulkanGraphicsBackend::UpdateSwapchainTriangleTextureDescriptor(ITexture *texture)
+    bool VulkanGraphicsBackend::ResolveSwapchainTriangleTextureDescriptorInfo(ITexture *texture, VkDescriptorImageInfo &textureImageInfo) const
     {
-        if ((device == VK_NULL_HANDLE) || (swapchainTriangleDescriptorSet == VK_NULL_HANDLE))
-            return;
-
         ITexture *textureToBind = (texture != nullptr) ? texture : swapchainTriangleFallbackTexture.get();
         if (textureToBind == nullptr)
-            return;
+            return false;
 
         auto *vulkanTexture = dynamic_cast<VulkanTexture *>(textureToBind);
         if ((vulkanTexture == nullptr) || (vulkanTexture->GetImageView() == VK_NULL_HANDLE) || (vulkanTexture->GetSampler() == VK_NULL_HANDLE))
         {
             vulkanTexture = dynamic_cast<VulkanTexture *>(swapchainTriangleFallbackTexture.get());
             if ((vulkanTexture == nullptr) || (vulkanTexture->GetImageView() == VK_NULL_HANDLE) || (vulkanTexture->GetSampler() == VK_NULL_HANDLE))
-                return;
+                return false;
         }
 
-        VkDescriptorImageInfo textureImageInfo{};
+        textureImageInfo = {};
         textureImageInfo.sampler = vulkanTexture->GetSampler();
         textureImageInfo.imageView = vulkanTexture->GetImageView();
         textureImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        return true;
+    }
+
+    void VulkanGraphicsBackend::UpdateSwapchainTriangleTextureDescriptor(const VkDescriptorImageInfo &textureImageInfo)
+    {
+        if ((device == VK_NULL_HANDLE) || (swapchainTriangleDescriptorSet == VK_NULL_HANDLE))
+            return;
 
         VkWriteDescriptorSet descriptorWrite{};
         descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -928,10 +1567,27 @@ namespace gfx
         vkUpdateDescriptorSets(device, 1u, &descriptorWrite, 0u, nullptr);
     }
 
+    void VulkanGraphicsBackend::UpdateSwapchainTriangleTextureDescriptor(ITexture *texture)
+    {
+        VkDescriptorImageInfo textureImageInfo{};
+        if (!ResolveSwapchainTriangleTextureDescriptorInfo(texture, textureImageInfo))
+            return;
+
+        UpdateSwapchainTriangleTextureDescriptor(textureImageInfo);
+    }
+
     void VulkanGraphicsBackend::SetSwapchainTriangleTexture(ITexture *texture)
     {
         swapchainTriangleTexture = texture;
         UpdateSwapchainTriangleTextureDescriptor(swapchainTriangleTexture);
+    }
+
+    void VulkanGraphicsBackend::UploadSwapchainTriangleTexture(ITexture *texture)
+    {
+        if (texture == nullptr)
+            return;
+
+        UpdateSwapchainTriangleTextureDescriptor(texture);
     }
 
     VkFormat VulkanGraphicsBackend::FindSupportedDepthFormat() const
@@ -1075,6 +1731,28 @@ namespace gfx
 
             throw;
         }
+    }
+
+    void VulkanGraphicsBackend::EnsureTransientBuffer(
+        VkDeviceSize requiredSize,
+        VkBufferUsageFlags usage,
+        VkBuffer &buffer,
+        VkDeviceMemory &memory,
+        VkDeviceSize &capacity)
+    {
+        const VkDeviceSize requestedSize = (requiredSize == 0u) ? static_cast<VkDeviceSize>(1u) : requiredSize;
+
+        if ((buffer != VK_NULL_HANDLE) && (memory != VK_NULL_HANDLE) && (capacity >= requestedSize))
+            return;
+
+        CreateBuffer(
+            requestedSize,
+            usage,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            buffer,
+            memory);
+
+        capacity = requestedSize;
     }
 
     void VulkanGraphicsBackend::CreateImage(
@@ -1334,8 +2012,9 @@ namespace gfx
         elapsedSeconds = static_cast<float>(SDL_GetTicks()) * 0.001f;
 #endif
 
-        const std::array<float, 16> modelMatrix = BuildSwapchainTriangleModelMatrix(elapsedSeconds);
-        const std::array<float, 16> mvpMatrix = BuildSwapchainTriangleMvpMatrix(swapchainExtent, elapsedSeconds);
+        const bool usePixelProjection = !EnableSwapchainDebugIslandDraw;
+        const std::array<float, 16> modelMatrix = usePixelProjection ? BuildIdentityMatrix() : BuildSwapchainTriangleModelMatrix(elapsedSeconds);
+        const std::array<float, 16> mvpMatrix = usePixelProjection ? BuildOrthographicProjectionMatrix(swapchainExtent) : BuildSwapchainTriangleMvpMatrix(swapchainExtent, elapsedSeconds);
 
         struct SwapchainTriangleUniformData
         {
@@ -1366,6 +2045,12 @@ namespace gfx
         {
             vkDestroyPipeline(device, swapchainTrianglePipeline, nullptr);
             swapchainTrianglePipeline = VK_NULL_HANDLE;
+        }
+
+        if (swapchainTexturedBatchPipeline != VK_NULL_HANDLE)
+        {
+            vkDestroyPipeline(device, swapchainTexturedBatchPipeline, nullptr);
+            swapchainTexturedBatchPipeline = VK_NULL_HANDLE;
         }
 
         if (swapchainTrianglePipelineLayout != VK_NULL_HANDLE)
@@ -1422,6 +2107,34 @@ namespace gfx
             vkFreeMemory(device, swapchainTriangleUniformBufferMemory, nullptr);
             swapchainTriangleUniformBufferMemory = VK_NULL_HANDLE;
         }
+
+        if (texturedBatchVertexBuffer != VK_NULL_HANDLE)
+        {
+            vkDestroyBuffer(device, texturedBatchVertexBuffer, nullptr);
+            texturedBatchVertexBuffer = VK_NULL_HANDLE;
+        }
+
+        if (texturedBatchVertexBufferMemory != VK_NULL_HANDLE)
+        {
+            vkFreeMemory(device, texturedBatchVertexBufferMemory, nullptr);
+            texturedBatchVertexBufferMemory = VK_NULL_HANDLE;
+        }
+        texturedBatchVertexBufferCapacity = 0u;
+
+        if (texturedBatchIndexBuffer != VK_NULL_HANDLE)
+        {
+            vkDestroyBuffer(device, texturedBatchIndexBuffer, nullptr);
+            texturedBatchIndexBuffer = VK_NULL_HANDLE;
+        }
+
+        if (texturedBatchIndexBufferMemory != VK_NULL_HANDLE)
+        {
+            vkFreeMemory(device, texturedBatchIndexBufferMemory, nullptr);
+            texturedBatchIndexBufferMemory = VK_NULL_HANDLE;
+        }
+        texturedBatchIndexBufferCapacity = 0u;
+
+        pendingTexturedBatchDraws.clear();
 
         swapchainTriangleTexture = nullptr;
         swapchainTriangleFallbackTexture.reset();
@@ -1566,9 +2279,12 @@ namespace gfx
                 "vkEnumerateInstanceExtensionProperties(list)");
         }
 
-        std::fprintf(stderr, "[Vulkan] Available instance extensions (%u):\n", static_cast<unsigned int>(availableExtensionCount));
-        for (const VkExtensionProperties &extension : availableExtensions)
-            std::fprintf(stderr, "[Vulkan]   %s (specVersion=%u)\n", extension.extensionName, static_cast<unsigned int>(extension.specVersion));
+        if (EnableVulkanInstanceDebugLogs)
+        {
+            std::fprintf(stderr, "[Vulkan] Available instance extensions (%u):\n", static_cast<unsigned int>(availableExtensionCount));
+            for (const VkExtensionProperties &extension : availableExtensions)
+                std::fprintf(stderr, "[Vulkan]   %s (specVersion=%u)\n", extension.extensionName, static_cast<unsigned int>(extension.specVersion));
+        }
 
 #if !defined(HEADLESS)
         if (window != nullptr)
@@ -1610,16 +2326,19 @@ namespace gfx
         createInfo.enabledExtensionCount = static_cast<std::uint32_t>(instanceExtensions.size());
         createInfo.ppEnabledExtensionNames = instanceExtensions.empty() ? nullptr : instanceExtensions.data();
 
-        std::fprintf(stderr, "[Vulkan] vkCreateInstance enabled extensions (%u):\n", static_cast<unsigned int>(createInfo.enabledExtensionCount));
-        for (std::uint32_t i = 0; i < createInfo.enabledExtensionCount; ++i)
+        if (EnableVulkanInstanceDebugLogs)
         {
-            const char *extName = createInfo.ppEnabledExtensionNames[i];
-            std::fprintf(stderr, "[Vulkan]   %s\n", (extName != nullptr) ? extName : "<null>");
+            std::fprintf(stderr, "[Vulkan] vkCreateInstance enabled extensions (%u):\n", static_cast<unsigned int>(createInfo.enabledExtensionCount));
+            for (std::uint32_t i = 0; i < createInfo.enabledExtensionCount; ++i)
+            {
+                const char *extName = createInfo.ppEnabledExtensionNames[i];
+                std::fprintf(stderr, "[Vulkan]   %s\n", (extName != nullptr) ? extName : "<null>");
+            }
+            std::fprintf(stderr,
+                         "[Vulkan] vkCreateInstance flags=0x%08x (%u)\n",
+                         static_cast<unsigned int>(createInfo.flags),
+                         static_cast<unsigned int>(createInfo.flags));
         }
-        std::fprintf(stderr,
-                     "[Vulkan] vkCreateInstance flags=0x%08x (%u)\n",
-                     static_cast<unsigned int>(createInfo.flags),
-                     static_cast<unsigned int>(createInfo.flags));
 
         CheckVkResult(vkCreateInstance(&createInfo, nullptr, &instance), "vkCreateInstance");
     }
@@ -2046,6 +2765,7 @@ namespace gfx
         CreateSwapchainFramebuffers();
         CreateSwapchainTriangleResources();
         CreateSwapchainTrianglePipeline();
+        CreateSwapchainTexturedBatchPipeline();
 
         VkFenceCreateInfo fenceCreateInfo{};
         fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -2392,6 +3112,189 @@ namespace gfx
             {
                 vkDestroyPipelineLayout(device, swapchainTrianglePipelineLayout, nullptr);
                 swapchainTrianglePipelineLayout = VK_NULL_HANDLE;
+            }
+
+            throw;
+        }
+    }
+
+    void VulkanGraphicsBackend::CreateSwapchainTexturedBatchPipeline()
+    {
+        if ((device == VK_NULL_HANDLE) || (swapchainRenderPass == VK_NULL_HANDLE) || (swapchainTrianglePipelineLayout == VK_NULL_HANDLE))
+            return;
+
+        if (swapchainTexturedBatchPipeline != VK_NULL_HANDLE)
+        {
+            vkDestroyPipeline(device, swapchainTexturedBatchPipeline, nullptr);
+            swapchainTexturedBatchPipeline = VK_NULL_HANDLE;
+        }
+
+        VkShaderModule vertexShaderModule = VK_NULL_HANDLE;
+        VkShaderModule fragmentShaderModule = VK_NULL_HANDLE;
+
+        const auto CleanupShaderModules = [&]()
+        {
+            if (vertexShaderModule != VK_NULL_HANDLE)
+            {
+                vkDestroyShaderModule(device, vertexShaderModule, nullptr);
+                vertexShaderModule = VK_NULL_HANDLE;
+            }
+
+            if (fragmentShaderModule != VK_NULL_HANDLE)
+            {
+                vkDestroyShaderModule(device, fragmentShaderModule, nullptr);
+                fragmentShaderModule = VK_NULL_HANDLE;
+            }
+        };
+
+        try
+        {
+            VkShaderModuleCreateInfo vertexShaderCreateInfo{};
+            vertexShaderCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            vertexShaderCreateInfo.codeSize = sizeof(SwapchainTexturedBatchVertSpv);
+            vertexShaderCreateInfo.pCode = SwapchainTexturedBatchVertSpv;
+            CheckVkResult(vkCreateShaderModule(device, &vertexShaderCreateInfo, nullptr, &vertexShaderModule), "vkCreateShaderModule(swapchainTexturedBatchVert)");
+
+            VkShaderModuleCreateInfo fragmentShaderCreateInfo{};
+            fragmentShaderCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            fragmentShaderCreateInfo.codeSize = sizeof(SwapchainTexturedBatchFragSpv);
+            fragmentShaderCreateInfo.pCode = SwapchainTexturedBatchFragSpv;
+            CheckVkResult(vkCreateShaderModule(device, &fragmentShaderCreateInfo, nullptr, &fragmentShaderModule), "vkCreateShaderModule(swapchainTexturedBatchFrag)");
+
+            VkPipelineShaderStageCreateInfo shaderStageCreateInfos[2]{};
+            shaderStageCreateInfos[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            shaderStageCreateInfos[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+            shaderStageCreateInfos[0].module = vertexShaderModule;
+            shaderStageCreateInfos[0].pName = "main";
+            shaderStageCreateInfos[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            shaderStageCreateInfos[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+            shaderStageCreateInfos[1].module = fragmentShaderModule;
+            shaderStageCreateInfos[1].pName = "main";
+
+            VkVertexInputBindingDescription vertexBindingDescription{};
+            vertexBindingDescription.binding = 0;
+            vertexBindingDescription.stride = static_cast<std::uint32_t>(sizeof(VulkanTexturedBatchVertex));
+            vertexBindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+            std::array<VkVertexInputAttributeDescription, 3> vertexAttributeDescriptions{};
+            vertexAttributeDescriptions[0].location = 0;
+            vertexAttributeDescriptions[0].binding = 0;
+            vertexAttributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+            vertexAttributeDescriptions[0].offset = static_cast<std::uint32_t>(offsetof(VulkanTexturedBatchVertex, x));
+
+            vertexAttributeDescriptions[1].location = 1;
+            vertexAttributeDescriptions[1].binding = 0;
+            vertexAttributeDescriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
+            vertexAttributeDescriptions[1].offset = static_cast<std::uint32_t>(offsetof(VulkanTexturedBatchVertex, u));
+
+            vertexAttributeDescriptions[2].location = 2;
+            vertexAttributeDescriptions[2].binding = 0;
+            vertexAttributeDescriptions[2].format = VK_FORMAT_R8G8B8A8_UNORM;
+            vertexAttributeDescriptions[2].offset = static_cast<std::uint32_t>(offsetof(VulkanTexturedBatchVertex, r));
+
+            VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo{};
+            vertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+            vertexInputStateCreateInfo.vertexBindingDescriptionCount = 1;
+            vertexInputStateCreateInfo.pVertexBindingDescriptions = &vertexBindingDescription;
+            vertexInputStateCreateInfo.vertexAttributeDescriptionCount = static_cast<std::uint32_t>(vertexAttributeDescriptions.size());
+            vertexInputStateCreateInfo.pVertexAttributeDescriptions = vertexAttributeDescriptions.data();
+
+            VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCreateInfo{};
+            inputAssemblyStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+            inputAssemblyStateCreateInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+            inputAssemblyStateCreateInfo.primitiveRestartEnable = VK_FALSE;
+
+            VkPipelineViewportStateCreateInfo viewportStateCreateInfo{};
+            viewportStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+            viewportStateCreateInfo.viewportCount = 1;
+            viewportStateCreateInfo.pViewports = nullptr;
+            viewportStateCreateInfo.scissorCount = 1;
+            viewportStateCreateInfo.pScissors = nullptr;
+
+            const VkDynamicState dynamicStates[] = {
+                VK_DYNAMIC_STATE_VIEWPORT,
+                VK_DYNAMIC_STATE_SCISSOR,
+            };
+
+            VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo{};
+            dynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+            dynamicStateCreateInfo.dynamicStateCount = static_cast<std::uint32_t>(std::size(dynamicStates));
+            dynamicStateCreateInfo.pDynamicStates = dynamicStates;
+
+            VkPipelineRasterizationStateCreateInfo rasterizationStateCreateInfo{};
+            rasterizationStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+            rasterizationStateCreateInfo.depthClampEnable = VK_FALSE;
+            rasterizationStateCreateInfo.rasterizerDiscardEnable = VK_FALSE;
+            rasterizationStateCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
+            rasterizationStateCreateInfo.cullMode = VK_CULL_MODE_NONE;
+            rasterizationStateCreateInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+            rasterizationStateCreateInfo.depthBiasEnable = VK_FALSE;
+            rasterizationStateCreateInfo.lineWidth = 1.0f;
+
+            VkPipelineMultisampleStateCreateInfo multisampleStateCreateInfo{};
+            multisampleStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+            multisampleStateCreateInfo.sampleShadingEnable = VK_FALSE;
+            multisampleStateCreateInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+            VkPipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo{};
+            depthStencilStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+            depthStencilStateCreateInfo.depthTestEnable = VK_FALSE;
+            depthStencilStateCreateInfo.depthWriteEnable = VK_FALSE;
+            depthStencilStateCreateInfo.depthCompareOp = VK_COMPARE_OP_ALWAYS;
+            depthStencilStateCreateInfo.depthBoundsTestEnable = VK_FALSE;
+            depthStencilStateCreateInfo.stencilTestEnable = VK_FALSE;
+
+            VkPipelineColorBlendAttachmentState colorBlendAttachmentState{};
+            colorBlendAttachmentState.blendEnable = VK_TRUE;
+            colorBlendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+            colorBlendAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            colorBlendAttachmentState.colorBlendOp = VK_BLEND_OP_ADD;
+            colorBlendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+            colorBlendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            colorBlendAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD;
+            colorBlendAttachmentState.colorWriteMask =
+                VK_COLOR_COMPONENT_R_BIT |
+                VK_COLOR_COMPONENT_G_BIT |
+                VK_COLOR_COMPONENT_B_BIT |
+                VK_COLOR_COMPONENT_A_BIT;
+
+            VkPipelineColorBlendStateCreateInfo colorBlendStateCreateInfo{};
+            colorBlendStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+            colorBlendStateCreateInfo.logicOpEnable = VK_FALSE;
+            colorBlendStateCreateInfo.logicOp = VK_LOGIC_OP_COPY;
+            colorBlendStateCreateInfo.attachmentCount = 1;
+            colorBlendStateCreateInfo.pAttachments = &colorBlendAttachmentState;
+
+            VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo{};
+            graphicsPipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+            graphicsPipelineCreateInfo.stageCount = 2;
+            graphicsPipelineCreateInfo.pStages = shaderStageCreateInfos;
+            graphicsPipelineCreateInfo.pVertexInputState = &vertexInputStateCreateInfo;
+            graphicsPipelineCreateInfo.pInputAssemblyState = &inputAssemblyStateCreateInfo;
+            graphicsPipelineCreateInfo.pViewportState = &viewportStateCreateInfo;
+            graphicsPipelineCreateInfo.pRasterizationState = &rasterizationStateCreateInfo;
+            graphicsPipelineCreateInfo.pMultisampleState = &multisampleStateCreateInfo;
+            graphicsPipelineCreateInfo.pDepthStencilState = &depthStencilStateCreateInfo;
+            graphicsPipelineCreateInfo.pColorBlendState = &colorBlendStateCreateInfo;
+            graphicsPipelineCreateInfo.pDynamicState = &dynamicStateCreateInfo;
+            graphicsPipelineCreateInfo.layout = swapchainTrianglePipelineLayout;
+            graphicsPipelineCreateInfo.renderPass = swapchainRenderPass;
+            graphicsPipelineCreateInfo.subpass = 0;
+            graphicsPipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
+            graphicsPipelineCreateInfo.basePipelineIndex = -1;
+
+            CheckVkResult(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1u, &graphicsPipelineCreateInfo, nullptr, &swapchainTexturedBatchPipeline), "vkCreateGraphicsPipelines(swapchainTexturedBatch)");
+
+            CleanupShaderModules();
+        }
+        catch (...)
+        {
+            CleanupShaderModules();
+
+            if (swapchainTexturedBatchPipeline != VK_NULL_HANDLE)
+            {
+                vkDestroyPipeline(device, swapchainTexturedBatchPipeline, nullptr);
+                swapchainTexturedBatchPipeline = VK_NULL_HANDLE;
             }
 
             throw;

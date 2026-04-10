@@ -184,41 +184,8 @@ SelectMenu::SelectMenu(std::shared_ptr<ClientSetup> setup)
 				{
 					vulkanMenuBackgroundTexture.reset();
 
-					CBitmap menuBitmap;
-					if (menuBitmap.Load(selectedBackground, 1.0f, 4u, 0x1401u, false))
-					{
-						try
-						{
-							gfx::TextureCreateInfo textureCI;
-							textureCI.dimension = gfx::TextureDimension::Tex2D;
-							textureCI.format = gfx::PixelFormat::RGBA8_UNorm;
-							textureCI.extent.width = static_cast<std::uint32_t>(std::max(menuBitmap.xsize, 1));
-							textureCI.extent.height = static_cast<std::uint32_t>(std::max(menuBitmap.ysize, 1));
-							textureCI.extent.depth = 1u;
-							textureCI.mipLevels = 1u;
-							textureCI.arrayLayers = 1u;
-							textureCI.usage = gfx::TextureUsage::Sampled | gfx::TextureUsage::TransferDst;
-							textureCI.debugName = "SelectMenuBackground";
-
-							vulkanMenuBackgroundTexture = globalRendering->graphicsBackend->CreateTexture(textureCI);
-							if (vulkanMenuBackgroundTexture != nullptr)
-							{
-								const std::size_t rowPitchBytes = static_cast<std::size_t>(textureCI.extent.width) * 4u;
-								const std::size_t pixelDataSize = rowPitchBytes * static_cast<std::size_t>(textureCI.extent.height);
-								const auto pixels = std::span<const std::byte>(
-									reinterpret_cast<const std::byte *>(menuBitmap.GetRawMem()),
-									pixelDataSize);
-
-								vulkanMenuBackgroundTexture->Upload(0u, 0u, pixels, rowPitchBytes);
-							}
-						}
-						catch (const std::exception &ex)
-						{
-							LOG_L(L_WARNING, "[%s] Failed to upload Vulkan menu texture: %s", __func__, ex.what());
-							vulkanMenuBackgroundTexture.reset();
-						}
-					}
-
+					// Keep fallback swapchain texture on Vulkan for now.
+					// The archive-backed bitmap upload path is still unstable on startup.
 					vulkanBackend->SetSwapchainTriangleTexture(vulkanMenuBackgroundTexture.get());
 				}
 #endif
@@ -276,7 +243,7 @@ bool SelectMenu::Draw()
 
 	if (!HasOpenGLBackend())
 	{
-		agui::gui->Clean();
+		agui::gui->Draw();
 		return true;
 	}
 
