@@ -1,4 +1,4 @@
- /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
 #include "MouseHandler.h"
 
@@ -52,7 +52,6 @@
 
 using namespace GL::State;
 
-
 CONFIG(bool, HardwareCursor).defaultValue(false).description("Sets hardware mouse cursor rendering. If you have a low framerate, your mouse cursor will seem \"laggy\". Setting hardware cursor will render the mouse cursor separately from spring and the mouse will behave normally. Note, not all GPU drivers support it in fullscreen mode!");
 CONFIG(bool, InvertMouse).defaultValue(false);
 CONFIG(bool, MouseRelativeModeWarp).defaultValue(true);
@@ -75,10 +74,19 @@ CONFIG(int, MouseDragFrontCommandThreshold).defaultValue(30).description("Distan
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
 
-CMouseHandler* mouse = nullptr;
+CMouseHandler *mouse = nullptr;
 
-static CInputReceiver*& activeReceiver = CInputReceiver::GetActiveReceiverRef();
+static CInputReceiver *&activeReceiver = CInputReceiver::GetActiveReceiverRef();
 
+namespace
+{
+	bool HasVulkanBackend()
+	{
+		return ((globalRendering != nullptr) &&
+				(globalRendering->graphicsBackend != nullptr) &&
+				(globalRendering->graphicsBackend->Type() == gfx::BackendType::Vulkan));
+	}
+}
 
 CMouseHandler::CMouseHandler()
 {
@@ -93,8 +101,8 @@ CMouseHandler::CMouseHandler()
 	hardwareCursor = configHandler->GetBool("HardwareCursor");
 #endif
 
-	crossSize      = configHandler->GetFloat("CrossSize");
-	crossAlpha     = configHandler->GetFloat("CrossAlpha");
+	crossSize = configHandler->GetFloat("CrossSize");
+	crossAlpha = configHandler->GetFloat("CrossAlpha");
 	crossMoveScale = configHandler->GetFloat("CrossMoveScale") * 0.005f;
 
 	doubleClickTime = configHandler->GetFloat("DoubleClickTime") / 1000.0f;
@@ -102,15 +110,15 @@ CMouseHandler::CMouseHandler()
 	ConfigUpdate();
 
 	configHandler->NotifyOnChange(this, {
-		"MiniMapMouseWheel",
-		"MouseDragScrollThreshold",
-		"MouseDragSelectionThreshold",
-		"MouseDragBoxCommandThreshold",
-		"MouseDragCircleCommandThreshold",
-		"MouseDragFrontCommandThreshold",
-		"InvertMouse",
-		"ScrollWheelSpeed",
-	});
+											"MiniMapMouseWheel",
+											"MouseDragScrollThreshold",
+											"MouseDragSelectionThreshold",
+											"MouseDragBoxCommandThreshold",
+											"MouseDragCircleCommandThreshold",
+											"MouseDragFrontCommandThreshold",
+											"InvertMouse",
+											"ScrollWheelSpeed",
+										});
 }
 
 CMouseHandler::~CMouseHandler()
@@ -121,7 +129,6 @@ CMouseHandler::~CMouseHandler()
 
 	configHandler->RemoveObserver(this);
 }
-
 
 void CMouseHandler::InitStatic()
 {
@@ -140,11 +147,10 @@ void CMouseHandler::KillStatic()
 	IMouseInput::FreeInstance(mouseInput);
 }
 
-
 void CMouseHandler::ReloadCursors()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	const CMouseCursor::HotSpot mCenter  = CMouseCursor::Center;
+	const CMouseCursor::HotSpot mCenter = CMouseCursor::Center;
 	const CMouseCursor::HotSpot mTopLeft = CMouseCursor::TopLeft;
 
 	activeCursorIdx = -1;
@@ -164,60 +170,61 @@ void CMouseHandler::ReloadCursors()
 	cursorCommandMap["none"] = loadedCursors.size() - 1;
 	cursorFileMap["null"] = loadedCursors.size() - 1;
 
-	AssignMouseCursor("",             "cursornormal",     mTopLeft, false);
+	AssignMouseCursor("", "cursornormal", mTopLeft, false);
 
-	AssignMouseCursor("Area attack",  "cursorareaattack", mCenter,  false);
-	AssignMouseCursor("Area attack",  "cursorattack",     mCenter,  false); // backup
+	AssignMouseCursor("Area attack", "cursorareaattack", mCenter, false);
+	AssignMouseCursor("Area attack", "cursorattack", mCenter, false); // backup
 
-	AssignMouseCursor("Attack",       "cursorattack",     mCenter,  false);
-	AssignMouseCursor("AttackBad",    "cursorattackbad",  mCenter,  false);
-	AssignMouseCursor("AttackBad",    "cursorattack",     mCenter,  false); // backup
-	AssignMouseCursor("BuildBad",     "cursorbuildbad",   mCenter,  false);
-	AssignMouseCursor("BuildGood",    "cursorbuildgood",  mCenter,  false);
-	AssignMouseCursor("Capture",      "cursorcapture",    mCenter,  false);
-	AssignMouseCursor("Centroid",     "cursorcentroid",   mCenter,  false);
+	AssignMouseCursor("Attack", "cursorattack", mCenter, false);
+	AssignMouseCursor("AttackBad", "cursorattackbad", mCenter, false);
+	AssignMouseCursor("AttackBad", "cursorattack", mCenter, false); // backup
+	AssignMouseCursor("BuildBad", "cursorbuildbad", mCenter, false);
+	AssignMouseCursor("BuildGood", "cursorbuildgood", mCenter, false);
+	AssignMouseCursor("Capture", "cursorcapture", mCenter, false);
+	AssignMouseCursor("Centroid", "cursorcentroid", mCenter, false);
 
-	AssignMouseCursor("DeathWait",    "cursordwatch",     mCenter,  false);
-	AssignMouseCursor("DeathWait",    "cursorwait",       mCenter,  false); // backup
+	AssignMouseCursor("DeathWait", "cursordwatch", mCenter, false);
+	AssignMouseCursor("DeathWait", "cursorwait", mCenter, false); // backup
 
-	AssignMouseCursor("ManualFire",   "cursormanfire",    mCenter,  false);
-	AssignMouseCursor("ManualFire",   "cursordgun",       mCenter,  false); // backup (backward compatibility)
-	AssignMouseCursor("ManualFire",   "cursorattack",     mCenter,  false); // backup
+	AssignMouseCursor("ManualFire", "cursormanfire", mCenter, false);
+	AssignMouseCursor("ManualFire", "cursordgun", mCenter, false);	 // backup (backward compatibility)
+	AssignMouseCursor("ManualFire", "cursorattack", mCenter, false); // backup
 
-	AssignMouseCursor("Fight",        "cursorfight",      mCenter,  false);
-	AssignMouseCursor("Fight",        "cursorattack",     mCenter,  false); // backup
+	AssignMouseCursor("Fight", "cursorfight", mCenter, false);
+	AssignMouseCursor("Fight", "cursorattack", mCenter, false); // backup
 
-	AssignMouseCursor("GatherWait",   "cursorgather",     mCenter,  false);
-	AssignMouseCursor("GatherWait",   "cursorwait",       mCenter,  false); // backup
+	AssignMouseCursor("GatherWait", "cursorgather", mCenter, false);
+	AssignMouseCursor("GatherWait", "cursorwait", mCenter, false); // backup
 
-	AssignMouseCursor("Guard",        "cursordefend",     mCenter,  false);
-	AssignMouseCursor("Load units",   "cursorpickup",     mCenter,  false);
-	AssignMouseCursor("Move",         "cursormove",       mCenter,  false);
-	AssignMouseCursor("Patrol",       "cursorpatrol",     mCenter,  false);
-	AssignMouseCursor("Reclaim",      "cursorreclamate",  mCenter,  false);
-	AssignMouseCursor("Repair",       "cursorrepair",     mCenter,  false);
+	AssignMouseCursor("Guard", "cursordefend", mCenter, false);
+	AssignMouseCursor("Load units", "cursorpickup", mCenter, false);
+	AssignMouseCursor("Move", "cursormove", mCenter, false);
+	AssignMouseCursor("Patrol", "cursorpatrol", mCenter, false);
+	AssignMouseCursor("Reclaim", "cursorreclamate", mCenter, false);
+	AssignMouseCursor("Repair", "cursorrepair", mCenter, false);
 
-	AssignMouseCursor("Resurrect",    "cursorrevive",     mCenter,  false);
-	AssignMouseCursor("Resurrect",    "cursorrepair",     mCenter,  false); // backup
+	AssignMouseCursor("Resurrect", "cursorrevive", mCenter, false);
+	AssignMouseCursor("Resurrect", "cursorrepair", mCenter, false); // backup
 
-	AssignMouseCursor("Restore",      "cursorrestore",    mCenter,  false);
-	AssignMouseCursor("Restore",      "cursorrepair",     mCenter,  false); // backup
+	AssignMouseCursor("Restore", "cursorrestore", mCenter, false);
+	AssignMouseCursor("Restore", "cursorrepair", mCenter, false); // backup
 
-	AssignMouseCursor("SelfD",        "cursorselfd",      mCenter,  false);
+	AssignMouseCursor("SelfD", "cursorselfd", mCenter, false);
 
-	AssignMouseCursor("SquadWait",    "cursornumber",     mCenter,  false);
-	AssignMouseCursor("SquadWait",    "cursorwait",       mCenter,  false); // backup
+	AssignMouseCursor("SquadWait", "cursornumber", mCenter, false);
+	AssignMouseCursor("SquadWait", "cursorwait", mCenter, false); // backup
 
-	AssignMouseCursor("TimeWait",     "cursortime",       mCenter,  false);
-	AssignMouseCursor("TimeWait",     "cursorwait",       mCenter,  false); // backup
+	AssignMouseCursor("TimeWait", "cursortime", mCenter, false);
+	AssignMouseCursor("TimeWait", "cursorwait", mCenter, false); // backup
 
-	AssignMouseCursor("Unload units", "cursorunload",     mCenter,  false);
-	AssignMouseCursor("Wait",         "cursorwait",       mCenter,  false);
+	AssignMouseCursor("Unload units", "cursorunload", mCenter, false);
+	AssignMouseCursor("Wait", "cursorwait", mCenter, false);
 
 	// the default cursor must exist
 	const auto defCursorIt = cursorCommandMap.find("");
 
-	if (defCursorIt == cursorCommandMap.end()) {
+	if (defCursorIt == cursorCommandMap.end())
+	{
 		throw content_error(
 			"Unable to load default cursor. Check that you have the required\n"
 			"content packages installed in your Spring \"base/\" directory.\n");
@@ -242,7 +249,6 @@ void CMouseHandler::WindowLeave()
 	lastx = viewMouseCenter.x;
 	lasty = viewMouseCenter.y;
 }
-
 
 /******************************************************************************/
 
@@ -270,13 +276,14 @@ void CMouseHandler::MouseMove(int x, int y, int dx, int dy)
 	scrollx += (dx * hideCursor);
 	scrolly += (dy * hideCursor);
 
-	if (locked) {
+	if (locked)
+	{
 		camHandler->GetCurrentController().MouseMove(float3(dx, dy, invertMouse ? -1.0f : 1.0f));
 		return;
 	}
 
-	const int movedPixels = (int)fastmath::sqrt_sse(float(dx*dx + dy*dy));
-	buttons[SDL_BUTTON_LEFT ].movement += movedPixels;
+	const int movedPixels = (int)fastmath::sqrt_sse(float(dx * dx + dy * dy));
+	buttons[SDL_BUTTON_LEFT].movement += movedPixels;
 	buttons[SDL_BUTTON_RIGHT].movement += movedPixels;
 
 	if (game != nullptr && !game->IsGameOver())
@@ -285,7 +292,8 @@ void CMouseHandler::MouseMove(int x, int y, int dx, int dy)
 	/* Only want to give a mouse event to RmlUI if the mouse isn't currently performing a drag.
 	 * Otherwise box selections get stuck when the mouse goes over an Rml element.
 	 * Flags that ButtonPressed() checks are not set when clicking on Rml element. */
-	if (!ButtonPressed() && RmlGui::ProcessMouseMove(x, lasty, dx, dy, activeButtonIdx)) {
+	if (!ButtonPressed() && RmlGui::ProcessMouseMove(x, lasty, dx, dy, activeButtonIdx))
+	{
 		return;
 	}
 
@@ -295,15 +303,16 @@ void CMouseHandler::MouseMove(int x, int y, int dx, int dy)
 	if (inMapDrawer != nullptr && inMapDrawer->IsDrawMode())
 		inMapDrawer->MouseMove(x, lasty, dx, dy, activeButtonIdx);
 
-	if (buttons[SDL_BUTTON_MIDDLE].pressed && (activeReceiver == nullptr)) {
+	if (buttons[SDL_BUTTON_MIDDLE].pressed && (activeReceiver == nullptr))
+	{
 		camHandler->GetCurrentController().MouseMove(float3(dx, dy, invertMouse ? -1.0f : 1.0f));
-		if (!camHandler->GetActiveCamera()->GetMovState()[CCamera::MOVE_STATE_RTT]) {
+		if (!camHandler->GetActiveCamera()->GetMovState()[CCamera::MOVE_STATE_RTT])
+		{
 			unitTracker.Disable();
 		}
 		return;
 	}
 }
-
 
 void CMouseHandler::MousePress(int x, int y, int button)
 {
@@ -317,19 +326,20 @@ void CMouseHandler::MousePress(int x, int y, int button)
 	if (game != nullptr && !game->IsGameOver())
 		playerHandler.Player(gu->myPlayerNum)->currentStats.mouseClicks++;
 
-	if (RmlGui::ProcessMousePress(x, y, button)) {
+	if (RmlGui::ProcessMousePress(x, y, button))
+	{
 		return;
 	}
 
 	activeButtonIdx = button;
-	ButtonPressEvt& bp = buttons[activeButtonIdx];
-	bp.chorded  = (buttons[SDL_BUTTON_LEFT].pressed || buttons[SDL_BUTTON_RIGHT].pressed);
-	bp.pressed  = true;
-	bp.time     = gu->gameTime;
-	bp.x        = x;
-	bp.y        = y;
-	bp.camPos   = camera->GetPos();
-	bp.dir      = (dir = GetCursorCameraDir(x, y));
+	ButtonPressEvt &bp = buttons[activeButtonIdx];
+	bp.chorded = (buttons[SDL_BUTTON_LEFT].pressed || buttons[SDL_BUTTON_RIGHT].pressed);
+	bp.pressed = true;
+	bp.time = gu->gameTime;
+	bp.x = x;
+	bp.y = y;
+	bp.camPos = camera->GetPos();
+	bp.dir = (dir = GetCursorCameraDir(x, y));
 	bp.movement = 0;
 
 	pressedBitMask |= 1 << button;
@@ -337,7 +347,8 @@ void CMouseHandler::MousePress(int x, int y, int button)
 	if (activeReceiver != nullptr && activeReceiver->MousePress(x, y, button))
 		return;
 
-	if (inMapDrawer != nullptr && inMapDrawer->IsDrawMode()) {
+	if (inMapDrawer != nullptr && inMapDrawer->IsDrawMode())
+	{
 		inMapDrawer->MousePress(x, y, button);
 		return;
 	}
@@ -345,36 +356,42 @@ void CMouseHandler::MousePress(int x, int y, int button)
 	if (button == SDL_BUTTON_MIDDLE && locked)
 		return;
 
-	if (luaInputReceiver->MousePress(x, y, button)) {
+	if (luaInputReceiver->MousePress(x, y, button))
+	{
 		if (activeReceiver == nullptr)
 			activeReceiver = luaInputReceiver;
 		return;
 	}
 
-	if (game != nullptr && !game->hideInterface) {
-		for (CInputReceiver* recv: CInputReceiver::GetReceivers()) {
-			if (recv != nullptr && recv->MousePress(x, y, button)) {
+	if (game != nullptr && !game->hideInterface)
+	{
+		for (CInputReceiver *recv : CInputReceiver::GetReceivers())
+		{
+			if (recv != nullptr && recv->MousePress(x, y, button))
+			{
 				if (activeReceiver == nullptr)
 					activeReceiver = recv;
 
 				return;
 			}
 		}
-
 	}
 
 	auto activeControllerReceiver = (activeController == nullptr) ? nullptr : activeController->GetInputReceiver();
-	if (button >= ACTION_BUTTON_MIN && activeControllerReceiver && activeControllerReceiver->MousePress(x, y, button)) {
+	if (button >= ACTION_BUTTON_MIN && activeControllerReceiver && activeControllerReceiver->MousePress(x, y, button))
+	{
 		activeReceiver = activeControllerReceiver;
 		return;
 	}
 
-	if (game != nullptr && !game->hideInterface) {
+	if (game != nullptr && !game->hideInterface)
+	{
 		// skip guihandler in this case
 		return;
 	}
 
-	if (guihandler != nullptr && guihandler->MousePress(x, y, button)) {
+	if (guihandler != nullptr && guihandler->MousePress(x, y, button))
+	{
 		if (activeReceiver == nullptr)
 			activeReceiver = guihandler; // for default (rmb) commands
 	}
@@ -384,13 +401,14 @@ void CMouseHandler::MousePress(int x, int y, int button)
  * GetSelectionBoxVertices
  *  returns the vertices of the SelectionBox in (cam->right, cam->up)-space
  */
-bool CMouseHandler::GetSelectionBoxVertices(float3& bl, float3& br, float3& tl, float3& tr) const
+bool CMouseHandler::GetSelectionBoxVertices(float3 &bl, float3 &br, float3 &tl, float3 &tr) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	if (activeReceiver != nullptr)
 		return false;
 
-	if (RmlGui::IsMouseInteractingWith()) {
+	if (RmlGui::IsMouseInteractingWith())
+	{
 		return false;
 	}
 
@@ -400,7 +418,7 @@ bool CMouseHandler::GetSelectionBoxVertices(float3& bl, float3& br, float3& tl, 
 	if (inMapDrawer != nullptr && inMapDrawer->IsDrawMode())
 		return false;
 
-	const ButtonPressEvt& bp = buttons[SDL_BUTTON_LEFT];
+	const ButtonPressEvt &bp = buttons[SDL_BUTTON_LEFT];
 
 	if (!bp.pressed)
 		return false;
@@ -416,10 +434,10 @@ bool CMouseHandler::GetSelectionBoxVertices(float3& bl, float3& br, float3& tl, 
 	// do not let the rectangle verts be clipped
 	const float dirScale = camera->GetNearPlaneDist() * 2.0f;
 
-	const float3 xmin   = camera->GetRight() * bttmLeft.x;
-	const float3 xmax   = camera->GetRight() * topRight.x;
-	const float3 ymin   = camera->GetUp()    * bttmLeft.y;
-	const float3 ymax   = camera->GetUp()    * topRight.y;
+	const float3 xmin = camera->GetRight() * bttmLeft.x;
+	const float3 xmax = camera->GetRight() * topRight.x;
+	const float3 ymin = camera->GetUp() * bttmLeft.y;
+	const float3 ymax = camera->GetUp() * topRight.y;
 
 	bl = camera->GetPos() + (xmin + ymin + camera->GetForward()) * dirScale;
 	tr = camera->GetPos() + (xmax + ymax + camera->GetForward()) * dirScale;
@@ -433,13 +451,13 @@ bool CMouseHandler::GetSelectionBoxVertices(float3& bl, float3& br, float3& tl, 
  *  returns the topright & bottomleft corner positions of the SelectionBox in (cam->right, cam->up)-space
  */
 void CMouseHandler::GetSelectionBoxCoeff(
-	const float3& pos1,
-	const float3& dir1,
-	const float3& pos2,
-	const float3& dir2,
-	float2& topright,
-	float2& bttmleft
-) {
+	const float3 &pos1,
+	const float3 &dir1,
+	const float3 &pos2,
+	const float3 &dir2,
+	float2 &topright,
+	float2 &bttmleft)
+{
 	const float maxDist = camera->GetFarPlaneDist() * 1.4f;
 
 	float pos1Dist = CGround::LineGroundCol(pos1, pos1 + dir1 * maxDist, false);
@@ -465,17 +483,18 @@ void CMouseHandler::GetSelectionBoxCoeff(
 
 	// one corner of the rectangle
 	topright.x = cdir1.dot(camera->GetRight()) / cdir1_fw;
-	topright.y = cdir1.dot(camera->GetUp())    / cdir1_fw;
+	topright.y = cdir1.dot(camera->GetUp()) / cdir1_fw;
 
 	// opposite corner
 	bttmleft.x = cdir2.dot(camera->GetRight()) / cdir2_fw;
-	bttmleft.y = cdir2.dot(camera->GetUp())    / cdir2_fw;
+	bttmleft.y = cdir2.dot(camera->GetUp()) / cdir2_fw;
 
 	// sort coeff so topright really is the topright corner
-	if (topright.x < bttmleft.x) std::swap(topright.x, bttmleft.x);
-	if (topright.y < bttmleft.y) std::swap(topright.y, bttmleft.y);
+	if (topright.x < bttmleft.x)
+		std::swap(topright.x, bttmleft.x);
+	if (topright.y < bttmleft.y)
+		std::swap(topright.y, bttmleft.y);
 }
-
 
 void CMouseHandler::MouseRelease(int x, int y, int button)
 {
@@ -494,16 +513,19 @@ void CMouseHandler::MouseRelease(int x, int y, int button)
 	buttons[button].pressed = false;
 	pressedBitMask &= ~(1 << button);
 
-	if (inMapDrawer != nullptr && inMapDrawer->IsDrawMode()) {
+	if (inMapDrawer != nullptr && inMapDrawer->IsDrawMode())
+	{
 		inMapDrawer->MouseRelease(x, y, button);
 		return;
 	}
 
-	if (RmlGui::ProcessMouseRelease(x, y, button)) {
+	if (RmlGui::ProcessMouseRelease(x, y, button))
+	{
 		return;
 	}
 
-	if (activeReceiver != nullptr) {
+	if (activeReceiver != nullptr)
+	{
 		activeReceiver->MouseRelease(x, y, button);
 
 		if (!buttons[SDL_BUTTON_LEFT].pressed && !buttons[SDL_BUTTON_MIDDLE].pressed && !buttons[SDL_BUTTON_RIGHT].pressed)
@@ -512,7 +534,8 @@ void CMouseHandler::MouseRelease(int x, int y, int button)
 		return;
 	}
 
-	if (button >= ACTION_BUTTON_MIN && activeController != nullptr && activeController->MouseRelease(x, y, button)) {
+	if (button >= ACTION_BUTTON_MIN && activeController != nullptr && activeController->MouseRelease(x, y, button))
+	{
 		return;
 	}
 
@@ -521,7 +544,8 @@ void CMouseHandler::MouseRelease(int x, int y, int button)
 	// switch (dragScrollThreshold)
 	//   <= means a camera mode switch
 	//    > means a drag scroll
-	if (button == SDL_BUTTON_MIDDLE) {
+	if (button == SDL_BUTTON_MIDDLE)
+	{
 		if (buttons[SDL_BUTTON_MIDDLE].time > (gu->gameTime - dragScrollThreshold))
 			ToggleMiddleClickScroll();
 		return;
@@ -533,13 +557,15 @@ void CMouseHandler::MouseRelease(int x, int y, int button)
 	if (guihandler == nullptr)
 		return;
 
-	if ((button == SDL_BUTTON_LEFT) && !buttons[button].chorded) {
-		ButtonPressEvt& bp = buttons[SDL_BUTTON_LEFT];
+	if ((button == SDL_BUTTON_LEFT) && !buttons[button].chorded)
+	{
+		ButtonPressEvt &bp = buttons[SDL_BUTTON_LEFT];
 
 		if (!KeyInput::GetKeyModState(KMOD_SHIFT) && !KeyInput::GetKeyModState(KMOD_CTRL) && selectedUnitsHandler.GetBoxSelectionHandledByEngine())
 			selectedUnitsHandler.ClearSelected();
 
-		if (bp.movement > dragSelectionThreshold && selectedUnitsHandler.GetBoxSelectionHandledByEngine()) {
+		if (bp.movement > dragSelectionThreshold && selectedUnitsHandler.GetBoxSelectionHandledByEngine())
+		{
 			// select box
 			float2 topright;
 			float2 bttmleft;
@@ -548,16 +574,20 @@ void CMouseHandler::MouseRelease(int x, int y, int button)
 
 			// GetSelectionBoxCoeff returns us the corner pos, but we want to do a inview frustum check.
 			// To do so we need the frustum planes (= plane normal + plane offset).
-			float3 norm1 =  camera->GetUp();
+			float3 norm1 = camera->GetUp();
 			float3 norm2 = -camera->GetUp();
-			float3 norm3 =  camera->GetRight();
+			float3 norm3 = camera->GetRight();
 			float3 norm4 = -camera->GetRight();
 
-			#define signf(x) ((x > 0.0f) ? 1.0f : -1.0f)
-			if (topright.y != 0.0f) norm1 = (camera->GetDir() * signf(-topright.y)) + (camera->GetUp()    / math::fabs(topright.y));
-			if (bttmleft.y != 0.0f) norm2 = (camera->GetDir() * signf( bttmleft.y)) - (camera->GetUp()    / math::fabs(bttmleft.y));
-			if (topright.x != 0.0f) norm3 = (camera->GetDir() * signf(-topright.x)) + (camera->GetRight() / math::fabs(topright.x));
-			if (bttmleft.x != 0.0f) norm4 = (camera->GetDir() * signf( bttmleft.x)) - (camera->GetRight() / math::fabs(bttmleft.x));
+#define signf(x) ((x > 0.0f) ? 1.0f : -1.0f)
+			if (topright.y != 0.0f)
+				norm1 = (camera->GetDir() * signf(-topright.y)) + (camera->GetUp() / math::fabs(topright.y));
+			if (bttmleft.y != 0.0f)
+				norm2 = (camera->GetDir() * signf(bttmleft.y)) - (camera->GetUp() / math::fabs(bttmleft.y));
+			if (topright.x != 0.0f)
+				norm3 = (camera->GetDir() * signf(-topright.x)) + (camera->GetRight() / math::fabs(topright.x));
+			if (bttmleft.x != 0.0f)
+				norm4 = (camera->GetDir() * signf(bttmleft.x)) - (camera->GetRight() / math::fabs(bttmleft.x));
 
 			const float4 plane1(norm1, -(norm1.dot(camera->GetPos())));
 			const float4 plane2(norm2, -(norm2.dot(camera->GetPos())));
@@ -565,16 +595,18 @@ void CMouseHandler::MouseRelease(int x, int y, int button)
 			const float4 plane4(norm4, -(norm4.dot(camera->GetPos())));
 
 			selectedUnitsHandler.HandleUnitBoxSelection(plane1, plane2, plane3, plane4);
-		} else {
-			const CUnit* unit = nullptr;
-			const CFeature* feature = nullptr;
+		}
+		else
+		{
+			const CUnit *unit = nullptr;
+			const CFeature *feature = nullptr;
 
 			TraceRay::GuiTraceRay(camera->GetPos(), dir, camera->GetFarPlaneDist() * 1.4f, nullptr, unit, feature, false);
 			lastClicked = unit;
 
 			const bool selectType = (bp.lastRelease >= (gu->gameTime - doubleClickTime) && unit == _lastClicked);
 
-			selectedUnitsHandler.HandleSingleUnitClickSelection(const_cast<CUnit*>(unit), true, selectType);
+			selectedUnitsHandler.HandleSingleUnitClickSelection(const_cast<CUnit *>(unit), true, selectType);
 		}
 
 		bp.lastRelease = gu->gameTime;
@@ -589,21 +621,22 @@ bool CMouseHandler::ButtonPressed()
 void CMouseHandler::MouseWheel(float delta)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	if (RmlGui::ProcessMouseWheel(delta)) {
+	if (RmlGui::ProcessMouseWheel(delta))
+	{
 		return;
 	}
 
 	if (eventHandler.MouseWheel(delta > 0.0f, delta))
 		return;
 
-	if (miniMapMouseWheel && (minimap != nullptr) && minimap->IsInside(mouse->lastx, mouse->lasty)) {
+	if (miniMapMouseWheel && (minimap != nullptr) && minimap->IsInside(mouse->lastx, mouse->lasty))
+	{
 		minimap->MouseWheel(delta > 0.0f, delta);
 		return;
 	}
 
 	camHandler->GetCurrentController().MouseWheelMove(delta * scrollWheelSpeed);
 }
-
 
 void CMouseHandler::DrawSelectionBox() const
 {
@@ -613,14 +646,14 @@ void CMouseHandler::DrawSelectionBox() const
 	if (!GetSelectionBoxVertices(btLeft, btRight, tpLeft, tpRight))
 		return;
 
-	auto& rb = RenderBuffer::GetTypedRenderBuffer<VA_TYPE_C>();
-	auto& sh = rb.GetShader();
+	auto &rb = RenderBuffer::GetTypedRenderBuffer<VA_TYPE_C>();
+	auto &sh = rb.GetShader();
 
 	rb.AddVertices({
-		{btLeft , cmdColors.mouseBox},
+		{btLeft, cmdColors.mouseBox},
 		{btRight, cmdColors.mouseBox},
 		{tpRight, cmdColors.mouseBox},
-		{tpLeft , cmdColors.mouseBox},
+		{tpLeft, cmdColors.mouseBox},
 	});
 
 	auto state = GL::SubState(
@@ -640,11 +673,10 @@ int2 CMouseHandler::GetViewMouseCenter() const
 {
 	return {
 		globalRendering->viewPosX + (globalRendering->viewSizeX >> 1),
-		                            (globalRendering->viewSizeY >> 1)
-	};
+		(globalRendering->viewSizeY >> 1)};
 }
 
-float3 CMouseHandler::GetCursorCameraDir(int x, int y) const { return (hideCursor? camera->GetDir() : camera->CalcPixelDir(x, y)); }
+float3 CMouseHandler::GetCursorCameraDir(int x, int y) const { return (hideCursor ? camera->GetDir() : camera->CalcPixelDir(x, y)); }
 float3 CMouseHandler::GetWorldMapPos() const
 {
 	const float3 cameraPos = camera->GetPos();
@@ -663,17 +695,20 @@ float3 CMouseHandler::GetWorldMapPos() const
 // CTooltipConsole::Draw --> CMouseHandler::GetCurrentTooltip
 std::string CMouseHandler::GetCurrentTooltip() const
 {
-	if (!offscreen) {
+	if (!offscreen)
+	{
 		std::string s;
 
-		if (luaInputReceiver->IsAbove(lastx, lasty)) {
+		if (luaInputReceiver->IsAbove(lastx, lasty))
+		{
 			s = luaInputReceiver->GetTooltip(lastx, lasty);
 
 			if (!s.empty())
 				return s;
 		}
 
-		for (CInputReceiver* recv: CInputReceiver::GetReceivers()) {
+		for (CInputReceiver *recv : CInputReceiver::GetReceivers())
+		{
 			if (recv == nullptr)
 				continue;
 			if (!recv->IsAbove(lastx, lasty))
@@ -690,7 +725,7 @@ std::string CMouseHandler::GetCurrentTooltip() const
 	if (guihandler == nullptr)
 		return "";
 
-	const std::string& buildTip = guihandler->GetBuildTooltip();
+	const std::string &buildTip = guihandler->GetBuildTooltip();
 
 	if (!buildTip.empty())
 		return buildTip;
@@ -698,14 +733,16 @@ std::string CMouseHandler::GetCurrentTooltip() const
 	const float range = camera->GetFarPlaneDist() * 1.4f;
 	float dist = 0.0f;
 
-	const CUnit* unit = nullptr;
-	const CFeature* feature = nullptr;
+	const CUnit *unit = nullptr;
+	const CFeature *feature = nullptr;
 
 	{
 		dist = TraceRay::GuiTraceRay(camera->GetPos(), dir, range, nullptr, unit, feature, true, false, true);
 
-		if (unit    != nullptr) return CTooltipConsole::MakeUnitString(unit);
-		if (feature != nullptr) return CTooltipConsole::MakeFeatureString(feature);
+		if (unit != nullptr)
+			return CTooltipConsole::MakeUnitString(unit);
+		if (feature != nullptr)
+			return CTooltipConsole::MakeFeatureString(feature);
 	}
 
 	const string selTip = selectedUnitsHandler.GetTooltip();
@@ -719,7 +756,6 @@ std::string CMouseHandler::GetCurrentTooltip() const
 	return "";
 }
 
-
 void CMouseHandler::Update()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
@@ -727,12 +763,13 @@ void CMouseHandler::Update()
 	// so let's make sure it's not ignored!
 	if (RmlGui::IsMouseInteractingWith())
 		// if the cursor string is empty, then Rml is cedeing control of it
-		if (auto& rmlCursor = RmlGui::GetMouseCursor(); !rmlCursor.empty())
+		if (auto &rmlCursor = RmlGui::GetMouseCursor(); !rmlCursor.empty())
 			queuedCursorName = rmlCursor;
 
 	SetCursor(queuedCursorName);
 
-	if (!hideCursor) {
+	if (!hideCursor)
+	{
 		mouse->UpdateCursorCameraDir();
 
 		return;
@@ -756,7 +793,6 @@ void CMouseHandler::Update()
 	mouseInput->SetPos(viewMouseCenter);
 }
 
-
 void CMouseHandler::WarpMouse(int x, int y)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
@@ -768,7 +804,6 @@ void CMouseHandler::WarpMouse(int x, int y)
 
 	mouseInput->SetWarpPos({lastx, lasty});
 }
-
 
 void CMouseHandler::ShowMouse()
 {
@@ -784,8 +819,6 @@ void CMouseHandler::ShowMouse()
 	// (by switching between default cursor and later the real one, e.g. `attack`)
 	// instead update state and cursor at the same time
 	ToggleHwCursor(hardwareCursor);
-
-
 }
 
 void CMouseHandler::HideMouse()
@@ -793,6 +826,15 @@ void CMouseHandler::HideMouse()
 	RECOIL_DETAILED_TRACY_ZONE;
 	if (hideCursor)
 		return;
+
+	if (HasVulkanBackend())
+	{
+		hideCursor = false;
+		hwHideCursor = false;
+		SDL_SetRelativeMouseMode(SDL_FALSE);
+		SDL_ShowCursor(SDL_ENABLE);
+		return;
+	}
 
 	hideCursor = true;
 	hwHideCursor = true;
@@ -815,13 +857,29 @@ void CMouseHandler::HideMouse()
 	mouseInput->SetPos(viewMouseCenter);
 }
 
-
 void CMouseHandler::ToggleMiddleClickScroll()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	if (locked) {
+	if (HasVulkanBackend())
+	{
+		SDL_SetRelativeMouseMode(SDL_FALSE);
+		SDL_ShowCursor(SDL_ENABLE);
+		hideCursor = false;
+		hwHideCursor = false;
+		locked = false;
+		mmbScroll = false;
+		ignoreMove = false;
+		if (globalRendering != nullptr)
+			globalRendering->SetWindowInputGrabbing(false);
+		return;
+	}
+
+	if (locked)
+	{
 		ShowMouse();
-	} else {
+	}
+	else
+	{
 		HideMouse();
 	}
 
@@ -830,13 +888,15 @@ void CMouseHandler::ToggleMiddleClickScroll()
 	ignoreMove = mmbScroll;
 }
 
-
 void CMouseHandler::ToggleHwCursor(bool enable)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	if ((hardwareCursor = enable)) {
+	if ((hardwareCursor = enable))
+	{
 		hwHideCursor = true;
-	} else {
+	}
+	else
+	{
 		mouseInput->SetWMMouseCursor(nullptr);
 		SDL_ShowCursor(SDL_DISABLE);
 	}
@@ -845,18 +905,16 @@ void CMouseHandler::ToggleHwCursor(bool enable)
 	activeCursorName = "none";
 }
 
-
 /******************************************************************************/
 
-void CMouseHandler::ChangeCursor(const std::string& cmdName, const float scale)
+void CMouseHandler::ChangeCursor(const std::string &cmdName, const float scale)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	queuedCursorName = cmdName;
 	cursorScale = scale;
 }
 
-
-void CMouseHandler::SetCursor(const std::string& cmdName, const bool forceRebind)
+void CMouseHandler::SetCursor(const std::string &cmdName, const bool forceRebind)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	if ((activeCursorName == cmdName) && !forceRebind)
@@ -864,33 +922,38 @@ void CMouseHandler::SetCursor(const std::string& cmdName, const bool forceRebind
 
 	const auto it = cursorCommandMap.find(activeCursorName = cmdName);
 
-	if (it != cursorCommandMap.end()) {
+	if (it != cursorCommandMap.end())
+	{
 		activeCursorIdx = it->second;
-	} else {
+	}
+	else
+	{
 		activeCursorIdx = cursorCommandMap[""];
 	}
 
 	if (!hardwareCursor || hideCursor)
 		return;
 
-	if ((hwHideCursor = !loadedCursors[activeCursorIdx].IsHWValid())) {
+	if ((hwHideCursor = !loadedCursors[activeCursorIdx].IsHWValid()))
+	{
 		SDL_ShowCursor(SDL_DISABLE);
 		mouseInput->SetWMMouseCursor(nullptr);
-	} else {
+	}
+	else
+	{
 		loadedCursors[activeCursorIdx].BindHwCursor(); // calls SDL_ShowCursor(SDL_ENABLE);
 	}
 }
-
 
 void CMouseHandler::UpdateCursors()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	// we update all cursors (for the command queue icons)
-	for (const auto& element: cursorFileMap) {
+	for (const auto &element : cursorFileMap)
+	{
 		loadedCursors[element.second].Update();
 	}
 }
-
 
 void CMouseHandler::UpdateCursorCameraDir()
 {
@@ -898,8 +961,7 @@ void CMouseHandler::UpdateCursorCameraDir()
 	dir = GetCursorCameraDir(lastx, lasty);
 }
 
-
-void CMouseHandler::DrawScrollCursor(TypedRenderBuffer<VA_TYPE_C>& rb) const
+void CMouseHandler::DrawScrollCursor(TypedRenderBuffer<VA_TYPE_C> &rb) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	const float scaleL = math::fabs(std::min(0.0f, scrollx)) * crossMoveScale + 1.0f;
@@ -907,56 +969,55 @@ void CMouseHandler::DrawScrollCursor(TypedRenderBuffer<VA_TYPE_C>& rb) const
 	const float scaleR = math::fabs(std::max(0.0f, scrollx)) * crossMoveScale + 1.0f;
 	const float scaleB = math::fabs(std::max(0.0f, scrolly)) * crossMoveScale + 1.0f;
 
-	rb.AddVertex({{ 0.00f * scaleT,  1.00f * scaleT, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
-	rb.AddVertex({{ 0.33f * scaleT,  0.66f * scaleT, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
-	rb.AddVertex({{-0.33f * scaleT,  0.66f * scaleT, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
+	rb.AddVertex({{0.00f * scaleT, 1.00f * scaleT, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
+	rb.AddVertex({{0.33f * scaleT, 0.66f * scaleT, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
+	rb.AddVertex({{-0.33f * scaleT, 0.66f * scaleT, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
 
-	rb.AddVertex({{ 0.00f * scaleB, -1.00f * scaleB, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
-	rb.AddVertex({{ 0.33f * scaleB, -0.66f * scaleB, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
+	rb.AddVertex({{0.00f * scaleB, -1.00f * scaleB, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
+	rb.AddVertex({{0.33f * scaleB, -0.66f * scaleB, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
 	rb.AddVertex({{-0.33f * scaleB, -0.66f * scaleB, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
 
-	rb.AddVertex({{-1.00f * scaleL,  0.00f * scaleL, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
-	rb.AddVertex({{-0.66f * scaleL,  0.33f * scaleL, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
+	rb.AddVertex({{-1.00f * scaleL, 0.00f * scaleL, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
+	rb.AddVertex({{-0.66f * scaleL, 0.33f * scaleL, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
 	rb.AddVertex({{-0.66f * scaleL, -0.33f * scaleL, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
 
-	rb.AddVertex({{ 1.00f * scaleR,  0.00f * scaleR, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
-	rb.AddVertex({{ 0.66f * scaleR,  0.33f * scaleR, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
-	rb.AddVertex({{ 0.66f * scaleR, -0.33f * scaleR, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
+	rb.AddVertex({{1.00f * scaleR, 0.00f * scaleR, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
+	rb.AddVertex({{0.66f * scaleR, 0.33f * scaleR, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
+	rb.AddVertex({{0.66f * scaleR, -0.33f * scaleR, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
 
-	rb.AddVertex({{-0.33f * scaleT,  0.66f * scaleT, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
-	rb.AddVertex({{ 0.33f * scaleT,  0.66f * scaleT, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
+	rb.AddVertex({{-0.33f * scaleT, 0.66f * scaleT, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
+	rb.AddVertex({{0.33f * scaleT, 0.66f * scaleT, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
 
-	rb.AddVertex({{ 0.00f         ,  0.00f         , 0.0f}, {0.2f, 0.2f, 0.2f,       0.0f}});
+	rb.AddVertex({{0.00f, 0.00f, 0.0f}, {0.2f, 0.2f, 0.2f, 0.0f}});
 
 	rb.AddVertex({{-0.33f * scaleB, -0.66f * scaleB, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
-	rb.AddVertex({{ 0.33f * scaleB, -0.66f * scaleB, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
+	rb.AddVertex({{0.33f * scaleB, -0.66f * scaleB, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
 
-	rb.AddVertex({{ 0.00f         ,  0.00f,          0.0f}, {0.2f, 0.2f, 0.2f,       0.0f}});
+	rb.AddVertex({{0.00f, 0.00f, 0.0f}, {0.2f, 0.2f, 0.2f, 0.0f}});
 
-	rb.AddVertex({{-0.66f * scaleL,  0.33f * scaleL, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
+	rb.AddVertex({{-0.66f * scaleL, 0.33f * scaleL, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
 	rb.AddVertex({{-0.66f * scaleL, -0.33f * scaleL, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
 
-	rb.AddVertex({{ 0.00f         ,  0.00f         , 0.0f}, {0.2f, 0.2f, 0.2f,       0.0f}});
+	rb.AddVertex({{0.00f, 0.00f, 0.0f}, {0.2f, 0.2f, 0.2f, 0.0f}});
 
-	rb.AddVertex({{ 0.66f * scaleR, -0.33f * scaleR, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
-	rb.AddVertex({{ 0.66f * scaleR,  0.33f * scaleR, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
+	rb.AddVertex({{0.66f * scaleR, -0.33f * scaleR, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
+	rb.AddVertex({{0.66f * scaleR, 0.33f * scaleR, 0.0f}, {1.0f, 1.0f, 1.0f, crossAlpha}});
 
-	rb.AddVertex({{ 0.00f         ,  0.00f         , 0.0f}, {0.2f, 0.2f, 0.2f,       0.0f}});
+	rb.AddVertex({{0.00f, 0.00f, 0.0f}, {0.2f, 0.2f, 0.2f, 0.0f}});
 
 	// center dot
-	rb.AddVertex({{-crossSize * 0.03f,  crossSize * 0.03f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.2f * crossAlpha}});
+	rb.AddVertex({{-crossSize * 0.03f, crossSize * 0.03f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.2f * crossAlpha}});
 	rb.AddVertex({{-crossSize * 0.03f, -crossSize * 0.03f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.2f * crossAlpha}});
-	rb.AddVertex({{ crossSize * 0.03f, -crossSize * 0.03f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.2f * crossAlpha}});
+	rb.AddVertex({{crossSize * 0.03f, -crossSize * 0.03f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.2f * crossAlpha}});
 
-	rb.AddVertex({{ crossSize * 0.03f, -crossSize * 0.03f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.2f * crossAlpha}});
-	rb.AddVertex({{ crossSize * 0.03f,  crossSize * 0.03f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.2f * crossAlpha}});
-	rb.AddVertex({{-crossSize * 0.03f,  crossSize * 0.03f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.2f * crossAlpha}});
+	rb.AddVertex({{crossSize * 0.03f, -crossSize * 0.03f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.2f * crossAlpha}});
+	rb.AddVertex({{crossSize * 0.03f, crossSize * 0.03f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.2f * crossAlpha}});
+	rb.AddVertex({{-crossSize * 0.03f, crossSize * 0.03f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.2f * crossAlpha}});
 
 	rb.DrawArrays(GL_TRIANGLES);
 }
 
-
-void CMouseHandler::DrawFPSCursor(TypedRenderBuffer<VA_TYPE_C>& rb) const
+void CMouseHandler::DrawFPSCursor(TypedRenderBuffer<VA_TYPE_C> &rb) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	constexpr int stepNumHalf = 2;
@@ -964,17 +1025,18 @@ void CMouseHandler::DrawFPSCursor(TypedRenderBuffer<VA_TYPE_C>& rb) const
 	const float wingHalf = math::PI * 0.111111f;
 	const float step = wingHalf / stepNumHalf;
 
-	for (float angle = 0.0f; angle < math::TWOPI; angle += (math::TWOPI * 0.333333f)) {
-		for (int i = -stepNumHalf; i < stepNumHalf; i++) {
-			rb.AddVertex({{0.1f * fastmath::sin(angle                 ), 0.1f * fastmath::cos(angle                 ), 0.0f}, {1.0f, 1.0f, 1.0f, 0.5f}});
-			rb.AddVertex({{0.8f * fastmath::sin(angle + (i    ) * step), 0.8f * fastmath::cos(angle + (i    ) * step), 0.0f}, {1.0f, 1.0f, 1.0f, 0.5f}});
+	for (float angle = 0.0f; angle < math::TWOPI; angle += (math::TWOPI * 0.333333f))
+	{
+		for (int i = -stepNumHalf; i < stepNumHalf; i++)
+		{
+			rb.AddVertex({{0.1f * fastmath::sin(angle), 0.1f * fastmath::cos(angle), 0.0f}, {1.0f, 1.0f, 1.0f, 0.5f}});
+			rb.AddVertex({{0.8f * fastmath::sin(angle + (i)*step), 0.8f * fastmath::cos(angle + (i)*step), 0.0f}, {1.0f, 1.0f, 1.0f, 0.5f}});
 			rb.AddVertex({{0.8f * fastmath::sin(angle + (i + 1) * step), 0.8f * fastmath::cos(angle + (i + 1) * step), 0.0f}, {1.0f, 1.0f, 1.0f, 0.5f}});
 		}
 	}
 
 	rb.Submit(GL_TRIANGLES);
 }
-
 
 void CMouseHandler::DrawCursor()
 {
@@ -984,9 +1046,11 @@ void CMouseHandler::DrawCursor()
 	if (guihandler != nullptr)
 		guihandler->DrawCentroidCursor();
 
-	if (locked) {
+	if (locked)
+	{
 		// draw procedural cursor if center-locked
-		if (crossSize > 0.0f) {
+		if (crossSize > 0.0f)
+		{
 			const float xscale = crossSize * globalRendering->pixelX;
 			const float yscale = crossSize * globalRendering->pixelY;
 
@@ -994,14 +1058,17 @@ void CMouseHandler::DrawCursor()
 			glTranslatef(0.5f - globalRendering->pixelX * 0.5f, 0.5f - globalRendering->pixelY * 0.5f, 0.0f);
 			glScalef(xscale, yscale, 1.0f);
 
-			auto& rb = RenderBuffer::GetTypedRenderBuffer<VA_TYPE_C>();
-			auto& sh = rb.GetShader();
+			auto &rb = RenderBuffer::GetTypedRenderBuffer<VA_TYPE_C>();
+			auto &sh = rb.GetShader();
 
 			sh.Enable();
 
-			if (gu->fpsMode) {
+			if (gu->fpsMode)
+			{
 				DrawFPSCursor(rb);
-			} else {
+			}
+			else
+			{
 				DrawScrollCursor(rb);
 			}
 
@@ -1016,13 +1083,15 @@ void CMouseHandler::DrawCursor()
 	if (hideCursor)
 		return;
 
-	if (hardwareCursor && loadedCursors[activeCursorIdx].IsHWValid()) {
+	if (hardwareCursor && loadedCursors[activeCursorIdx].IsHWValid())
+	{
 		loadedCursors[activeCursorIdx].UpdateHwCursor();
 		return;
 	}
 
 	// draw the 'software' cursor
-	if (cursorScale >= 0.0f) {
+	if (cursorScale >= 0.0f)
+	{
 		loadedCursors[activeCursorIdx].Draw(lastx, lasty, cursorScale);
 		return;
 	}
@@ -1030,12 +1099,13 @@ void CMouseHandler::DrawCursor()
 	// hovered minimap, show default cursor and draw `special` cursor scaled-down bottom right of the default one
 	const size_t normalCursorIndex = cursorFileMap["cursornormal"];
 
-	if (normalCursorIndex == 0) {
+	if (normalCursorIndex == 0)
+	{
 		loadedCursors[activeCursorIdx].Draw(lastx, lasty, -cursorScale);
 		return;
 	}
 
-	CMouseCursor& normalCursor = loadedCursors[normalCursorIndex];
+	CMouseCursor &normalCursor = loadedCursors[normalCursorIndex];
 	normalCursor.Draw(lastx, lasty, 1.0f);
 
 	if (activeCursorIdx == normalCursorIndex)
@@ -1044,18 +1114,17 @@ void CMouseHandler::DrawCursor()
 	loadedCursors[activeCursorIdx].Draw(lastx + normalCursor.GetMaxSizeX(), lasty + normalCursor.GetMaxSizeY(), -cursorScale);
 }
 
-
 bool CMouseHandler::AssignMouseCursor(
-	const std::string& cmdName,
-	const std::string& fileName,
+	const std::string &cmdName,
+	const std::string &fileName,
 	CMouseCursor::HotSpot hotSpot,
-	bool overwrite
-) {
+	bool overwrite)
+{
 	RECOIL_DETAILED_TRACY_ZONE;
-	const auto  cmdIt = cursorCommandMap.find(cmdName);
+	const auto cmdIt = cursorCommandMap.find(cmdName);
 	const auto fileIt = cursorFileMap.find(fileName);
 
-	const bool haveCmd  = ( cmdIt != cursorCommandMap.end());
+	const bool haveCmd = (cmdIt != cursorCommandMap.end());
 	const bool haveFile = (fileIt != cursorFileMap.end());
 
 	// already assigned a cursor for this command
@@ -1063,13 +1132,14 @@ bool CMouseHandler::AssignMouseCursor(
 		return false;
 
 	// cursor is already loaded but not assigned, reuse it
-	if (haveFile) {
+	if (haveFile)
+	{
 		cursorCommandMap[cmdName] = fileIt->second;
 		return true;
 	}
 
 	const size_t numLoadedCursors = loadedCursors.size();
-	const size_t commandCursorIdx = haveCmd? cmdIt->second: numLoadedCursors + 1;
+	const size_t commandCursorIdx = haveCmd ? cmdIt->second : numLoadedCursors + 1;
 
 	// assign the new cursor and remap indices
 	loadedCursors.emplace_back(fileName, hotSpot);
@@ -1090,19 +1160,19 @@ bool CMouseHandler::AssignMouseCursor(
 }
 
 bool CMouseHandler::ReplaceMouseCursor(
-	const string& oldName,
-	const string& newName,
-	CMouseCursor::HotSpot hotSpot
-) {
+	const string &oldName,
+	const string &newName,
+	CMouseCursor::HotSpot hotSpot)
+{
 	RECOIL_DETAILED_TRACY_ZONE;
 	const auto fileIt = cursorFileMap.find(oldName);
 
 	if (fileIt == cursorFileMap.end())
 		return false;
 
-	const auto* loadedCursor = loadedCursors.data() + fileIt->second;
+	const auto *loadedCursor = loadedCursors.data() + fileIt->second;
 
-	if (newName == loadedCursor->GetName() && hotSpot == loadedCursor->GetHotSpot()) //same
+	if (newName == loadedCursor->GetName() && hotSpot == loadedCursor->GetHotSpot()) // same
 		return true;
 
 	CMouseCursor newCursor = CMouseCursor(newName, hotSpot);
@@ -1115,14 +1185,13 @@ bool CMouseHandler::ReplaceMouseCursor(
 	if (activeCursorIdx == fileIt->second)
 		SetCursor(activeCursorName, true);
 
-	newCursor = {}; //now it's safe to kill old cursor
+	newCursor = {}; // now it's safe to kill old cursor
 	return (loadedCursors[activeCursorIdx].IsValid());
 }
 
-
 /******************************************************************************/
 
-void CMouseHandler::ConfigNotify(const std::string& key, const std::string& value)
+void CMouseHandler::ConfigNotify(const std::string &key, const std::string &value)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	ConfigUpdate();

@@ -2,8 +2,12 @@
 
 #include "SelectMenu.h"
 
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <SDL_keycode.h>
 #include <functional>
+#include <span>
 #include <sstream>
 #include <stack>
 
@@ -27,6 +31,11 @@
 #include "System/MsgStrings.h"
 #include "System/StartScriptGen.h"
 #include "Rendering/GlobalRendering.h"
+#include "Rendering/Gfx/GfxTypes.h"
+#ifdef ENABLE_VULKAN
+#include "Rendering/Gfx/Vulkan/VulkanGraphicsBackend.h"
+#endif
+#include "Rendering/Textures/Bitmap.h"
 #include "aGui/Gui.h"
 #include "aGui/VerticalLayout.h"
 #include "aGui/HorizontalLayout.h"
@@ -38,41 +47,67 @@
 #include "aGui/List.h"
 #include "alphanum.hpp"
 
-using std::string;
 using agui::Button;
 using agui::HorizontalLayout;
+using std::string;
 
 CONFIG(std::string, address).defaultValue("").description("Last Ip/hostname used as direct connect in the menu.");
 CONFIG(std::string, LastSelectedSetting).defaultValue("").description("Stores the previously selected setting, when editing settings within the Spring main menu.");
 CONFIG(std::string, MenuArchive).defaultValue("Spring Bitmaps").description("Archive name for the default Menu.");
 
-class ConnectWindow : public agui::Window {
+namespace
+{
+	bool HasOpenGLBackend()
+	{
+		return ((globalRendering != nullptr) &&
+				(globalRendering->graphicsBackend != nullptr) &&
+				(globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL));
+	}
+
+#ifdef ENABLE_VULKAN
+	gfx::VulkanGraphicsBackend *GetVulkanBackend()
+	{
+		if ((globalRendering == nullptr) || (globalRendering->graphicsBackend == nullptr))
+			return nullptr;
+
+		if (globalRendering->graphicsBackend->Type() != gfx::BackendType::Vulkan)
+			return nullptr;
+
+		return dynamic_cast<gfx::VulkanGraphicsBackend *>(globalRendering->graphicsBackend.get());
+	}
+#endif
+}
+
+class ConnectWindow : public agui::Window
+{
 public:
-	ConnectWindow() : agui::Window("Connect to server") {
+	ConnectWindow() : agui::Window("Connect to server")
+	{
 		agui::gui->AddElement(this);
 		SetPos(0.5, 0.5);
 		SetSize(0.4, 0.2);
 
-		agui::VerticalLayout* wndLayout = new agui::VerticalLayout(this);
-		HorizontalLayout* input = new HorizontalLayout(wndLayout);
-		/*agui::TextElement* label = */new agui::TextElement("Address:", input); // will be deleted in input
+		agui::VerticalLayout *wndLayout = new agui::VerticalLayout(this);
+		HorizontalLayout *input = new HorizontalLayout(wndLayout);
+		/*agui::TextElement* label = */ new agui::TextElement("Address:", input); // will be deleted in input
 		address = new agui::LineEdit(input);
 		address->DefaultAction = std::bind(&ConnectWindow::Finish, this, true);
 		address->SetFocus(true);
 		address->SetContent(configHandler->GetString("address"));
-		HorizontalLayout* buttons = new HorizontalLayout(wndLayout);
-		Button* connect = new Button("Connect", buttons);
+		HorizontalLayout *buttons = new HorizontalLayout(wndLayout);
+		Button *connect = new Button("Connect", buttons);
 		connect->Clicked = std::bind(&ConnectWindow::Finish, this, true);
-		Button* close = new Button("Close", buttons);
+		Button *close = new Button("Close", buttons);
 		close->Clicked = std::bind(&ConnectWindow::Finish, this, false);
 		GeometryChange();
 	}
 
 	OnClickStringType Connect;
-	agui::LineEdit* address;
+	agui::LineEdit *address;
 
 private:
-	void Finish(bool connect) {
+	void Finish(bool connect)
+	{
 		if (connect)
 			Connect(address->GetContent());
 		else
@@ -80,34 +115,37 @@ private:
 	};
 };
 
-class SettingsWindow : public agui::Window {
+class SettingsWindow : public agui::Window
+{
 public:
-	SettingsWindow(std::string &name) : agui::Window(name) {
+	SettingsWindow(std::string &name) : agui::Window(name)
+	{
 		agui::gui->AddElement(this);
 		SetPos(0.5, 0.5);
 		SetSize(0.4, 0.2);
 
-		agui::VerticalLayout* wndLayout = new agui::VerticalLayout(this);
-		HorizontalLayout* input = new HorizontalLayout(wndLayout);
-		/*agui::TextElement* value_label = */new agui::TextElement("Value:", input); // will be deleted in input
+		agui::VerticalLayout *wndLayout = new agui::VerticalLayout(this);
+		HorizontalLayout *input = new HorizontalLayout(wndLayout);
+		/*agui::TextElement* value_label = */ new agui::TextElement("Value:", input); // will be deleted in input
 		value = new agui::LineEdit(input);
 		value->DefaultAction = std::bind(&SettingsWindow::Finish, this, true);
 		value->SetFocus(true);
 		if (configHandler->IsSet(name))
 			value->SetContent(configHandler->GetString(name));
-		HorizontalLayout* buttons = new HorizontalLayout(wndLayout);
-		Button* ok = new Button("OK", buttons);
+		HorizontalLayout *buttons = new HorizontalLayout(wndLayout);
+		Button *ok = new Button("OK", buttons);
 		ok->Clicked = std::bind(&SettingsWindow::Finish, this, true);
-		Button* close = new Button("Cancel", buttons);
+		Button *close = new Button("Cancel", buttons);
 		close->Clicked = std::bind(&SettingsWindow::Finish, this, false);
 		GeometryChange();
 	}
 
 	OnClickStringType OK;
-	agui::LineEdit* value;
+	agui::LineEdit *value;
 
 private:
-	void Finish(bool set) {
+	void Finish(bool set)
+	{
 		if (set)
 			OK(title + " = " + value->GetContent());
 		else
@@ -115,22 +153,15 @@ private:
 	};
 };
 
-
-
-
 SelectMenu::SelectMenu(std::shared_ptr<ClientSetup> setup)
-: GuiElement(nullptr)
-, clientSetup(setup)
-, conWindow(nullptr)
-, settingsWindow(nullptr)
-, curSelect(nullptr)
+	: GuiElement(nullptr), clientSetup(setup), conWindow(nullptr), settingsWindow(nullptr), curSelect(nullptr)
 {
 	SetPos(0, 0);
 	SetSize(1, 1);
 	agui::gui->AddElement(this, true);
 
 	{ // GUI stuff
-		agui::Picture* background = new agui::Picture(this);
+		agui::Picture *background = new agui::Picture(this);
 
 		{
 			// can not conflict with LuaMenu archive, just keep in VFS if it was not already
@@ -138,36 +169,85 @@ SelectMenu::SelectMenu(std::shared_ptr<ClientSetup> setup)
 			vfsHandler->AddArchiveIf(configHandler->GetString("MenuArchive"), false);
 			vfsHandler->SetName("SpringVFS");
 
-			//TODO: select by resolution / aspect ratio with fallback image
+			// TODO: select by resolution / aspect ratio with fallback image
 			const std::vector<std::string> files = CFileHandler::FindFiles("bitmaps/ui/background/", "*");
 
 			if (!files.empty())
-				background->Load(files[ guRNG.NextInt(files.size()) ]);
+			{
+				const std::string selectedBackground = files[guRNG.NextInt(files.size())];
+
+				if (HasOpenGLBackend())
+					background->Load(selectedBackground);
+
+#ifdef ENABLE_VULKAN
+				if (gfx::VulkanGraphicsBackend *vulkanBackend = GetVulkanBackend(); vulkanBackend != nullptr)
+				{
+					vulkanMenuBackgroundTexture.reset();
+
+					CBitmap menuBitmap;
+					if (menuBitmap.Load(selectedBackground, 1.0f, 4u, 0x1401u, false))
+					{
+						try
+						{
+							gfx::TextureCreateInfo textureCI;
+							textureCI.dimension = gfx::TextureDimension::Tex2D;
+							textureCI.format = gfx::PixelFormat::RGBA8_UNorm;
+							textureCI.extent.width = static_cast<std::uint32_t>(std::max(menuBitmap.xsize, 1));
+							textureCI.extent.height = static_cast<std::uint32_t>(std::max(menuBitmap.ysize, 1));
+							textureCI.extent.depth = 1u;
+							textureCI.mipLevels = 1u;
+							textureCI.arrayLayers = 1u;
+							textureCI.usage = gfx::TextureUsage::Sampled | gfx::TextureUsage::TransferDst;
+							textureCI.debugName = "SelectMenuBackground";
+
+							vulkanMenuBackgroundTexture = globalRendering->graphicsBackend->CreateTexture(textureCI);
+							if (vulkanMenuBackgroundTexture != nullptr)
+							{
+								const std::size_t rowPitchBytes = static_cast<std::size_t>(textureCI.extent.width) * 4u;
+								const std::size_t pixelDataSize = rowPitchBytes * static_cast<std::size_t>(textureCI.extent.height);
+								const auto pixels = std::span<const std::byte>(
+									reinterpret_cast<const std::byte *>(menuBitmap.GetRawMem()),
+									pixelDataSize);
+
+								vulkanMenuBackgroundTexture->Upload(0u, 0u, pixels, rowPitchBytes);
+							}
+						}
+						catch (const std::exception &ex)
+						{
+							LOG_L(L_WARNING, "[%s] Failed to upload Vulkan menu texture: %s", __func__, ex.what());
+							vulkanMenuBackgroundTexture.reset();
+						}
+					}
+
+					vulkanBackend->SetSwapchainTriangleTexture(vulkanMenuBackgroundTexture.get());
+				}
+#endif
+			}
 		}
 
 		selw = new SelectionWidget(this);
-		agui::VerticalLayout* menu = new agui::VerticalLayout(this);
+		agui::VerticalLayout *menu = new agui::VerticalLayout(this);
 		menu->SetPos(0.1, 0.5);
 		menu->SetSize(0.4, 0.4);
 		menu->SetBorder(1.2f);
-		/*agui::TextElement* title = */new agui::TextElement("Recoil " + SpringVersion::GetFull(), menu); // will be deleted in menu
-		Button* testGame = new Button("Test Game", menu);
+		/*agui::TextElement* title = */ new agui::TextElement("Recoil " + SpringVersion::GetFull(), menu); // will be deleted in menu
+		Button *testGame = new Button("Test Game", menu);
 		testGame->Clicked = std::bind(&SelectMenu::Single, this);
 
-		Button* playDemo = new Button("Play Demo", menu);
+		Button *playDemo = new Button("Play Demo", menu);
 		playDemo->Clicked = std::bind(&SelectMenu::Demo, this);
 
-		Button* loadGame = new Button("Load Game", menu);
+		Button *loadGame = new Button("Load Game", menu);
 		loadGame->Clicked = std::bind(&SelectMenu::Load, this);
 
 		userSetting = configHandler->GetString("LastSelectedSetting");
-		Button* editsettings = new Button("Edit Settings", menu);
+		Button *editsettings = new Button("Edit Settings", menu);
 		editsettings->Clicked = std::bind(&SelectMenu::ShowSettingsList, this);
 
-		Button* directConnect = new Button("Direct Connect", menu);
+		Button *directConnect = new Button("Direct Connect", menu);
 		directConnect->Clicked = std::bind(&SelectMenu::ShowConnectWindow, this, true);
 
-		Button* quit = new Button("Quit", menu);
+		Button *quit = new Button("Quit", menu);
 		quit->Clicked = std::bind(&SelectMenu::Quit, this);
 		background->GeometryChange();
 	}
@@ -177,6 +257,13 @@ SelectMenu::SelectMenu(std::shared_ptr<ClientSetup> setup)
 
 SelectMenu::~SelectMenu()
 {
+#ifdef ENABLE_VULKAN
+	if (gfx::VulkanGraphicsBackend *vulkanBackend = GetVulkanBackend(); vulkanBackend != nullptr)
+		vulkanBackend->SetSwapchainTriangleTexture(nullptr);
+
+	vulkanMenuBackgroundTexture.reset();
+#endif
+
 	ShowConnectWindow(false);
 	ShowSettingsWindow(false, "");
 	CleanWindow();
@@ -186,16 +273,23 @@ bool SelectMenu::Draw()
 {
 	spring_msecs(10).sleep(true);
 	globalRendering->drawFrame = std::max(1U, globalRendering->drawFrame + 1);
+
+	if (!HasOpenGLBackend())
+	{
+		agui::gui->Clean();
+		return true;
+	}
+
 	ClearScreen();
 	agui::gui->Draw();
 
 	return true;
 }
 
-
 void SelectMenu::Demo()
 {
-	const auto demoSelectedCB = [&](const std::string& userDemo) {
+	const auto demoSelectedCB = [&](const std::string &userDemo)
+	{
 		if (pregame != nullptr)
 			return;
 
@@ -205,12 +299,13 @@ void SelectMenu::Demo()
 
 		pregame = new CPreGame(clientSetup);
 		pregame->AsyncExecute(&CPreGame::LoadDemoFile, clientSetup->demoFile);
-		//pregame->LoadDemoFile(clientSetup->demoFile);
+		// pregame->LoadDemoFile(clientSetup->demoFile);
 
 		return (agui::gui->RmElement(this));
 	};
 
-	if (selw->userDemo == SelectionWidget::NoDemoSelect) {
+	if (selw->userDemo == SelectionWidget::NoDemoSelect)
+	{
 		selw->ShowDemoList(demoSelectedCB);
 		return;
 	}
@@ -218,7 +313,8 @@ void SelectMenu::Demo()
 
 void SelectMenu::Load()
 {
-	const auto loadSelectedCB = [&](const std::string& userSave) {
+	const auto loadSelectedCB = [&](const std::string &userSave)
+	{
 		if (pregame != nullptr)
 			return;
 
@@ -227,12 +323,13 @@ void SelectMenu::Load()
 
 		pregame = new CPreGame(clientSetup);
 		pregame->AsyncExecute(&CPreGame::LoadSaveFile, clientSetup->saveFile);
-		//pregame->LoadSaveFile(clientSetup->saveFile);
+		// pregame->LoadSaveFile(clientSetup->saveFile);
 
 		return (agui::gui->RmElement(this));
 	};
 
-	if (selw->userLoad == SelectionWidget::NoSaveSelect) {
+	if (selw->userLoad == SelectionWidget::NoSaveSelect)
+	{
 		selw->ShowSavegameList(loadSelectedCB);
 		return;
 	}
@@ -240,27 +337,31 @@ void SelectMenu::Load()
 
 void SelectMenu::Single()
 {
-	if (selw->userMod == SelectionWidget::NoModSelect) {
+	if (selw->userMod == SelectionWidget::NoModSelect)
+	{
 		selw->ShowModList();
 		return;
 	}
-	if (selw->userMap == SelectionWidget::NoMapSelect) {
+	if (selw->userMap == SelectionWidget::NoMapSelect)
+	{
 		selw->ShowMapList();
 		return;
 	}
-	if (selw->userScript == SelectionWidget::NoScriptSelect) {
+	if (selw->userScript == SelectionWidget::NoScriptSelect)
+	{
 		selw->ShowScriptList();
 		return;
 	}
 
-	if (pregame == nullptr) {
+	if (pregame == nullptr)
+	{
 		// in case of double-click
 		if (selw->userScript == SelectionWidget::SandboxAI)
 			selw->userScript.clear();
 
 		pregame = new CPreGame(clientSetup);
 		pregame->AsyncExecute(&CPreGame::LoadSetupScript, StartScriptGen::CreateDefaultSetup(selw->userMap, selw->userMod, selw->userScript, clientSetup->myPlayerName));
-		//pregame->LoadSetupScript(StartScriptGen::CreateDefaultSetup(selw->userMap, selw->userMod, selw->userScript, clientSetup->myPlayerName));
+		// pregame->LoadSetupScript(StartScriptGen::CreateDefaultSetup(selw->userMap, selw->userMod, selw->userScript, clientSetup->myPlayerName));
 		return (agui::gui->RmElement(this));
 	}
 }
@@ -288,8 +389,10 @@ void SelectMenu::ShowConnectWindow(bool show)
 
 void SelectMenu::ShowSettingsWindow(bool show, std::string name)
 {
-	if (show) {
-		if (settingsWindow) {
+	if (show)
+	{
+		if (settingsWindow)
+		{
 			agui::gui->RmElement(settingsWindow);
 			settingsWindow = nullptr;
 		}
@@ -297,11 +400,13 @@ void SelectMenu::ShowSettingsWindow(bool show, std::string name)
 		settingsWindow->OK = std::bind(&SelectMenu::ShowSettingsWindow, this, false, std::placeholders::_1);
 		settingsWindow->WantClose = std::bind(&SelectMenu::ShowSettingsWindow, this, false, "");
 	}
-	else if (!show && settingsWindow) {
+	else if (!show && settingsWindow)
+	{
 		agui::gui->RmElement(settingsWindow);
 		settingsWindow = nullptr;
 		const size_t p = name.find(" = ");
-		if (p != std::string::npos) {
+		if (p != std::string::npos)
+		{
 			configHandler->SetString(name.substr(0, p), name.substr(p + 3));
 			ShowSettingsList();
 		}
@@ -312,18 +417,19 @@ void SelectMenu::ShowSettingsWindow(bool show, std::string name)
 
 void SelectMenu::ShowSettingsList()
 {
-	if (curSelect == nullptr) {
+	if (curSelect == nullptr)
+	{
 		curSelect = new ListSelectWnd("Select setting");
 		curSelect->Selected = std::bind(&SelectMenu::SelectSetting, this, std::placeholders::_1);
 		curSelect->WantClose = std::bind(&SelectMenu::CleanWindow, this);
 	}
 	curSelect->list->RemoveAllItems();
 
-	typedef std::map<std::string, std::string, doj::alphanum_less<std::string> > DataSorted;
-	const std::map<std::string, std::string>& data = configHandler->GetData();
+	typedef std::map<std::string, std::string, doj::alphanum_less<std::string>> DataSorted;
+	const std::map<std::string, std::string> &data = configHandler->GetData();
 	const DataSorted dataSorted(data.begin(), data.end());
 
-	for (const auto& item: dataSorted)
+	for (const auto &item : dataSorted)
 		curSelect->list->AddItem(item.first + " = " + item.second, "");
 
 	if (data.find(userSetting) != data.end())
@@ -332,24 +438,27 @@ void SelectMenu::ShowSettingsList()
 	curSelect->list->RefreshQuery();
 }
 
-void SelectMenu::SelectSetting(std::string setting) {
+void SelectMenu::SelectSetting(std::string setting)
+{
 	size_t p = setting.find(" = ");
-	if(p != std::string::npos)
+	if (p != std::string::npos)
 		setting = setting.substr(0, p);
 	userSetting = setting;
 	configHandler->SetString("LastSelectedSetting", userSetting);
 	ShowSettingsWindow(true, userSetting);
 }
 
-void SelectMenu::CleanWindow() {
-	if (curSelect) {
+void SelectMenu::CleanWindow()
+{
+	if (curSelect)
+	{
 		ShowSettingsWindow(false, "");
 		agui::gui->RmElement(curSelect);
 		curSelect = nullptr;
 	}
 }
 
-void SelectMenu::DirectConnect(const std::string& addr)
+void SelectMenu::DirectConnect(const std::string &addr)
 {
 	configHandler->SetString("address", addr);
 
@@ -360,19 +469,24 @@ void SelectMenu::DirectConnect(const std::string& addr)
 	return (agui::gui->RmElement(this));
 }
 
-bool SelectMenu::HandleEventSelf(const SDL_Event& ev)
+bool SelectMenu::HandleEventSelf(const SDL_Event &ev)
 {
-	switch (ev.type) {
-		case SDL_KEYDOWN: {
-			if (ev.key.keysym.sym == SDLK_ESCAPE) {
-				LOG("[SelectMenu] user exited");
-				Quit();
-			} else if (ev.key.keysym.sym == SDLK_RETURN) {
-				Single();
-				return true;
-			}
-			break;
+	switch (ev.type)
+	{
+	case SDL_KEYDOWN:
+	{
+		if (ev.key.keysym.sym == SDLK_ESCAPE)
+		{
+			LOG("[SelectMenu] user exited");
+			Quit();
 		}
+		else if (ev.key.keysym.sym == SDLK_RETURN)
+		{
+			Single();
+			return true;
+		}
+		break;
+	}
 	}
 	return false;
 }

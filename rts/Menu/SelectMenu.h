@@ -7,12 +7,16 @@
 #include "Game/GameController.h"
 #include <memory>
 
+namespace gfx
+{
+	class ITexture;
+}
+
 class SelectionWidget;
 class ConnectWindow;
 class SettingsWindow;
 class ListSelectWnd;
 class ClientSetup;
-
 
 /**
 @brief User prompt for options when no script is given
@@ -37,13 +41,13 @@ private:
 	void Multi();
 	void Quit();
 	void ShowConnectWindow(bool show);
-	void DirectConnect(const std::string& addr);
+	void DirectConnect(const std::string &addr);
 
-	bool HandleEventSelf(const SDL_Event& ev);
+	bool HandleEventSelf(const SDL_Event &ev);
 
-	void SelectScript(const std::string& s);
-	void SelectMap(const std::string& s);
-	void SelectMod(const std::string& s);
+	void SelectScript(const std::string &s);
+	void SelectMap(const std::string &s);
+	void SelectMod(const std::string &s);
 
 	void ShowSettingsWindow(bool show, std::string name);
 	void ShowSettingsList();
@@ -53,12 +57,14 @@ private:
 private:
 	std::shared_ptr<ClientSetup> clientSetup;
 
-	ConnectWindow* conWindow;
-	SelectionWidget* selw;
+	ConnectWindow *conWindow;
+	SelectionWidget *selw;
 
-	SettingsWindow* settingsWindow;
-	ListSelectWnd* curSelect;
+	SettingsWindow *settingsWindow;
+	ListSelectWnd *curSelect;
 	std::string userSetting;
+
+	std::unique_ptr<gfx::ITexture> vulkanMenuBackgroundTexture;
 };
 
 #endif

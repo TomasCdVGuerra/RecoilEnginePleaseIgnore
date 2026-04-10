@@ -10,6 +10,7 @@
 #include <SDL_video.h>
 
 #include "Rendering/GL/myGL.h"
+#include "Rendering/GlobalRendering.h"
 #ifndef HEADLESS
 #include "System/TimeProfiler.h"
 #endif
@@ -1912,9 +1913,19 @@ bool CBitmap::SaveFloat(std::string const &filename) const
 }
 
 #ifndef HEADLESS
+static bool HasOpenGLBackend()
+{
+	return ((globalRendering != nullptr) &&
+			(globalRendering->graphicsBackend != nullptr) &&
+			(globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL));
+}
+
 uint32_t CBitmap::CreateTexture(const GL::TextureCreationParams &tcp) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (!HasOpenGLBackend())
+		return 0;
+
 	if (compressed)
 		return CreateDDSTexture(tcp);
 
@@ -1947,6 +1958,9 @@ static void HandleDDSMipmap(GLenum target, int32_t numEmbeddedLevels, uint32_t m
 uint32_t CBitmap::CreateDDSTexture(const GL::TextureCreationParams &tcp) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (!HasOpenGLBackend())
+		return 0;
+
 	glPushAttrib(GL_TEXTURE_BIT);
 
 	auto texID = tcp.texID;

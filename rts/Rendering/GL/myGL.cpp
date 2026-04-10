@@ -32,17 +32,15 @@
 static std::array<CVertexArray, 2> vertexArrays;
 static int currentVertexArray = 0;
 
-
 /******************************************************************************/
 /******************************************************************************/
 
-CVertexArray* GetVertexArray()
+CVertexArray *GetVertexArray()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	currentVertexArray = (currentVertexArray + 1) % vertexArrays.size();
 	return &vertexArrays[currentVertexArray];
 }
-
 
 /******************************************************************************/
 
@@ -67,13 +65,14 @@ bool CheckAvailableVideoModes()
 		"[GL::%s] desktop={%ix%ix%ibpp@%iHz} current={%ix%ix%ibpp@%iHz}",
 		__func__,
 		ddm.w, ddm.h, SDL_BPP(ddm.format), ddm.refresh_rate,
-		cdm.w, cdm.h, SDL_BPP(cdm.format), cdm.refresh_rate
-	);
+		cdm.w, cdm.h, SDL_BPP(cdm.format), cdm.refresh_rate);
 
-	for (int k = 0; k < numDisplays; ++k) {
+	for (int k = 0; k < numDisplays; ++k)
+	{
 		const int numModes = SDL_GetNumDisplayModes(k);
 
-		if (numModes <= 0) {
+		if (numModes <= 0)
+		{
 			LOG("\tdisplay=%d bounds=N/A modes=N/A", k + 1);
 			continue;
 		}
@@ -86,7 +85,8 @@ bool CheckAvailableVideoModes()
 
 		LOG("\tDisplay (%s)=%d modes=%d bounds={x=%d, y=%d, w=%d, h=%d}", dn.c_str(), k + 1, numModes, db.x, db.y, db.w, db.h);
 
-		for (int i = 0; i < numModes; ++i) {
+		for (int i = 0; i < numModes; ++i)
+		{
 			SDL_GetDisplayMode(k, i, &cm);
 
 			// skip resolutions less than minimum / per dimension
@@ -103,8 +103,7 @@ bool CheckAvailableVideoModes()
 				cm.w,
 				cm.h,
 				static_cast<int32_t>(SDL_BPP(cm.format)),
-				cm.refresh_rate
-			});
+				cm.refresh_rate});
 
 			LOG("\t\t[%2i] %ix%ix%ibpp@%iHz", int(i + 1), cm.w, cm.h, SDL_BPP(cm.format), cm.refresh_rate);
 			pm = cm;
@@ -115,10 +114,8 @@ bool CheckAvailableVideoModes()
 	return (SDL_BPP(ddm.format) >= 24);
 }
 
-
-
 #ifndef HEADLESS
-static bool GetVideoMemInfoNV(GLint* memInfo)
+static bool GetVideoMemInfoNV(GLint *memInfo)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	if (!GLAD_GL_NVX_gpu_memory_info)
@@ -129,14 +126,15 @@ static bool GetVideoMemInfoNV(GLint* memInfo)
 	return true;
 }
 
-static bool GetVideoMemInfoATI(GLint* memInfo)
+static bool GetVideoMemInfoATI(GLint *memInfo)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	if (!GLAD_GL_ATI_meminfo)
 		return false;
 
 	// these are not disjoint, don't sum
-	for (uint32_t param: {/*GL_VBO_FREE_MEMORY_ATI,*/ GL_TEXTURE_FREE_MEMORY_ATI/*, GL_RENDERBUFFER_FREE_MEMORY_ATI*/}) {
+	for (uint32_t param : {/*GL_VBO_FREE_MEMORY_ATI,*/ GL_TEXTURE_FREE_MEMORY_ATI /*, GL_RENDERBUFFER_FREE_MEMORY_ATI*/})
+	{
 		glGetIntegerv(param, &memInfo[0]);
 
 		memInfo[4] += (memInfo[0] + memInfo[2]); // total main plus aux. memory free in pool
@@ -148,50 +146,80 @@ static bool GetVideoMemInfoATI(GLint* memInfo)
 	return true;
 }
 
-static bool GetVideoMemInfoMESA(GLint* memInfo)
+static bool GetVideoMemInfoMESA(GLint *memInfo)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	return GLX::GetVideoMemInfoMESA(memInfo);
 }
 #endif
 
-bool GetAvailableVideoRAM(GLint* memory, const char* glVendor)
+bool GetAvailableVideoRAM(GLint *memory, const char *glVendor)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	#ifdef HEADLESS
+#ifdef HEADLESS
 	return false;
-	#else
+#else
 	GLint memInfo[4 + 2] = {-1, -1, -1, -1, 0, 0};
 
-	switch (glVendor[0]) {
-		case 'N': { if (!GetVideoMemInfoNV  (memInfo)) return false; } break; // "NVIDIA"
-		case 'A': { if (!GetVideoMemInfoATI (memInfo)) return false; } break; // "ATI" or "AMD"
-		case 'X': { if (!GetVideoMemInfoMESA(memInfo)) return false; } break; // "X.org"
-		case 'M': { if (!GetVideoMemInfoMESA(memInfo)) return false; } break; // "Mesa"
-		case 'V': { if (!GetVideoMemInfoMESA(memInfo)) return false; } break; // "VMware" (also ships a Mesa variant)
-		case 'I': {                                    return false; } [[fallthrough]]; // "Intel"
-		default: {
-			// try everything
-			if (!(GetVideoMemInfoNV(memInfo) || GetVideoMemInfoATI(memInfo) || GetVideoMemInfoMESA(memInfo)))
-				return false;
-		} break;
+	switch (glVendor[0])
+	{
+	case 'N':
+	{
+		if (!GetVideoMemInfoNV(memInfo))
+			return false;
+	}
+	break; // "NVIDIA"
+	case 'A':
+	{
+		if (!GetVideoMemInfoATI(memInfo))
+			return false;
+	}
+	break; // "ATI" or "AMD"
+	case 'X':
+	{
+		if (!GetVideoMemInfoMESA(memInfo))
+			return false;
+	}
+	break; // "X.org"
+	case 'M':
+	{
+		if (!GetVideoMemInfoMESA(memInfo))
+			return false;
+	}
+	break; // "Mesa"
+	case 'V':
+	{
+		if (!GetVideoMemInfoMESA(memInfo))
+			return false;
+	}
+	break; // "VMware" (also ships a Mesa variant)
+	case 'I':
+	{
+		return false;
+	}
+		[[fallthrough]]; // "Intel"
+	default:
+	{
+		// try everything
+		if (!(GetVideoMemInfoNV(memInfo) || GetVideoMemInfoATI(memInfo) || GetVideoMemInfoMESA(memInfo)))
+			return false;
+	}
+	break;
 	}
 
 	// callers assume [0]=total and [1]=free
 	memory[0] = std::max(memInfo[0], memInfo[1]);
 	memory[1] = std::min(memInfo[0], memInfo[1]);
 	return true;
-	#endif
+#endif
 }
 
-
-
-bool ShowDriverWarning(const char* glVendor)
+bool ShowDriverWarning(const char *glVendor)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	assert(glVendor != nullptr);
 
-	const std::string& _glVendor = StringToLower(glVendor);
+	const std::string &_glVendor = StringToLower(glVendor);
 
 	// should be unreachable
 	// note that checking for Microsoft stubs is no longer required
@@ -200,8 +228,9 @@ bool ShowDriverWarning(const char* glVendor)
 	if (_glVendor.find("unknown") != std::string::npos)
 		return false;
 
-	if (_glVendor.find("vmware") != std::string::npos) {
-		const char* msg =
+	if (_glVendor.find("vmware") != std::string::npos)
+	{
+		const char *msg =
 			"Running Spring with virtualized drivers can result in severely degraded "
 			"performance and is discouraged. Prefer to use your host operating system.";
 
@@ -212,7 +241,6 @@ bool ShowDriverWarning(const char* glVendor)
 
 	return true;
 }
-
 
 /******************************************************************************/
 
@@ -234,7 +262,7 @@ void WorkaroundATIPointSizeBug()
 
 /******************************************************************************/
 
-void RecoilGetTexParams(GLenum target, GLuint textureID, GLint level, TextureParameters& tp)
+void RecoilGetTexParams(GLenum target, GLuint textureID, GLint level, TextureParameters &tp)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	auto texBind = GL::TexBind(target, textureID);
@@ -251,37 +279,64 @@ void RecoilGetTexParams(GLenum target, GLuint textureID, GLint level, TexturePar
 
 	switch (tp.intFmt)
 	{
-	case GL_LUMINANCE32F_ARB: [[fallthrough]];
-	case GL_INTENSITY32F_ARB: {
+	case GL_LUMINANCE32F_ARB:
+		[[fallthrough]];
+	case GL_INTENSITY32F_ARB:
+	{
 		tp.bpp = 32;
 		tp.chNum = 1;
 		tp.prefDataType = GL_FLOAT;
-	} break;
-	default: {
+	}
+	break;
+	default:
+	{
 		GLint _cbits;
-		glGetTexLevelParameteriv(target, level, GL_TEXTURE_RED_SIZE  , &_cbits); tp.bpp += _cbits; if (_cbits > 0) tp.chNum++;
-		glGetTexLevelParameteriv(target, level, GL_TEXTURE_GREEN_SIZE, &_cbits); tp.bpp += _cbits; if (_cbits > 0) tp.chNum++;
-		glGetTexLevelParameteriv(target, level, GL_TEXTURE_BLUE_SIZE , &_cbits); tp.bpp += _cbits; if (_cbits > 0) tp.chNum++;
-		glGetTexLevelParameteriv(target, level, GL_TEXTURE_ALPHA_SIZE, &_cbits); tp.bpp += _cbits; if (_cbits > 0) tp.chNum++;
-		glGetTexLevelParameteriv(target, level, GL_TEXTURE_DEPTH_SIZE, &_cbits); tp.bpp += _cbits; if (_cbits > 0) { tp.chNum++; tp.isNormalizedDepth = true; tp.prefDataType = GL_FLOAT; }
+		glGetTexLevelParameteriv(target, level, GL_TEXTURE_RED_SIZE, &_cbits);
+		tp.bpp += _cbits;
+		if (_cbits > 0)
+			tp.chNum++;
+		glGetTexLevelParameteriv(target, level, GL_TEXTURE_GREEN_SIZE, &_cbits);
+		tp.bpp += _cbits;
+		if (_cbits > 0)
+			tp.chNum++;
+		glGetTexLevelParameteriv(target, level, GL_TEXTURE_BLUE_SIZE, &_cbits);
+		tp.bpp += _cbits;
+		if (_cbits > 0)
+			tp.chNum++;
+		glGetTexLevelParameteriv(target, level, GL_TEXTURE_ALPHA_SIZE, &_cbits);
+		tp.bpp += _cbits;
+		if (_cbits > 0)
+			tp.chNum++;
+		glGetTexLevelParameteriv(target, level, GL_TEXTURE_DEPTH_SIZE, &_cbits);
+		tp.bpp += _cbits;
+		if (_cbits > 0)
+		{
+			tp.chNum++;
+			tp.isNormalizedDepth = true;
+			tp.prefDataType = GL_FLOAT;
+		}
 
-		if (tp.chNum > 0) {
+		if (tp.chNum > 0)
+		{
 			if (auto bytesPerChannel = (tp.bpp / tp.chNum) >> 3; bytesPerChannel == 4)
 				tp.prefDataType = GL_UNSIGNED_INT;
 			else if (bytesPerChannel == 2)
 				tp.prefDataType = GL_UNSIGNED_SHORT;
 		}
-	} break;
+	}
+	break;
 	}
 
 	{
 		GLint isCompressed;
 		glGetTexLevelParameteriv(target, level, GL_TEXTURE_COMPRESSED, &isCompressed);
 		tp.isCompressed = isCompressed;
-		if (isCompressed) {
+		if (isCompressed)
+		{
 			glGetTexLevelParameteriv(target, level, GL_TEXTURE_COMPRESSED_IMAGE_SIZE, &tp.imageSize);
 		}
-		else {
+		else
+		{
 			tp.imageSize =
 				std::max(tp.sizeX, 1) *
 				std::max(tp.sizeY, 1) *
@@ -291,8 +346,7 @@ void RecoilGetTexParams(GLenum target, GLuint textureID, GLint level, TexturePar
 	}
 }
 
-
-void glSaveTexture(const GLuint textureID, const char* filename, int level)
+void glSaveTexture(const GLuint textureID, const char *filename, int level)
 {
 	TextureParameters params;
 	RecoilGetTexParams(GL_TEXTURE_2D, textureID, level, params);
@@ -307,17 +361,18 @@ void glSaveTexture(const GLuint textureID, const char* filename, int level)
 		glGetTexImage(GL_TEXTURE_2D, level, extFormat, params.prefDataType, bmp.GetRawMem());
 	}
 
-	if (params.isNormalizedDepth) {
-		//doesn't work, TODO: fix
+	if (params.isNormalizedDepth)
+	{
+		// doesn't work, TODO: fix
 		bmp.SaveFloat(filename);
 	}
-	else {
+	else
+	{
 		bmp.Save(filename, params.bpp < 32);
 	}
 }
 
-
-void glSaveTextureArray(const GLuint textureID, const char* filename, int level, int page)
+void glSaveTextureArray(const GLuint textureID, const char *filename, int level, int page)
 {
 	TextureParameters params;
 	RecoilGetTexParams(GL_TEXTURE_2D_ARRAY, textureID, level, params);
@@ -327,11 +382,13 @@ void glSaveTextureArray(const GLuint textureID, const char* filename, int level,
 	CBitmap bmp;
 	bmp.Alloc(params.sizeX, params.sizeY, params.chNum, params.prefDataType);
 
-	if (GLAD_GL_VERSION_4_5) {
-		//DSA, needs no binding
+	if (GLAD_GL_VERSION_4_5)
+	{
+		// DSA, needs no binding
 		glGetTextureSubImage(textureID, level, 0, 0, page, params.sizeX, params.sizeY, 1, extFormat, params.prefDataType, bmp.GetMemSize(), bmp.GetRawMem());
 	}
-	else {
+	else
+	{
 		const size_t pageSize = params.sizeX * params.sizeY * params.chNum * CBitmap::GetDataTypeSize(params.prefDataType);
 		const size_t allPagesSize = pageSize * params.sizeZ;
 		assert(params.imageSize == allPagesSize);
@@ -345,15 +402,16 @@ void glSaveTextureArray(const GLuint textureID, const char* filename, int level,
 		std::copy(
 			dataBytes.data() + (page + 0) * pageSize,
 			dataBytes.data() + (page + 1) * pageSize,
-			bmp.GetRawMem()
-		);
+			bmp.GetRawMem());
 	}
 
-	if (params.isNormalizedDepth) {
-		//doesn't work, TODO: fix
+	if (params.isNormalizedDepth)
+	{
+		// doesn't work, TODO: fix
 		bmp.SaveFloat(filename);
 	}
-	else {
+	else
+	{
 		bmp.Save(filename, params.bpp < 32);
 	}
 }
@@ -362,42 +420,47 @@ void RecoilTexStorage2D(GLenum target, GLint levels, GLint internalFormat, GLsiz
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	if (levels <= 0)
-		levels = std::bit_width(static_cast<uint32_t>(std::max({ width , height })));
+		levels = std::bit_width(static_cast<uint32_t>(std::max({width, height})));
 
-	if (GLAD_GL_ARB_texture_storage) {
+	if (GLAD_GL_ARB_texture_storage)
+	{
 		glTexStorage2D(target, levels, internalFormat, width, height);
-	} else {
+	}
+	else
+	{
 		auto format = GL::GetDataFormatFromInternalFormat(internalFormat);
-		auto type   = GL::GetDataTypeFromInternalFormat(internalFormat);
+		auto type = GL::GetDataTypeFromInternalFormat(internalFormat);
 
 		for (int level = 0; level < levels; ++level)
 			glTexImage2D(target, level, internalFormat, std::max(width >> level, 1), std::max(height >> level, 1), 0, format, type, nullptr);
 	}
-	glTexParameteri(target, GL_TEXTURE_BASE_LEVEL,          0);
-	glTexParameteri(target, GL_TEXTURE_MAX_LEVEL , levels - 1);
+	glTexParameteri(target, GL_TEXTURE_BASE_LEVEL, 0);
+	glTexParameteri(target, GL_TEXTURE_MAX_LEVEL, levels - 1);
 }
 
 void RecoilTexStorage3D(GLenum target, GLint levels, GLint internalFormat, GLsizei width, GLsizei height, GLsizei depth)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	if (levels <= 0)
-		levels = std::bit_width(static_cast<uint32_t>(std::max({ width , height, depth })));
+		levels = std::bit_width(static_cast<uint32_t>(std::max({width, height, depth})));
 
-	if (GLAD_GL_ARB_texture_storage) {
+	if (GLAD_GL_ARB_texture_storage)
+	{
 		glTexStorage3D(target, levels, internalFormat, width, height, depth);
-	} else {
+	}
+	else
+	{
 		auto format = GL::GetDataFormatFromInternalFormat(internalFormat);
-		auto type   = GL::GetDataTypeFromInternalFormat(internalFormat);
+		auto type = GL::GetDataTypeFromInternalFormat(internalFormat);
 
 		for (int level = 0; level < levels; ++level)
 			glTexImage3D(target, level, internalFormat, std::max(width >> level, 1), std::max(height >> level, 1), std::max(depth >> level, 1), 0, format, type, nullptr);
 	}
-	glTexParameteri(target, GL_TEXTURE_BASE_LEVEL,          0);
-	glTexParameteri(target, GL_TEXTURE_MAX_LEVEL , levels - 1);
+	glTexParameteri(target, GL_TEXTURE_BASE_LEVEL, 0);
+	glTexParameteri(target, GL_TEXTURE_MAX_LEVEL, levels - 1);
 }
 
-
-void RecoilBuildMipmaps(const GLenum target, GLint internalFormat, const GLsizei width, const GLsizei height, const GLenum format, const GLenum type, const void* data, int32_t levels)
+void RecoilBuildMipmaps(const GLenum target, GLint internalFormat, const GLsizei width, const GLsizei height, const GLenum format, const GLenum type, const void *data, int32_t levels)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 
@@ -406,21 +469,24 @@ void RecoilBuildMipmaps(const GLenum target, GLint internalFormat, const GLsizei
 	// the number of required levels was not specified, assume the request for
 	// mipmapped texture, determine the number of levels
 	if (levels <= 0)
-		levels = std::bit_width(static_cast<uint32_t>(std::max(width , height)));
+		levels = std::bit_width(static_cast<uint32_t>(std::max(width, height)));
 
 	// cannot use glTexStorage2D/RecoilTexStorage2D as they don't support GL_COMPRESSED textures
 	glTexImage2D(target, 0, internalFormat, width, height, 0, format, type, data);
 	for (int level = 1; level < levels; ++level)
 		glTexImage2D(target, level, internalFormat, std::max(width >> level, 1), std::max(height >> level, 1), 0, format, type, nullptr);
 
-	glTexParameteri(target, GL_TEXTURE_BASE_LEVEL,          0);
-	glTexParameteri(target, GL_TEXTURE_MAX_LEVEL , levels - 1);
+	glTexParameteri(target, GL_TEXTURE_BASE_LEVEL, 0);
+	glTexParameteri(target, GL_TEXTURE_MAX_LEVEL, levels - 1);
 
-	if (globalRendering->amdHacks) {
+	if (globalRendering->amdHacks)
+	{
 		glEnable(target);
 		glGenerateMipmap(target);
 		glDisable(target);
-	} else {
+	}
+	else
+	{
 		glGenerateMipmap(target);
 	}
 }
@@ -438,16 +504,16 @@ bool glSpringBlitImages(
 	const bool sameIntFormat = (srcTexParams.intFmt == dstTexParams.intFmt);
 	const bool fineDims = (srcWidth <= dstTexParams.sizeX && srcHeight <= dstTexParams.sizeY);
 
-	if (GLAD_GL_ARB_copy_image && fineDims && sameIntFormat) {
+	if (GLAD_GL_ARB_copy_image && fineDims && sameIntFormat)
+	{
 		glCopyImageSubData(
 			srcName, srcTarget, srcLevel, srcX, srcY, srcZ,
 			dstName, dstTarget, dstLevel, dstX, dstY, dstZ,
-			srcWidth, srcHeight, srcDepth
-		);
+			srcWidth, srcHeight, srcDepth);
 		return true;
 	}
 
-	if (dstTexParams.isCompressed) //can't be rendered into
+	if (dstTexParams.isCompressed) // can't be rendered into
 		return false;
 
 	if (!GLAD_GL_EXT_framebuffer_blit || !GLAD_GL_EXT_texture_array)
@@ -470,7 +536,8 @@ bool glSpringBlitImages(
 	glBindFramebufferEXT(GL_READ_FRAMEBUFFER_EXT, newReadFBO);
 
 	const GLenum blitfilter = (srcWidth == dstTexParams.sizeX && srcHeight == dstTexParams.sizeY) ? GL_NEAREST : GL_LINEAR;
-	for (int z = 0; result && z < srcDepth; z++) {
+	for (int z = 0; result && z < srcDepth; z++)
+	{
 		// GL_READ_FRAMEBUFFER
 		{
 			switch (srcTarget)
@@ -484,7 +551,8 @@ bool glSpringBlitImages(
 			case GL_TEXTURE_3D:
 				glFramebufferTexture3DEXT(GL_READ_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0, srcTarget, srcName, srcLevel, srcZ + z);
 				break;
-			case GL_TEXTURE_1D_ARRAY: [[fallthrough]];
+			case GL_TEXTURE_1D_ARRAY:
+				[[fallthrough]];
 			case GL_TEXTURE_2D_ARRAY:
 				glFramebufferTextureLayerEXT(GL_READ_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0, srcName, srcLevel, srcZ + z);
 				break;
@@ -512,7 +580,8 @@ bool glSpringBlitImages(
 			case GL_TEXTURE_3D:
 				glFramebufferTexture3DEXT(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, dstTarget, dstName, dstLevel, dstZ + z);
 				break;
-			case GL_TEXTURE_1D_ARRAY: [[fallthrough]];
+			case GL_TEXTURE_1D_ARRAY:
+				[[fallthrough]];
 			case GL_TEXTURE_2D_ARRAY:
 				glFramebufferTextureLayerEXT(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, dstName, dstLevel, dstZ + z);
 				break;
@@ -527,7 +596,8 @@ bool glSpringBlitImages(
 			result &= (fbStatus == GL_FRAMEBUFFER_COMPLETE_EXT);
 		}
 
-		if (result) {
+		if (result)
+		{
 			glBlitFramebufferEXT(srcX, srcY, srcX + srcWidth, srcY + srcHeight, dstX, dstY, dstX + srcWidth, dstY + srcHeight, GL_COLOR_BUFFER_BIT, blitfilter);
 		}
 	}
@@ -545,9 +615,21 @@ bool glSpringBlitImages(
 
 /******************************************************************************/
 
+static bool HasOpenGLBackend()
+{
+	return ((globalRendering != nullptr) &&
+			(globalRendering->graphicsBackend != nullptr) &&
+			(globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL));
+}
+
+/******************************************************************************/
+
 void ClearScreen()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (!HasOpenGLBackend())
+		return;
+
 	glClearColor(0, 0, 0, 1);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -563,10 +645,9 @@ void ClearScreen()
 	glColor3f(1, 1, 1);
 }
 
-
 /******************************************************************************/
 
-static unsigned int LoadProgram(GLenum, const char*, const char*);
+static unsigned int LoadProgram(GLenum, const char *, const char *);
 
 /**
  * True if the program in DATADIR/shaders/filename is
@@ -576,13 +657,13 @@ static unsigned int LoadProgram(GLenum, const char*, const char*);
  * @param filename Name of the file under shaders with the program in it.
  */
 
-bool ProgramStringIsNative(GLenum target, const char* filename)
+bool ProgramStringIsNative(GLenum target, const char *filename)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	// clear any current GL errors so that the following check is valid
 	glClearErrors("GL", __func__, globalRendering->glDebugErrors);
 
-	const GLuint tempProg = LoadProgram(target, filename, (target == GL_VERTEX_PROGRAM_ARB? "vertex": "fragment"));
+	const GLuint tempProg = LoadProgram(target, filename, (target == GL_VERTEX_PROGRAM_ARB ? "vertex" : "fragment"));
 
 	if (tempProg == 0)
 		return false;
@@ -590,7 +671,6 @@ bool ProgramStringIsNative(GLenum target, const char* filename)
 	glSafeDeleteProgram(tempProg);
 	return true;
 }
-
 
 /**
  * Presumes the last GL operation was to load a vertex or
@@ -602,47 +682,52 @@ bool ProgramStringIsNative(GLenum target, const char* filename)
  * @param filename Only substituted in the message.
  * @param program The program text (used to enhance the message)
  */
-static bool CheckParseErrors(GLenum target, const char* filename, const char* program)
+static bool CheckParseErrors(GLenum target, const char *filename, const char *program)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	GLint errorPos = -1;
-	GLint isNative =  0;
+	GLint isNative = 0;
 
 	glGetIntegerv(GL_PROGRAM_ERROR_POSITION_ARB, &errorPos);
 	glGetProgramivARB(target, GL_PROGRAM_UNDER_NATIVE_LIMITS_ARB, &isNative);
 
-	if (errorPos != -1) {
-		const char* fmtString =
+	if (errorPos != -1)
+	{
+		const char *fmtString =
 			"[%s] shader compilation error at index %d (near "
 			"\"%.30s\") when loading %s-program file %s:\n%s";
-		const char* tgtString = (target == GL_VERTEX_PROGRAM_ARB)? "vertex": "fragment";
-		const char* errString = (const char*) glGetString(GL_PROGRAM_ERROR_STRING_ARB);
+		const char *tgtString = (target == GL_VERTEX_PROGRAM_ARB) ? "vertex" : "fragment";
+		const char *errString = (const char *)glGetString(GL_PROGRAM_ERROR_STRING_ARB);
 
-		if (errString != NULL) {
+		if (errString != NULL)
+		{
 			LOG_L(L_ERROR, fmtString, __func__, errorPos, program + errorPos, tgtString, filename, errString);
-		} else {
+		}
+		else
+		{
 			LOG_L(L_ERROR, fmtString, __func__, errorPos, program + errorPos, tgtString, filename, "(null)");
 		}
 
 		return true;
 	}
 
-	if (isNative != 1) {
+	if (isNative != 1)
+	{
 		GLint aluInstrs, maxAluInstrs;
 		GLint texInstrs, maxTexInstrs;
 		GLint texIndirs, maxTexIndirs;
 		GLint nativeTexIndirs, maxNativeTexIndirs;
 		GLint nativeAluInstrs, maxNativeAluInstrs;
 
-		glGetProgramivARB(GL_FRAGMENT_PROGRAM_ARB, GL_PROGRAM_ALU_INSTRUCTIONS_ARB,            &aluInstrs);
-		glGetProgramivARB(GL_FRAGMENT_PROGRAM_ARB, GL_MAX_PROGRAM_ALU_INSTRUCTIONS_ARB,        &maxAluInstrs);
-		glGetProgramivARB(GL_FRAGMENT_PROGRAM_ARB, GL_PROGRAM_TEX_INSTRUCTIONS_ARB,            &texInstrs);
-		glGetProgramivARB(GL_FRAGMENT_PROGRAM_ARB, GL_MAX_PROGRAM_TEX_INSTRUCTIONS_ARB,        &maxTexInstrs);
-		glGetProgramivARB(GL_FRAGMENT_PROGRAM_ARB, GL_PROGRAM_TEX_INDIRECTIONS_ARB,            &texIndirs);
-		glGetProgramivARB(GL_FRAGMENT_PROGRAM_ARB, GL_MAX_PROGRAM_TEX_INDIRECTIONS_ARB,        &maxTexIndirs);
-		glGetProgramivARB(GL_FRAGMENT_PROGRAM_ARB, GL_PROGRAM_NATIVE_TEX_INDIRECTIONS_ARB,     &nativeTexIndirs);
+		glGetProgramivARB(GL_FRAGMENT_PROGRAM_ARB, GL_PROGRAM_ALU_INSTRUCTIONS_ARB, &aluInstrs);
+		glGetProgramivARB(GL_FRAGMENT_PROGRAM_ARB, GL_MAX_PROGRAM_ALU_INSTRUCTIONS_ARB, &maxAluInstrs);
+		glGetProgramivARB(GL_FRAGMENT_PROGRAM_ARB, GL_PROGRAM_TEX_INSTRUCTIONS_ARB, &texInstrs);
+		glGetProgramivARB(GL_FRAGMENT_PROGRAM_ARB, GL_MAX_PROGRAM_TEX_INSTRUCTIONS_ARB, &maxTexInstrs);
+		glGetProgramivARB(GL_FRAGMENT_PROGRAM_ARB, GL_PROGRAM_TEX_INDIRECTIONS_ARB, &texIndirs);
+		glGetProgramivARB(GL_FRAGMENT_PROGRAM_ARB, GL_MAX_PROGRAM_TEX_INDIRECTIONS_ARB, &maxTexIndirs);
+		glGetProgramivARB(GL_FRAGMENT_PROGRAM_ARB, GL_PROGRAM_NATIVE_TEX_INDIRECTIONS_ARB, &nativeTexIndirs);
 		glGetProgramivARB(GL_FRAGMENT_PROGRAM_ARB, GL_MAX_PROGRAM_NATIVE_TEX_INDIRECTIONS_ARB, &maxNativeTexIndirs);
-		glGetProgramivARB(GL_FRAGMENT_PROGRAM_ARB, GL_PROGRAM_NATIVE_ALU_INSTRUCTIONS_ARB,     &nativeAluInstrs);
+		glGetProgramivARB(GL_FRAGMENT_PROGRAM_ARB, GL_PROGRAM_NATIVE_ALU_INSTRUCTIONS_ARB, &nativeAluInstrs);
 		glGetProgramivARB(GL_FRAGMENT_PROGRAM_ARB, GL_MAX_PROGRAM_NATIVE_ALU_INSTRUCTIONS_ARB, &maxNativeAluInstrs);
 
 		if (aluInstrs > maxAluInstrs)
@@ -666,8 +751,7 @@ static bool CheckParseErrors(GLenum target, const char* filename, const char* pr
 	return false;
 }
 
-
-static unsigned int LoadProgram(GLenum target, const char* filename, const char* program_type)
+static unsigned int LoadProgram(GLenum target, const char *filename, const char *program_type)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	GLuint ret = 0;
@@ -678,46 +762,49 @@ static unsigned int LoadProgram(GLenum target, const char* filename, const char*
 		return ret;
 
 	CFileHandler file(std::string("shaders/") + filename);
-	if (!file.FileExists()) {
+	if (!file.FileExists())
+	{
 		std::string c = fmt::sprintf("[myGL::LoadProgram] Cannot find %s-program file '%s'", program_type, filename);
 		throw content_error(c);
 	}
 
 	std::vector<unsigned char> fbuf;
 
-	if (!file.IsBuffered()) {
+	if (!file.IsBuffered())
+	{
 		fbuf.resize(file.FileSize(), 0);
 		file.Read(fbuf.data(), fbuf.size());
-	} else {
+	}
+	else
+	{
 		fbuf = std::move(file.GetBuffer());
 	}
 
 	if (fbuf.back() != '\0')
-		fbuf.emplace_back('\0'); //vmware driver can't deal with non-null terminated strings
+		fbuf.emplace_back('\0'); // vmware driver can't deal with non-null terminated strings
 
 	glGenProgramsARB(1, &ret);
 	glBindProgramARB(target, ret);
-	glProgramStringARB(target, GL_PROGRAM_FORMAT_ASCII_ARB, fbuf.size() - 1, fbuf.data()); //NV driver refuses to deal with null-terminated endings
+	glProgramStringARB(target, GL_PROGRAM_FORMAT_ASCII_ARB, fbuf.size() - 1, fbuf.data()); // NV driver refuses to deal with null-terminated endings
 
-	if (CheckParseErrors(target, filename, reinterpret_cast<char*>(fbuf.data())))
+	if (CheckParseErrors(target, filename, reinterpret_cast<char *>(fbuf.data())))
 		ret = 0;
 
 	return ret;
 }
 
-unsigned int LoadVertexProgram(const char* filename)
+unsigned int LoadVertexProgram(const char *filename)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	return LoadProgram(GL_VERTEX_PROGRAM_ARB, filename, "vertex");
 }
 
-unsigned int LoadFragmentProgram(const char* filename)
+unsigned int LoadFragmentProgram(const char *filename)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 
 	return LoadProgram(GL_FRAGMENT_PROGRAM_ARB, filename, "fragment");
 }
-
 
 void glSafeDeleteProgram(GLuint program)
 {
@@ -727,17 +814,21 @@ void glSafeDeleteProgram(GLuint program)
 	glDeleteProgramsARB(1, &program);
 }
 
-
 /******************************************************************************/
 
-void glClearErrors(const char* cls, const char* fnc, bool verbose)
+void glClearErrors(const char *cls, const char *fnc, bool verbose)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	if (verbose) {
-		for (int count = 0, error = 0; ((error = glGetError()) != GL_NO_ERROR) && (count < 10000); count++) {
+	if (verbose)
+	{
+		for (int count = 0, error = 0; ((error = glGetError()) != GL_NO_ERROR) && (count < 10000); count++)
+		{
 			LOG_L(L_ERROR, "[GL::%s][%s::%s][frame=%u] count=%04d error=0x%x", __func__, cls, fnc, globalRendering->drawFrame, count, error);
 		}
-	} else {
-		for (int count = 0; (glGetError() != GL_NO_ERROR) && (count < 10000); count++);
+	}
+	else
+	{
+		for (int count = 0; (glGetError() != GL_NO_ERROR) && (count < 10000); count++)
+			;
 	}
 }

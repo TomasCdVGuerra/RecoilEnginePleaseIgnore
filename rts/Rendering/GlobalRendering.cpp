@@ -372,11 +372,14 @@ SDL_Window *CGlobalRendering::CreateSDLWindow(const char *title) const
 	uint32_t sdlFlags = SDL_WINDOW_RESIZABLE;
 #ifdef ENABLE_VULKAN
 	sdlFlags |= SDL_WINDOW_VULKAN;
+	// Force a normal decorated window in Vulkan debug mode.
+	// sdlFlags |= (borderless_ ? SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_WINDOW_FULLSCREEN) * fullScreen_;
+	// sdlFlags |= (SDL_WINDOW_BORDERLESS * borderless_);
 #else
 	sdlFlags |= SDL_WINDOW_OPENGL;
-#endif
 	sdlFlags |= (borderless_ ? SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_WINDOW_FULLSCREEN) * fullScreen_;
 	sdlFlags |= (SDL_WINDOW_BORDERLESS * borderless_);
+#endif
 
 #ifdef ENABLE_VULKAN
 	if ((newWindow = SDL_CreateWindow(title, winPosX_, winPosY_, newRes.x, newRes.y, sdlFlags)) == nullptr)
@@ -636,6 +639,9 @@ void CGlobalRendering::KillSDL() const
 
 void CGlobalRendering::PostInit()
 {
+	if ((graphicsBackend == nullptr) || (graphicsBackend->Type() != gfx::BackendType::OpenGL))
+		return;
+
 	// glewInit sets GL_INVALID_ENUM, get rid of it
 	glGetError();
 
@@ -1264,6 +1270,14 @@ void CGlobalRendering::SetWindowAttributes(SDL_Window *window)
 	winPosX = configHandler->GetInt("WindowPosX");
 	winPosY = configHandler->GetInt("WindowPosY");
 
+#ifdef ENABLE_VULKAN
+	// Force decorated windowed mode while debugging Vulkan integration.
+	// borderless = configHandler->GetBool("WindowBorderless");
+	// fullScreen = configHandler->GetBool("Fullscreen");
+	borderless = false;
+	fullScreen = false;
+#endif
+
 	// update display count
 	numDisplays = SDL_GetNumVideoDisplays();
 
@@ -1661,6 +1675,9 @@ void CGlobalRendering::SaveWindowPosAndSize()
 
 void CGlobalRendering::UpdateGLConfigs()
 {
+	if ((graphicsBackend == nullptr) || (graphicsBackend->Type() != gfx::BackendType::OpenGL))
+		return;
+
 	LOG("[GR::%s]", __func__);
 
 	// re-read configuration value
@@ -1743,6 +1760,9 @@ void CGlobalRendering::UpdateWindowBorders(SDL_Window *window) const
 
 void CGlobalRendering::UpdateGLGeometry()
 {
+	if ((graphicsBackend == nullptr) || (graphicsBackend->Type() != gfx::BackendType::OpenGL))
+		return;
+
 	LOG("[GR::%s][1] winSize=<%d,%d>", __func__, winSizeX, winSizeY);
 
 	ReadWindowPosAndSize();
@@ -1755,6 +1775,9 @@ void CGlobalRendering::UpdateGLGeometry()
 
 void CGlobalRendering::InitGLState()
 {
+	if ((graphicsBackend == nullptr) || (graphicsBackend->Type() != gfx::BackendType::OpenGL))
+		return;
+
 	LOG("[GR::%s]", __func__);
 
 	glShadeModel(GL_SMOOTH);

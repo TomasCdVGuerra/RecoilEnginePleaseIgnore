@@ -14,6 +14,13 @@
 
 namespace
 {
+    bool HasOpenGLBackend()
+    {
+        return ((globalRendering != nullptr) &&
+                (globalRendering->graphicsBackend != nullptr) &&
+                (globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL));
+    }
+
     gfx::FilterMode TranslateFilterMode(uint32_t filterMode)
     {
         switch (filterMode)
@@ -190,6 +197,9 @@ namespace GL
 
     GL::TexBind TextureBase::ScopedBind()
     {
+        if (!HasOpenGLBackend())
+            return GL::TexBind();
+
         auto scopedBinding = GL::TexBind(texTarget, GetGLId());
         lastBoundSlot = scopedBinding.GetLastActiveTextureSlot();
         return scopedBinding;
@@ -197,24 +207,42 @@ namespace GL
 
     GL::TexBind TextureBase::ScopedBind(uint32_t relSlot)
     {
+        if (!HasOpenGLBackend())
+            return GL::TexBind();
+
         lastBoundSlot = GL_TEXTURE0 + relSlot;
         return GL::TexBind(relSlot, texTarget, GetGLId());
     }
 
     void TextureBase::ScopedBind(const GL::TexBind &existingScopedBinding)
     {
+        if (!HasOpenGLBackend())
+            return;
+
         glActiveTexture(existingScopedBinding.GetLastActiveTextureSlot());
         glBindTexture(texTarget, GetGLId());
     }
 
     void TextureBase::Bind()
     {
+        if (!HasOpenGLBackend())
+        {
+            lastBoundSlot = GL_TEXTURE0;
+            return;
+        }
+
         lastBoundSlot = GL::FetchActiveTextureSlot();
         glBindTexture(texTarget, GetGLId());
     }
 
     void TextureBase::Bind(uint32_t relSlot)
     {
+        if (!HasOpenGLBackend())
+        {
+            lastBoundSlot = GL_TEXTURE0 + relSlot;
+            return;
+        }
+
         lastBoundSlot = GL_TEXTURE0 + relSlot;
         glActiveTexture(GL_TEXTURE0 + relSlot);
         glBindTexture(texTarget, GetGLId());
@@ -222,12 +250,24 @@ namespace GL
 
     void TextureBase::Unbind()
     {
+        if (!HasOpenGLBackend())
+        {
+            lastBoundSlot = 0;
+            return;
+        }
+
         glBindTexture(texTarget, 0);
         lastBoundSlot = 0;
     }
 
     void TextureBase::Unbind(uint32_t relSlot)
     {
+        if (!HasOpenGLBackend())
+        {
+            lastBoundSlot = 0;
+            return;
+        }
+
         glActiveTexture(GL_TEXTURE0 + relSlot);
         glBindTexture(texTarget, 0);
         lastBoundSlot = 0;
@@ -256,13 +296,18 @@ namespace GL
                         ? static_cast<int32_t>(std::bit_width(static_cast<uint32_t>(std::max({size.x, size.y}))))
                         : tcp.reqNumLevels;
         numLevels = std::max<int32_t>(1, numLevels);
-        lastBoundSlot = GL::FetchActiveTextureSlot();
+        lastBoundSlot = GL_TEXTURE0;
 
         if ((globalRendering == nullptr) || (globalRendering->graphicsBackend == nullptr))
         {
             LOG_L(L_WARNING, "[Texture2D::Texture2D] graphics backend unavailable");
             return;
         }
+
+        if (globalRendering->graphicsBackend->Type() != gfx::BackendType::OpenGL)
+            return;
+
+        lastBoundSlot = GL::FetchActiveTextureSlot();
 
         gfx::TextureCreateInfo ci;
         ci.dimension = gfx::TextureDimension::Tex2D;
@@ -336,13 +381,18 @@ namespace GL
                         ? static_cast<int32_t>(std::bit_width(static_cast<uint32_t>(std::max({size.x, size.y}))))
                         : tcp.reqNumLevels;
         numLevels = std::max<int32_t>(1, numLevels);
-        lastBoundSlot = GL::FetchActiveTextureSlot();
+        lastBoundSlot = GL_TEXTURE0;
 
         if ((globalRendering == nullptr) || (globalRendering->graphicsBackend == nullptr))
         {
             LOG_L(L_WARNING, "[Texture2DArray::Texture2DArray] graphics backend unavailable");
             return;
         }
+
+        if (globalRendering->graphicsBackend->Type() != gfx::BackendType::OpenGL)
+            return;
+
+        lastBoundSlot = GL::FetchActiveTextureSlot();
 
         gfx::TextureCreateInfo ci;
         ci.dimension = gfx::TextureDimension::Tex2DArray;

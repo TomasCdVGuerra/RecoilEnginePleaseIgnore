@@ -106,15 +106,19 @@ private:
 	gfx::ITexture *activeTexture = nullptr;
 };
 
-class CglNullFontRenderer final : public CglFontRenderer
+class CglDummyFontRenderer final : public CglFontRenderer
 {
-	// Inherited via CglFontRenderer
+public:
+	CglDummyFontRenderer() = default;
+	~CglDummyFontRenderer() override = default;
+
 	void AddQuadTrianglesPB(VA_TYPE_TC &&tl, VA_TYPE_TC &&tr, VA_TYPE_TC &&br, VA_TYPE_TC &&bl) override {}
 	void AddQuadTrianglesOB(VA_TYPE_TC &&tl, VA_TYPE_TC &&tr, VA_TYPE_TC &&br, VA_TYPE_TC &&bl) override {}
 	void DrawTraingleElements() override {}
 	void HandleTextureUpdate(CFontTexture &font, bool onlyUpload) override {}
 	void PushGLState(const CglFont &font) override {}
 	void PopGLState(const CglFont &font) override {}
+
 	bool IsLegacy() const override { return true; }
 	bool IsValid() const override { return true; }
 	void GetStats(std::array<size_t, 8> &stats) const override;

@@ -79,6 +79,9 @@ namespace gfx
         void SwapBuffers() override;
         void DeviceWaitIdle() override;
 
+        // Binds the sampled texture used by the swapchain demo draw.
+        void SetSwapchainTriangleTexture(ITexture *texture);
+
     private:
         void Init();
         void Cleanup() noexcept;
@@ -93,6 +96,31 @@ namespace gfx
         void CreatePrimaryCommandBuffer();
         void CreateSwapchain();
         void CreateSwapchainImageViews();
+        void CreateSwapchainDepthResources();
+        void CreateSwapchainRenderPass();
+        void CreateSwapchainFramebuffers();
+        void CreateSwapchainTriangleResources();
+        void CreateSwapchainTrianglePipeline();
+        void UpdateSwapchainTriangleProjection();
+        void UpdateSwapchainTriangleTextureDescriptor(ITexture *texture);
+        void DestroySwapchainTriangleResources() noexcept;
+        void CreateBuffer(
+            VkDeviceSize size,
+            VkBufferUsageFlags usage,
+            VkMemoryPropertyFlags properties,
+            VkBuffer &buffer,
+            VkDeviceMemory &memory);
+        void CreateImage(
+            std::uint32_t width,
+            std::uint32_t height,
+            VkFormat format,
+            VkImageUsageFlags usage,
+            VkImageAspectFlags aspectFlags,
+            VkImage &image,
+            VkDeviceMemory &memory,
+            VkImageView &imageView);
+        [[nodiscard]] VkFormat FindSupportedDepthFormat() const;
+        [[nodiscard]] std::uint32_t FindMemoryType(std::uint32_t typeFilter, VkMemoryPropertyFlags properties) const;
         void DestroySwapchain() noexcept;
 
         static constexpr std::uint32_t InvalidQueueFamilyIndex = std::numeric_limits<std::uint32_t>::max();
@@ -114,6 +142,25 @@ namespace gfx
         VkExtent2D swapchainExtent = {0u, 0u};
         std::vector<VkImage> swapchainImages;
         std::vector<VkImageView> swapchainImageViews;
+        VkRenderPass swapchainRenderPass = VK_NULL_HANDLE;
+        std::vector<VkFramebuffer> swapchainFramebuffers;
+        VkDescriptorSetLayout swapchainTriangleDescriptorSetLayout = VK_NULL_HANDLE;
+        VkDescriptorPool swapchainTriangleDescriptorPool = VK_NULL_HANDLE;
+        VkDescriptorSet swapchainTriangleDescriptorSet = VK_NULL_HANDLE;
+        VkBuffer swapchainTriangleVertexBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory swapchainTriangleVertexBufferMemory = VK_NULL_HANDLE;
+        VkBuffer swapchainTriangleUniformBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory swapchainTriangleUniformBufferMemory = VK_NULL_HANDLE;
+        VkBuffer swapchainTriangleIndexBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory swapchainTriangleIndexBufferMemory = VK_NULL_HANDLE;
+        VkPipelineLayout swapchainTrianglePipelineLayout = VK_NULL_HANDLE;
+        VkPipeline swapchainTrianglePipeline = VK_NULL_HANDLE;
+        ITexture *swapchainTriangleTexture = nullptr;
+        std::unique_ptr<ITexture> swapchainTriangleFallbackTexture;
+        VkFormat swapchainDepthFormat = VK_FORMAT_UNDEFINED;
+        VkImage swapchainDepthImage = VK_NULL_HANDLE;
+        VkDeviceMemory swapchainDepthImageMemory = VK_NULL_HANDLE;
+        VkImageView swapchainDepthImageView = VK_NULL_HANDLE;
         VkFence swapchainAcquireFence = VK_NULL_HANDLE;
         std::uint32_t currentSwapchainImageIndex = 0;
         bool frameRecording = false;

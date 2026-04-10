@@ -505,6 +505,35 @@ std::unique_ptr<CglFontRenderer> CglFontRenderer::CreateInstance()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 #ifndef HEADLESS
+	static bool warnedNoBackend = false;
+	static bool warnedNonOpenGLBackend = false;
+
+	if ((globalRendering == nullptr) || (globalRendering->graphicsBackend == nullptr))
+	{
+		if (!warnedNoBackend)
+		{
+			LOG_L(L_WARNING, "[CglFontRenderer::%s] no active graphics backend, using dummy font renderer", __func__);
+			warnedNoBackend = true;
+		}
+
+		return std::make_unique<CglDummyFontRenderer>();
+	}
+
+	if (globalRendering->graphicsBackend->Type() != gfx::BackendType::OpenGL)
+	{
+		if (!warnedNonOpenGLBackend)
+		{
+			LOG_L(
+				L_WARNING,
+				"[CglFontRenderer::%s] backend type %d is not OpenGL, using dummy font renderer",
+				__func__,
+				static_cast<int>(globalRendering->graphicsBackend->Type()));
+			warnedNonOpenGLBackend = true;
+		}
+
+		return std::make_unique<CglDummyFontRenderer>();
+	}
+
 	// return std::make_unique<CglNoShaderFontRenderer>();
 	if (globalRendering->amdHacks)
 		return std::make_unique<CglNoShaderFontRenderer>();
@@ -516,7 +545,7 @@ std::unique_ptr<CglFontRenderer> CglFontRenderer::CreateInstance()
 	fr = nullptr;
 	return std::make_unique<CglNoShaderFontRenderer>();
 #else
-	return std::make_unique<CglNullFontRenderer>();
+	return std::make_unique<CglDummyFontRenderer>();
 #endif
 }
 
@@ -526,7 +555,7 @@ void CglFontRenderer::DeleteInstance(std::unique_ptr<CglFontRenderer> &instance)
 	instance = nullptr;
 }
 
-void CglNullFontRenderer::GetStats(std::array<size_t, 8> &stats) const
+void CglDummyFontRenderer::GetStats(std::array<size_t, 8> &stats) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	std::fill(stats.begin(), stats.end(), 0u);

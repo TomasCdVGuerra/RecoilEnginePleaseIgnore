@@ -1,39 +1,56 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-
 #include "Picture.h"
 
 #include "Rendering/GL/myGL.h"
+#include "Rendering/GlobalRendering.h"
 #include "Rendering/GL/RenderBuffers.h"
 #include "Rendering/Shaders/Shader.h"
 #include "Rendering/Textures/Bitmap.h"
 #include "System/Log/ILog.h"
 
+namespace
+{
+	bool HasOpenGLBackend()
+	{
+		return ((globalRendering != nullptr) &&
+				(globalRendering->graphicsBackend != nullptr) &&
+				(globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL));
+	}
+}
+
 namespace agui
 {
 
-	Picture::Picture(GuiElement* parent)
-		: GuiElement(parent)
-		, texture(0)
+	Picture::Picture(GuiElement *parent)
+		: GuiElement(parent), texture(0)
 	{
 	}
 
 	Picture::~Picture()
 	{
-		if (texture) {
+		if (texture && HasOpenGLBackend())
+		{
 			glDeleteTextures(1, &texture);
 		}
 	}
 
-	void Picture::Load(const std::string& _file)
+	void Picture::Load(const std::string &_file)
 	{
 		file = _file;
+		if (!HasOpenGLBackend())
+		{
+			texture = 0;
+			return;
+		}
 
 		CBitmap bmp;
-		if (bmp.Load(file)) {
+		if (bmp.Load(file))
+		{
 			texture = bmp.CreateTexture();
 		}
-		else {
+		else
+		{
 			LOG_L(L_WARNING, "Failed to load: %s", file.c_str());
 			texture = 0;
 		}
@@ -44,17 +61,20 @@ namespace agui
 #else
 	void Picture::DrawSelf()
 	{
-		if (texture) {
-			auto& rb = RenderBuffer::GetTypedRenderBuffer<VA_TYPE_2DTC>();
-			auto& sh = rb.GetShader();
-			const SColor color = { 1.0f, 1.0f, 1.0f, 1.0f };
+		if (!HasOpenGLBackend())
+			return;
+
+		if (texture)
+		{
+			auto &rb = RenderBuffer::GetTypedRenderBuffer<VA_TYPE_2DTC>();
+			auto &sh = rb.GetShader();
+			const SColor color = {1.0f, 1.0f, 1.0f, 1.0f};
 
 			rb.AddQuadTriangles(
-				{ pos[0]          , pos[1]          , 0.0f, 1.0f, color },
-				{ pos[0] + size[0], pos[1]          , 1.0f, 1.0f, color },
-				{ pos[0] + size[0], pos[1] + size[1], 1.0f, 0.0f, color },
-				{ pos[0]          , pos[1] + size[1], 0.0f, 0.0f, color }
-			);
+				{pos[0], pos[1], 0.0f, 1.0f, color},
+				{pos[0] + size[0], pos[1], 1.0f, 1.0f, color},
+				{pos[0] + size[0], pos[1] + size[1], 1.0f, 0.0f, color},
+				{pos[0], pos[1] + size[1], 0.0f, 0.0f, color});
 
 			glBindTexture(GL_TEXTURE_2D, texture);
 			sh.Enable();

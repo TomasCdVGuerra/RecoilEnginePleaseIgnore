@@ -113,7 +113,7 @@ public:
 	friend class CglFontRenderer;
 	friend class CglShaderFontRenderer;
 	friend class CglNoShaderFontRenderer;
-	friend class CglNullFontRenderer;
+	friend class CglDummyFontRenderer;
 
 	static void InitFonts();
 	static void KillFonts();

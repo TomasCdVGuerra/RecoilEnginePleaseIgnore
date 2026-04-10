@@ -80,6 +80,11 @@ namespace gfx
             return imageView;
         }
 
+        [[nodiscard]] VkSampler GetSampler() const noexcept
+        {
+            return sampler;
+        }
+
         [[nodiscard]] VkFormat GetVkFormat() const noexcept
         {
             return vkFormat;

@@ -21,6 +21,23 @@ void ShowSplashScreen(
 	const std::string& springVersionStr,
 	const std::function<bool()>& testDoneFunc
 ) {
+	const bool useOpenGLSplash = (
+		(globalRendering != nullptr) &&
+		(globalRendering->graphicsBackend != nullptr) &&
+		(globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL)
+	);
+
+	if (!useOpenGLSplash) {
+		// Keep pumping events and watchdog while VFS initialization runs.
+		while (!testDoneFunc()) {
+			SDL_Event event;
+			while (SDL_PollEvent(&event)) {}
+			Watchdog::ClearTimer(WDT_MAIN);
+		}
+
+		return;
+	}
+
 	CBitmap bmp;
 
 	VA_TYPE_2DT quadElems[] = {
