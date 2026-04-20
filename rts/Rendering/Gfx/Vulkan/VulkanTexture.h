@@ -85,6 +85,11 @@ namespace gfx
             return sampler;
         }
 
+        [[nodiscard]] VkImageLayout GetCurrentLayout() const noexcept
+        {
+            return currentLayout;
+        }
+
         [[nodiscard]] VkFormat GetVkFormat() const noexcept
         {
             return vkFormat;

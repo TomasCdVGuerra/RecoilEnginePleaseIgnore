@@ -1449,6 +1449,14 @@ void CFontTexture::CreateTexture(const int width, const int height, const bool i
 	textureCI.usage = gfx::TextureUsage::Sampled | gfx::TextureUsage::TransferDst;
 	textureCI.debugName = "FontGlyphAtlas";
 
+#ifdef ENABLE_VULKAN
+	if (usingVulkanBackend && (glyphAtlasTexture != nullptr))
+	{
+		if (auto *vulkanBackend = dynamic_cast<gfx::VulkanGraphicsBackend *>(backend); vulkanBackend != nullptr)
+			vulkanBackend->ClearPendingTexturedBatchDraws();
+	}
+#endif
+
 	glyphAtlasTexture = backend->CreateTexture(textureCI);
 	if (glyphAtlasTexture == nullptr)
 	{

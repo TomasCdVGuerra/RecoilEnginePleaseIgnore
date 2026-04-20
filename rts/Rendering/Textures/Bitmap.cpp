@@ -11,6 +11,8 @@
 
 #include "Rendering/GL/myGL.h"
 #include "Rendering/GlobalRendering.h"
+#include "Rendering/Gfx/IGraphicsBackend.h"
+#include "Rendering/Gfx/ITexture.h"
 #ifndef HEADLESS
 #include "System/TimeProfiler.h"
 #endif
@@ -1920,6 +1922,77 @@ static bool HasOpenGLBackend()
 			(globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL));
 }
 
+std::unique_ptr<gfx::ITexture> CBitmap::CreateBackendTexture() const
+{
+	RECOIL_DETAILED_TRACY_ZONE;
+
+	auto *backend = (globalRendering != nullptr) ? globalRendering->graphicsBackend.get() : nullptr;
+	if (backend == nullptr)
+	{
+		LOG_L(L_WARNING, "[CBitmap::%s] graphicsBackend is null", __func__);
+		return nullptr;
+	}
+
+	if (compressed)
+	{
+		LOG_L(L_WARNING, "[CBitmap::%s] compressed bitmap upload through backend path is not supported", __func__);
+		return nullptr;
+	}
+
+	if (GetMemSize() == 0)
+		return nullptr;
+
+	if (dataType != 0x1401 /*GL_UNSIGNED_BYTE*/)
+	{
+		LOG_L(L_WARNING, "[CBitmap::%s] unsupported bitmap data type (%u)", __func__, dataType);
+		return nullptr;
+	}
+
+	gfx::TextureCreateInfo textureCI;
+	textureCI.dimension = gfx::TextureDimension::Tex2D;
+	textureCI.extent.width = static_cast<std::uint32_t>(std::max(xsize, 1));
+	textureCI.extent.height = static_cast<std::uint32_t>(std::max(ysize, 1));
+	textureCI.extent.depth = 1u;
+	textureCI.mipLevels = 1u;
+	textureCI.arrayLayers = 1u;
+	textureCI.usage = gfx::TextureUsage::Sampled | gfx::TextureUsage::TransferDst;
+	textureCI.debugName = "BitmapBackendTexture";
+
+	switch (channels)
+	{
+	case 1:
+		textureCI.format = gfx::PixelFormat::R8_UNorm;
+		break;
+	case 2:
+		textureCI.format = gfx::PixelFormat::RG8_UNorm;
+		break;
+	case 3:
+		textureCI.format = gfx::PixelFormat::RGB8_UNorm;
+		break;
+	case 4:
+		textureCI.format = gfx::PixelFormat::RGBA8_UNorm;
+		break;
+	default:
+		LOG_L(L_WARNING, "[CBitmap::%s] unsupported channel count (%d)", __func__, channels);
+		return nullptr;
+	}
+
+	auto texture = backend->CreateTexture(textureCI);
+	if (texture == nullptr)
+	{
+		LOG_L(L_WARNING, "[CBitmap::%s] backend texture creation failed", __func__);
+		return nullptr;
+	}
+
+	const std::size_t rowPitchBytes = static_cast<std::size_t>(std::max(xsize, 1)) * static_cast<std::size_t>(channels) * GetDataTypeSize();
+	const auto pixels = std::span<const std::byte>(
+		reinterpret_cast<const std::byte *>(GetRawMem()),
+		GetMemSize());
+
+	texture->Upload(0u, 0u, pixels, rowPitchBytes, 0u);
+	return texture;
+}
+
 uint32_t CBitmap::CreateTexture(const GL::TextureCreationParams &tcp) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
@@ -2050,6 +2123,12 @@ uint32_t CBitmap::CreateDDSTexture(const GL::TextureCreationParams &tcp) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	return 0;
+}
+
+std::unique_ptr<gfx::ITexture> CBitmap::CreateBackendTexture() const
+{
+	RECOIL_DETAILED_TRACY_ZONE;
+	return nullptr;
 }
 #endif // !HEADLESS
 

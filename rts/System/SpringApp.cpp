@@ -313,7 +313,9 @@ bool SpringApp::Init()
 
 	// Lua socket restrictions
 	CLuaSocketRestrictions::InitStatic();
-	LuaVFSDownload::Init();
+
+	if (isOpenGLBackend)
+		LuaVFSDownload::Init();
 
 	// Create CGameSetup and CPreGame objects
 	Startup();
@@ -684,6 +686,8 @@ void SpringApp::StartScript(const std::string &script)
 
 void SpringApp::LoadSpringMenu()
 {
+	LOG("[Vulkan][Frontier12][LoadSpringMenu] begin oldmenu=%d", static_cast<int>(FLAGS_oldmenu));
+
 	const std::string vfsScript = "defaultstartscript.txt";
 	const std::string &cfgScript = configHandler->GetString("DefaultStartScript");
 
@@ -691,10 +695,14 @@ void SpringApp::LoadSpringMenu()
 
 	// bypass default menu if we have a valid LuaMenu handler
 	if (CLuaMenuController::ActivateInstance(""))
+	{
+		LOG("[Vulkan][Frontier12][LoadSpringMenu] activated LuaMenu instance");
 		return;
+	}
 
 	if (FLAGS_oldmenu || startScript.empty())
 	{
+		LOG("[Vulkan][Frontier12][LoadSpringMenu] creating SelectMenu");
 		// old menu
 #ifdef HEADLESS
 		handleerror(nullptr,
@@ -707,6 +715,7 @@ void SpringApp::LoadSpringMenu()
 	}
 	else
 	{
+		LOG("[Vulkan][Frontier12][LoadSpringMenu] running StartScript from %s", startScript.c_str());
 		// run custom menu from game and map
 		StartScript(startScript);
 	}
@@ -717,6 +726,8 @@ void SpringApp::LoadSpringMenu()
  */
 void SpringApp::Startup()
 {
+	LOG("[Vulkan][Frontier12][Startup] begin inputFile=%s", inputFile.c_str());
+
 	// bash input
 	const std::string &extension = FileSystem::GetExtension(inputFile);
 
@@ -733,11 +744,13 @@ void SpringApp::Startup()
 	clientSetup->myPlayerName = configHandler->GetString("name");
 	clientSetup->SanityCheck();
 
+	LOG("[Vulkan][Frontier12][Startup] constructing LuaMenuController menu=%s", FLAGS_menu.c_str());
 	luaMenuController = new CLuaMenuController(FLAGS_menu);
 
 	// no argument (either game is given or show selectmenu)
 	if (inputFile.empty())
 	{
+		LOG("[Vulkan][Frontier12][Startup] no input file, loading spring menu");
 		clientSetup->isHost = true;
 
 		if ((!FLAGS_game.empty()) && (!FLAGS_map.empty()))
@@ -780,6 +793,10 @@ void SpringApp::Reload(const std::string script)
 {
 	LOG("[SpringApp::%s][1]", __func__);
 
+	const bool hasOpenGLBackend = ((globalRendering != nullptr) &&
+								   (globalRendering->graphicsBackend != nullptr) &&
+								   (globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL));
+
 	// get rid of any running worker threads
 	ThreadPool::SetThreadCount(0);
 	ThreadPool::SetDefaultThreadCount();
@@ -815,7 +832,8 @@ void SpringApp::Reload(const std::string script)
 	LOG("[SpringApp::%s][5]", __func__);
 
 	// do not stop running downloads when reloading
-	LuaVFSDownload::Free(false);
+	if (hasOpenGLBackend)
+		LuaVFSDownload::Free(false);
 
 	LOG("[SpringApp::%s][6]", __func__);
 
@@ -858,7 +876,8 @@ void SpringApp::Reload(const std::string script)
 	// make sure all old EventClients are really gone (safety)
 	eventHandler.ResetState();
 
-	LuaVFSDownload::Init();
+	if (hasOpenGLBackend)
+		LuaVFSDownload::Init();
 
 	LOG("[SpringApp::%s][10]", __func__);
 
@@ -1052,7 +1071,13 @@ void SpringApp::Kill(bool fromRun)
 	LOG("[SpringApp::%s][1] fromRun=%d", __func__, fromRun);
 	ThreadPool::SetThreadCount(0);
 	LOG("[SpringApp::%s][2]", __func__);
-	LuaVFSDownload::Free(true);
+
+	const bool hasOpenGLBackend = ((globalRendering != nullptr) &&
+								   (globalRendering->graphicsBackend != nullptr) &&
+								   (globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL));
+
+	if (hasOpenGLBackend)
+		LuaVFSDownload::Free(true);
 
 	// save window state early for the same reason as client demo
 	if (globalRendering != nullptr)

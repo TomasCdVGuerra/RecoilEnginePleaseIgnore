@@ -7,6 +7,8 @@
 #include "Game/UI/MouseHandler.h"
 #include "Lua/LuaInputReceiver.h"
 #include "Lua/LuaMenu.h"
+#include "Rendering/GlobalRendering.h"
+#include "Rendering/GlobalRenderingInfo.h"
 #include "System/Config/ConfigHandler.h"
 #include "System/EventHandler.h"
 #include "System/FileSystem/VFSHandler.h"
@@ -17,12 +19,18 @@
 
 CONFIG(std::string, DefaultLuaMenu).defaultValue("").description("Sets the default menu to be used when spring is started.");
 
-CLuaMenuController* luaMenuController = nullptr;
+CLuaMenuController *luaMenuController = nullptr;
 
+static bool IsOpenGLBackendForLuaMenu()
+{
+	if ((globalRendering == nullptr) || (globalRendering->graphicsBackend == nullptr))
+		return false;
 
-CLuaMenuController::CLuaMenuController(const std::string& menuName)
-	: menuArchive(menuName)
-	, lastDrawFrameTime(spring_gettime())
+	return (globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL);
+}
+
+CLuaMenuController::CLuaMenuController(const std::string &menuName)
+	: menuArchive(menuName), lastDrawFrameTime(spring_gettime())
 {
 	if (!Valid())
 		menuArchive = configHandler->GetString("DefaultLuaMenu");
@@ -40,10 +48,10 @@ CLuaMenuController::~CLuaMenuController()
 	CLuaMenu::FreeHandler();
 }
 
-
 bool CLuaMenuController::Reset()
 {
-	if (!Valid()) {
+	if (!Valid())
+	{
 		// if no LuaMenu, cursor will not be updated (again) until game exists so force a reset
 		// calling ReloadCursors here is not possible since no archives are loaded at this point
 		mouse->ResetCursor();
@@ -51,19 +59,36 @@ bool CLuaMenuController::Reset()
 	}
 
 	LOG("[LuaMenuController::%s] using menu archive \"%s\"", __func__, menuArchive.c_str());
+	const bool allowLegacyArchiveMount = IsOpenGLBackendForLuaMenu();
 
 	// lock should not be needed here, but does no harm either
 	vfsHandler->GrabLock();
 	vfsHandler->SetName("LuaMenuVFS");
-	vfsHandler->AddArchiveWithDeps(menuArchive, false);
+	try
+	{
+		if (allowLegacyArchiveMount)
+		{
+			vfsHandler->AddArchiveWithDeps(menuArchive, false);
+		}
+		else
+		{
+			LOG_L(L_WARNING, "[LuaMenuController::%s] skipping LuaMenuVFS archive mount on non-OpenGL backend", __func__);
+		}
+	}
+	catch (...)
+	{
+		vfsHandler->SetName("SpringVFS");
+		vfsHandler->FreeLock();
+		throw;
+	}
 	vfsHandler->SetName("SpringVFS");
 	vfsHandler->FreeLock();
 
 	mouse->ReloadCursors();
-	return true;
+	return allowLegacyArchiveMount;
 }
 
-bool CLuaMenuController::Activate(const std::string& msg)
+bool CLuaMenuController::Activate(const std::string &msg)
 {
 	LOG("[LuaMenuController::%s(msg=\"%s\")] luaMenu=%p", __func__, msg.c_str(), luaMenu);
 
@@ -79,7 +104,7 @@ bool CLuaMenuController::Activate(const std::string& msg)
 	return true;
 }
 
-bool CLuaMenuController::ActivateInstance(const std::string& msg)
+bool CLuaMenuController::ActivateInstance(const std::string &msg)
 {
 	return (luaMenuController->Valid() && luaMenuController->Activate(msg));
 }
@@ -116,7 +141,8 @@ bool CLuaMenuController::Draw()
 	const bool allowDraw = (globalRendering->active && luaMenu->AllowDraw());
 	const bool forceDraw = ((spring_gettime() - lastDrawFrameTime).toSecsi() > 30);
 
-	if (allowDraw || forceDraw) {
+	if (allowDraw || forceDraw)
+	{
 		globalRendering->drawFrame = std::max(1U, globalRendering->drawFrame + 1);
 		ClearScreen();
 
@@ -133,7 +159,6 @@ bool CLuaMenuController::Draw()
 	return false;
 }
 
-
 int CLuaMenuController::KeyReleased(int keyCode, int scanCode)
 {
 	luaInputReceiver->KeyReleased(keyCode, scanCode);
@@ -146,13 +171,13 @@ int CLuaMenuController::KeyPressed(int keyCode, int scanCode, bool isRepeat)
 	return 0;
 }
 
-int CLuaMenuController::TextInput(const std::string& utf8Text)
+int CLuaMenuController::TextInput(const std::string &utf8Text)
 {
 	eventHandler.TextInput(utf8Text);
 	return 0;
 }
 
-int CLuaMenuController::TextEditing(const std::string& utf8Text, unsigned int start, unsigned int length)
+int CLuaMenuController::TextEditing(const std::string &utf8Text, unsigned int start, unsigned int length)
 {
 	eventHandler.TextEditing(utf8Text, start, length);
 	return 0;

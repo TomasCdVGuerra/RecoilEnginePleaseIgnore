@@ -2,6 +2,7 @@
 
 #include "Window.h"
 
+#include "Rendering/GlobalRendering.h"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/Fonts/glFont.h"
 #include "Rendering/GL/RenderBuffers.h"
@@ -9,74 +10,96 @@
 namespace agui
 {
 
-Window::Window(const std::string& _title, GuiElement* parent) : GuiElement(parent), title(_title)
-{
-	titleHeight = 0.05f;
-	dragging = false;
+	namespace
+	{
+		bool HasOpenGLBackend()
+		{
+			return ((globalRendering != nullptr) &&
+					(globalRendering->graphicsBackend != nullptr) &&
+					(globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL));
+		}
+	}
 
-	size[0] = size[1] = 0.3f;
-	pos[0] = pos[1] = 0.2f;
-	dragPos[0] = dragPos[1] = 0.0f;
-}
+	Window::Window(const std::string &_title, GuiElement *parent) : GuiElement(parent), title(_title)
+	{
+		titleHeight = 0.05f;
+		dragging = false;
 
-void Window::AddChild(GuiElement* elem)
-{
-	children.push_back(elem);
-	elem->SetPos(pos[0], pos[1]);
-	elem->SetSize(size[0], size[1]-titleHeight);
-}
+		size[0] = size[1] = 0.3f;
+		pos[0] = pos[1] = 0.2f;
+		dragPos[0] = dragPos[1] = 0.0f;
+	}
 
+	void Window::AddChild(GuiElement *elem)
+	{
+		children.push_back(elem);
+		elem->SetPos(pos[0], pos[1]);
+		elem->SetSize(size[0], size[1] - titleHeight);
+	}
 
 #ifdef HEADLESS
-void Window::DrawSelf() {}
+	void Window::DrawSelf() {}
 #else
-void Window::DrawSelf()
-{
-	const float opacity = Opacity();
+	void Window::DrawSelf()
+	{
+		const float opacity = Opacity();
+		const bool useOpenGLState = HasOpenGLBackend();
 
-	DrawBox(GL_QUADS, { 0.0f,0.0f,0.0f, opacity });
+		DrawBox(GL_QUADS, {0.0f, 0.0f, 0.0f, opacity});
 
-	auto& rb = RenderBuffer::GetTypedRenderBuffer<VA_TYPE_2DC>();
-	auto& sh = rb.GetShader();
+		if (useOpenGLState)
+		{
+			auto &rb = RenderBuffer::GetTypedRenderBuffer<VA_TYPE_2DC>();
+			auto &sh = rb.GetShader();
 
-	const SColor color = { 0.7f,0.7f,0.7f, opacity };
-	rb.AddQuadTriangles(
-		{ pos[0]          , pos[1] + size[1] - titleHeight, color },
-		{ pos[0]          , pos[1] + size[1]              , color },
-		{ pos[0] + size[0], pos[1] + size[1]              , color },
-		{ pos[0] + size[0], pos[1] + size[1] - titleHeight, color }
-	);
-	sh.Enable();
-	rb.DrawElements(GL_TRIANGLES);
-	sh.Disable();
+			const SColor color = {0.7f, 0.7f, 0.7f, opacity};
+			rb.AddQuadTriangles(
+				{pos[0], pos[1] + size[1] - titleHeight, color},
+				{pos[0], pos[1] + size[1], color},
+				{pos[0] + size[0], pos[1] + size[1], color},
+				{pos[0] + size[0], pos[1] + size[1] - titleHeight, color});
+			sh.Enable();
+			rb.DrawElements(GL_TRIANGLES);
+			sh.Disable();
+		}
+		else
+		{
+			GuiElement titleBar;
+			titleBar.SetPos(pos[0], pos[1] + size[1] - titleHeight);
+			titleBar.SetSize(size[0], titleHeight);
+			titleBar.DrawBox(GL_QUADS, {0.7f, 0.7f, 0.7f, opacity});
+		}
 
-	glLineWidth(2.0f);
-	DrawBox(GL_LINE_LOOP, { 1.0f,1.0f,1.0f, opacity });
+		if (useOpenGLState)
+			glLineWidth(2.0f);
+		DrawBox(GL_LINE_LOOP, {1.0f, 1.0f, 1.0f, opacity});
 
-	/*
-	rb.AddVertices({
-		{pos[0]          , pos[1] - titleHeight, { 1.0f,1.0f,1.0f, opacity }},
-		{pos[0] + size[1], pos[1] - titleHeight, { 1.0f,1.0f,1.0f, opacity }},
-	});
-	rb.DrawArrays(GL_LINES);
-	*/
+		/*
+		rb.AddVertices({
+			{pos[0]          , pos[1] - titleHeight, { 1.0f,1.0f,1.0f, opacity }},
+			{pos[0] + size[1], pos[1] - titleHeight, { 1.0f,1.0f,1.0f, opacity }},
+		});
+		rb.DrawArrays(GL_LINES);
+		*/
 
-	font->Begin();
-	font->SetTextColor(1.0f, 1.0f, 1.0f, opacity);
-	font->SetOutlineColor(0.0f, 0.0f, 0.0f, opacity);
-	font->glPrint(pos[0]+0.01, pos[1]+size[1]-titleHeight/2, 1.0, FONT_VCENTER | FONT_SCALE | FONT_SHADOW | FONT_NORM, title);
-	font->End();
-}
+		font->Begin();
+		font->SetTextColor(1.0f, 1.0f, 1.0f, opacity);
+		font->SetOutlineColor(0.0f, 0.0f, 0.0f, opacity);
+		font->glPrint(pos[0] + 0.01, pos[1] + size[1] - titleHeight / 2, 1.0, FONT_VCENTER | FONT_SCALE | FONT_SHADOW | FONT_NORM, title);
+		font->End();
+	}
 #endif
 
-bool Window::HandleEventSelf(const SDL_Event& ev)
-{
-	switch (ev.type) {
-		case SDL_MOUSEBUTTONDOWN: {
+	bool Window::HandleEventSelf(const SDL_Event &ev)
+	{
+		switch (ev.type)
+		{
+		case SDL_MOUSEBUTTONDOWN:
+		{
 			if (MouseOver(ev.button.x, ev.button.y))
 			{
 				float mouse[2] = {PixelToGlX(ev.button.x), PixelToGlY(ev.button.y)};
-				if (mouse[1] > pos[1]+size[1]-titleHeight)
+				if (mouse[1] > pos[1] + size[1] - titleHeight)
 				{
 					dragPos[0] = mouse[0] - pos[0];
 					dragPos[1] = mouse[1] - pos[1];
@@ -86,7 +109,8 @@ bool Window::HandleEventSelf(const SDL_Event& ev)
 			}
 			break;
 		}
-		case SDL_MOUSEBUTTONUP: {
+		case SDL_MOUSEBUTTONUP:
+		{
 			if (dragging)
 			{
 				dragging = false;
@@ -94,15 +118,17 @@ bool Window::HandleEventSelf(const SDL_Event& ev)
 			}
 			break;
 		}
-		case SDL_MOUSEMOTION: {
+		case SDL_MOUSEMOTION:
+		{
 			if (dragging)
 			{
-				Move(PixelToGlX(ev.motion.xrel), PixelToGlY(ev.motion.yrel)-1);
+				Move(PixelToGlX(ev.motion.xrel), PixelToGlY(ev.motion.yrel) - 1);
 				return true;
 			}
 			break;
 		}
-		case SDL_KEYDOWN: {
+		case SDL_KEYDOWN:
+		{
 			if (ev.key.keysym.sym == SDLK_ESCAPE)
 			{
 				WantClose();
@@ -110,16 +136,16 @@ bool Window::HandleEventSelf(const SDL_Event& ev)
 			}
 			break;
 		}
+		}
+		return false;
 	}
-	return false;
-}
 
-float Window::Opacity() const
-{
-	if (dragging)
-		return GuiElement::Opacity()/2.f;
-	else
-		return GuiElement::Opacity();
-}
+	float Window::Opacity() const
+	{
+		if (dragging)
+			return GuiElement::Opacity() / 2.f;
+		else
+			return GuiElement::Opacity();
+	}
 
 }

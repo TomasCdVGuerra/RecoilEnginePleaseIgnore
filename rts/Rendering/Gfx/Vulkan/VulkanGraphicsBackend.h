@@ -57,6 +57,17 @@ namespace gfx
             IndexElementType indexType,
             const TexturedBatchState &state) override;
 
+        // Vulkan-specific overload that accepts a nullable texture pointer.
+        // A null texture binds the backend-owned white fallback texture.
+        void DrawTexturedIndexedBatches(
+            IVertexBuffer &vertexBuffer,
+            IVertexBuffer &indexBuffer,
+            ITexture *texture,
+            std::span<const TexturedIndexedBatchDesc> batches,
+            const TexturedVertexLayout &vertexLayout,
+            IndexElementType indexType,
+            const TexturedBatchState &state);
+
         void DrawIndexed(
             IVertexArray &vertexArray,
             PrimitiveTopology topology,
@@ -84,6 +95,10 @@ namespace gfx
         void SetSwapchainTriangleTexture(ITexture *texture);
         // Explicit descriptor refresh hook for textures updated outside the draw path.
         void UploadSwapchainTriangleTexture(ITexture *texture);
+        // Returns the backend-owned 1x1 fallback texture used by UI textured draws.
+        ITexture *GetSwapchainTriangleFallbackTexture() const;
+        // Clears queued deferred UI draws. Useful when source textures are recreated mid-frame.
+        void ClearPendingTexturedBatchDraws();
 
     private:
         void Init();

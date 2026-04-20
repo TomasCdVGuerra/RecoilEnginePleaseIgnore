@@ -9,6 +9,7 @@
 #include "System/Log/ILog.h"
 #include "System/SafeUtil.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <span>
 
@@ -425,20 +426,68 @@ void CglNoShaderFontRenderer::DrawTraingleElements()
 
 	std::vector<VA_TYPE_TC> uploadVertices;
 
+	float viewportWidth = 1.0f;
+	float viewportHeight = 1.0f;
+	if (globalRendering != nullptr)
+	{
+		int sx = globalRendering->viewSizeX;
+		int sy = globalRendering->viewSizeY;
+
+		if ((sx <= 16) || (sy <= 16))
+		{
+			sx = globalRendering->winSizeX;
+			sy = globalRendering->winSizeY;
+		}
+
+		if ((sx > 16) && (sy > 16))
+		{
+			viewportWidth = static_cast<float>(sx);
+			viewportHeight = static_cast<float>(sy);
+		}
+	}
+
 	for (size_t idx = 0; idx < 2; ++idx)
 	{
 		if (verts[idx].empty() || indcs[idx].empty())
 			continue;
 
+		bool positionsLookNormalized = !useOpenGLState;
+		if (positionsLookNormalized)
+		{
+			for (const VA_TYPE_TC &vertex : verts[idx])
+			{
+				if ((vertex.pos.x < -0.25f) || (vertex.pos.x > 1.25f) || (vertex.pos.y < -0.25f) || (vertex.pos.y > 1.25f))
+				{
+					positionsLookNormalized = false;
+					break;
+				}
+			}
+		}
+
+		const bool convertPositionsToPixels = (!useOpenGLState) && positionsLookNormalized;
+		const bool rewriteVertices = normalizeTexCoords || convertPositionsToPixels;
+
 		const VA_TYPE_TC *uploadVerticesData = verts[idx].data();
 		const std::size_t uploadVertexCount = verts[idx].size();
-		if (normalizeTexCoords)
+		if (rewriteVertices)
 		{
 			uploadVertices = verts[idx];
+
 			for (VA_TYPE_TC &vertex : uploadVertices)
 			{
-				vertex.s *= invTextureWidth;
-				vertex.t *= invTextureHeight;
+				if (normalizeTexCoords)
+				{
+					const float normalizedS = std::clamp(vertex.s * invTextureWidth, 0.0f, 1.0f);
+					const float normalizedT = std::clamp(vertex.t * invTextureHeight, 0.0f, 1.0f);
+					vertex.s = normalizedS;
+					vertex.t = 1.0f - normalizedT;
+				}
+
+				if (convertPositionsToPixels)
+				{
+					vertex.pos.x *= viewportWidth;
+					vertex.pos.y = (1.0f - vertex.pos.y) * viewportHeight;
+				}
 			}
 
 			uploadVerticesData = uploadVertices.data();

@@ -156,6 +156,8 @@ private:
 SelectMenu::SelectMenu(std::shared_ptr<ClientSetup> setup)
 	: GuiElement(nullptr), clientSetup(setup), conWindow(nullptr), settingsWindow(nullptr), curSelect(nullptr)
 {
+	LOG("[Vulkan][Frontier12][SelectMenu::ctor] begin");
+
 	SetPos(0, 0);
 	SetSize(1, 1);
 	agui::gui->AddElement(this, true);
@@ -164,32 +166,45 @@ SelectMenu::SelectMenu(std::shared_ptr<ClientSetup> setup)
 		agui::Picture *background = new agui::Picture(this);
 
 		{
-			// can not conflict with LuaMenu archive, just keep in VFS if it was not already
-			vfsHandler->SetName("SelMenuVFS");
-			vfsHandler->AddArchiveIf(configHandler->GetString("MenuArchive"), false);
-			vfsHandler->SetName("SpringVFS");
-
-			// TODO: select by resolution / aspect ratio with fallback image
-			const std::vector<std::string> files = CFileHandler::FindFiles("bitmaps/ui/background/", "*");
-
-			if (!files.empty())
+			if (HasOpenGLBackend())
 			{
-				const std::string selectedBackground = files[guRNG.NextInt(files.size())];
+				LOG("[Vulkan][Frontier12][SelectMenu::ctor] entering legacy background scanner");
 
-				if (HasOpenGLBackend())
+				// can not conflict with LuaMenu archive, just keep in VFS if it was not already
+				vfsHandler->SetName("SelMenuVFS");
+
+				try
+				{
+					vfsHandler->AddArchiveIf(configHandler->GetString("MenuArchive"), false);
+				}
+				catch (...)
+				{
+					vfsHandler->SetName("SpringVFS");
+					throw;
+				}
+
+				vfsHandler->SetName("SpringVFS");
+
+				// TODO: select by resolution / aspect ratio with fallback image
+				const std::vector<std::string> files = CFileHandler::FindFiles("bitmaps/ui/background/", "*");
+
+				if (!files.empty())
+				{
+					const std::string selectedBackground = files[guRNG.NextInt(files.size())];
 					background->Load(selectedBackground);
+				}
+			}
 
 #ifdef ENABLE_VULKAN
-				if (gfx::VulkanGraphicsBackend *vulkanBackend = GetVulkanBackend(); vulkanBackend != nullptr)
-				{
-					vulkanMenuBackgroundTexture.reset();
+			if (gfx::VulkanGraphicsBackend *vulkanBackend = GetVulkanBackend(); vulkanBackend != nullptr)
+			{
+				LOG("[Vulkan][Frontier12][SelectMenu::ctor] binding Vulkan fallback menu texture");
 
-					// Keep fallback swapchain texture on Vulkan for now.
-					// The archive-backed bitmap upload path is still unstable on startup.
-					vulkanBackend->SetSwapchainTriangleTexture(vulkanMenuBackgroundTexture.get());
-				}
-#endif
+				// Keep fallback swapchain texture on Vulkan for now.
+				// The archive-backed bitmap upload path is still unstable on startup.
+				vulkanBackend->SetSwapchainTriangleTexture(vulkanMenuBackgroundTexture.get());
 			}
+#endif
 		}
 
 		selw = new SelectionWidget(this);

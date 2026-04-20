@@ -73,8 +73,14 @@ namespace
         std::fflush(stderr);
     }
 
-    // Temporary debug toggle to isolate UI rendering while the hardcoded demo draw still exists.
-    static constexpr bool EnableSwapchainDebugIslandDraw = true;
+    bool IsDescriptorImageInfoValid(const VkDescriptorImageInfo &textureImageInfo)
+    {
+        return (textureImageInfo.imageView != VK_NULL_HANDLE) && (textureImageInfo.sampler != VK_NULL_HANDLE);
+    }
+
+    // Keep the legacy swapchain debug-island path disabled by default.
+    // UI should render through the textured-batch pipeline instead.
+    static constexpr bool EnableSwapchainDebugIslandDraw = false;
     static constexpr bool EnableVulkanUiDebugLogs = false;
 
     struct VulkanVertex
@@ -381,10 +387,27 @@ namespace
         std::uint32_t orthoWidth = (extent.width == 0u) ? 1u : extent.width;
         std::uint32_t orthoHeight = (extent.height == 0u) ? 1u : extent.height;
 
-        if ((globalRendering != nullptr) && (globalRendering->viewSizeX > 0) && (globalRendering->viewSizeY > 0))
+        if (globalRendering != nullptr)
         {
-            orthoWidth = static_cast<std::uint32_t>(globalRendering->viewSizeX);
-            orthoHeight = static_cast<std::uint32_t>(globalRendering->viewSizeY);
+            int candidateWidth = globalRendering->viewSizeX;
+            int candidateHeight = globalRendering->viewSizeY;
+
+            // During early startup on Vulkan, viewSize can still be 1x1.
+            // Fall back to window size before using swapchain extent defaults.
+            if ((candidateWidth <= 16) || (candidateHeight <= 16))
+            {
+                if ((globalRendering->winSizeX > 16) && (globalRendering->winSizeY > 16))
+                {
+                    candidateWidth = globalRendering->winSizeX;
+                    candidateHeight = globalRendering->winSizeY;
+                }
+            }
+
+            if ((candidateWidth > 16) && (candidateHeight > 16))
+            {
+                orthoWidth = static_cast<std::uint32_t>(candidateWidth);
+                orthoHeight = static_cast<std::uint32_t>(candidateHeight);
+            }
         }
 
         const float width = static_cast<float>(orthoWidth);
@@ -643,6 +666,32 @@ namespace gfx
         (void)batches;
         (void)stippleState;
         ThrowNotImplemented("DrawLineBatches");
+    }
+
+    void VulkanGraphicsBackend::DrawTexturedIndexedBatches(
+        IVertexBuffer &vertexBuffer,
+        IVertexBuffer &indexBuffer,
+        ITexture *texture,
+        std::span<const TexturedIndexedBatchDesc> batches,
+        const TexturedVertexLayout &vertexLayout,
+        IndexElementType indexType,
+        const TexturedBatchState &state)
+    {
+        ITexture *textureToUse = texture;
+        if (textureToUse == nullptr)
+            textureToUse = swapchainTriangleFallbackTexture.get();
+
+        if (textureToUse == nullptr)
+            return;
+
+        DrawTexturedIndexedBatches(
+            vertexBuffer,
+            indexBuffer,
+            *textureToUse,
+            batches,
+            vertexLayout,
+            indexType,
+            state);
     }
 
     void VulkanGraphicsBackend::DrawTexturedIndexedBatches(
@@ -929,6 +978,31 @@ namespace gfx
         {
             PendingTexturedBatchDraw deferredDraw{};
             deferredDraw.hasTextureImageInfo = ResolveSwapchainTriangleTextureDescriptorInfo(&texture, deferredDraw.textureImageInfo);
+
+            if (!deferredDraw.hasTextureImageInfo || !IsDescriptorImageInfoValid(deferredDraw.textureImageInfo))
+            {
+                VkDescriptorImageInfo fallbackTextureImageInfo{};
+                const bool hasFallbackTextureImageInfo =
+                    ResolveSwapchainTriangleTextureDescriptorInfo(nullptr, fallbackTextureImageInfo) &&
+                    IsDescriptorImageInfoValid(fallbackTextureImageInfo);
+
+                if (hasFallbackTextureImageInfo)
+                {
+                    deferredDraw.textureImageInfo = fallbackTextureImageInfo;
+                    deferredDraw.hasTextureImageInfo = true;
+
+                    if (shouldLogThisCall)
+                        VulkanTrace("[Vulkan][UI2D] deferred: source texture descriptor unavailable, using fallback descriptor\n");
+                }
+                else
+                {
+                    if (shouldLogThisCall)
+                        VulkanTrace("[Vulkan][UI2D] deferred: dropping draw (no valid source/fallback texture descriptor)\n");
+
+                    return;
+                }
+            }
+
             deferredDraw.vertexData.resize(transientVertices.size() * sizeof(VulkanTexturedBatchVertex));
             if (!deferredDraw.vertexData.empty())
             {
@@ -961,8 +1035,28 @@ namespace gfx
             return;
         }
 
+        std::uint64_t totalImmediateIndexCount = 0u;
+        for (const EffectiveBatchDraw &batch : effectiveBatches)
+            totalImmediateIndexCount += static_cast<std::uint64_t>(batch.indexCount);
+
+        if (totalImmediateIndexCount == 0u)
+        {
+            if (shouldLogThisCall)
+                VulkanTrace("[Vulkan][UI2D] skipped: effective batch index count is zero\n");
+            return;
+        }
+
         const VkDeviceSize transientVertexUploadSize = static_cast<VkDeviceSize>(transientVertices.size() * sizeof(VulkanTexturedBatchVertex));
-        const VkDeviceSize transientIndexUploadSize = static_cast<VkDeviceSize>(transientIndices.size() * indexElementSizeBytes);
+        const VkDeviceSize transientIndexUploadSize = static_cast<VkDeviceSize>(transientIndices.size() * sizeof(std::uint32_t));
+
+        if ((transientVertexUploadSize == 0u) || (transientIndexUploadSize == 0u))
+        {
+            if (shouldLogThisCall)
+                VulkanTrace("[Vulkan][UI2D] skipped: transient upload size is zero (vb=%llu ib=%llu)\n",
+                            static_cast<unsigned long long>(transientVertexUploadSize),
+                            static_cast<unsigned long long>(transientIndexUploadSize));
+            return;
+        }
 
         EnsureTransientBuffer(
             transientVertexUploadSize,
@@ -978,10 +1072,32 @@ namespace gfx
             texturedBatchIndexBufferMemory,
             texturedBatchIndexBufferCapacity);
 
+        if (
+            (texturedBatchVertexBuffer == VK_NULL_HANDLE) ||
+            (texturedBatchVertexBufferMemory == VK_NULL_HANDLE) ||
+            (texturedBatchIndexBuffer == VK_NULL_HANDLE) ||
+            (texturedBatchIndexBufferMemory == VK_NULL_HANDLE))
+        {
+            if (shouldLogThisCall)
+                VulkanTrace("[Vulkan][UI2D] skipped: transient upload buffers are unavailable for immediate submit\n");
+            return;
+        }
+
         void *mappedTransientVertexData = nullptr;
         CheckVkResult(
             vkMapMemory(device, texturedBatchVertexBufferMemory, 0, transientVertexUploadSize, 0, &mappedTransientVertexData),
             "vkMapMemory(texturedBatchVertexBuffer)");
+
+        if (mappedTransientVertexData == nullptr)
+        {
+            vkUnmapMemory(device, texturedBatchVertexBufferMemory);
+            if (shouldLogThisCall)
+                VulkanTrace("[Vulkan][UI2D] skipped: mapped transient vertex pointer is null\n");
+            return;
+        }
+
+        // Transient upload buffers request HOST_COHERENT memory in EnsureTransientBuffer,
+        // so explicit vkFlushMappedMemoryRanges is not required after memcpy.
         std::memcpy(mappedTransientVertexData, transientVertices.data(), static_cast<std::size_t>(transientVertexUploadSize));
         vkUnmapMemory(device, texturedBatchVertexBufferMemory);
 
@@ -990,16 +1106,15 @@ namespace gfx
             vkMapMemory(device, texturedBatchIndexBufferMemory, 0, transientIndexUploadSize, 0, &mappedTransientIndexData),
             "vkMapMemory(texturedBatchIndexBuffer)");
 
-        if (indexType == IndexElementType::UInt16)
+        if (mappedTransientIndexData == nullptr)
         {
-            auto *destinationIndices = static_cast<std::uint16_t *>(mappedTransientIndexData);
-            for (std::size_t i = 0u; i < transientIndices.size(); ++i)
-                destinationIndices[i] = static_cast<std::uint16_t>(transientIndices[i]);
+            vkUnmapMemory(device, texturedBatchIndexBufferMemory);
+            if (shouldLogThisCall)
+                VulkanTrace("[Vulkan][UI2D] skipped: mapped transient index pointer is null\n");
+            return;
         }
-        else
-        {
-            std::memcpy(mappedTransientIndexData, transientIndices.data(), static_cast<std::size_t>(transientIndexUploadSize));
-        }
+
+        std::memcpy(mappedTransientIndexData, transientIndices.data(), static_cast<std::size_t>(transientIndexUploadSize));
 
         vkUnmapMemory(device, texturedBatchIndexBufferMemory);
 
@@ -1030,7 +1145,15 @@ namespace gfx
 
         vkCmdBindPipeline(primaryCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, swapchainTexturedBatchPipeline);
 
-        UpdateSwapchainTriangleTextureDescriptor(&texture);
+        VkDescriptorImageInfo textureImageInfo{};
+        if (!ResolveSwapchainTriangleTextureDescriptorInfo(&texture, textureImageInfo) || !IsDescriptorImageInfoValid(textureImageInfo))
+        {
+            if (shouldLogThisCall)
+                VulkanTrace("[Vulkan][UI2D] skipped: no valid texture descriptor info for immediate submit\n");
+            return;
+        }
+
+        UpdateSwapchainTriangleTextureDescriptor(textureImageInfo);
         vkCmdBindDescriptorSets(
             primaryCommandBuffer,
             VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -1062,7 +1185,7 @@ namespace gfx
 
         const VkDeviceSize vertexOffset = 0u;
         vkCmdBindVertexBuffers(primaryCommandBuffer, 0u, 1u, &texturedBatchVertexBuffer, &vertexOffset);
-        vkCmdBindIndexBuffer(primaryCommandBuffer, texturedBatchIndexBuffer, 0u, TranslateIndexElementType(indexType));
+        vkCmdBindIndexBuffer(primaryCommandBuffer, texturedBatchIndexBuffer, 0u, VK_INDEX_TYPE_UINT32);
 
         for (const EffectiveBatchDraw &batch : effectiveBatches)
         {
@@ -1272,7 +1395,7 @@ namespace gfx
             if (frameRecording && (primaryCommandBuffer != VK_NULL_HANDLE))
             {
                 std::array<VkClearValue, 2> clearValues{};
-                clearValues[0].color = {{1.0f, 0.5f, 0.0f, 1.0f}};
+                clearValues[0].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
                 clearValues[1].depthStencil = {1.0f, 0u};
 
                 VkRenderPassBeginInfo renderPassBeginInfo{};
@@ -1358,7 +1481,7 @@ namespace gfx
                                 "[Vulkan][UI2D] dropping deferred draws (%zu): pipeline/layout/descriptor not ready\\n",
                                 pendingTexturedBatchDraws.size());
                         }
-                        pendingTexturedBatchDraws.clear();
+                        ClearPendingTexturedBatchDraws();
                     }
                     else
                     {
@@ -1409,6 +1532,7 @@ namespace gfx
                         vkCmdBindPipeline(primaryCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, swapchainTexturedBatchPipeline);
 
                         std::size_t submittedDeferredDrawCalls = 0u;
+                        std::size_t skippedDeferredDraws = 0u;
                         for (const PendingTexturedBatchDraw &pendingDraw : pendingTexturedBatchDraws)
                         {
                             if (
@@ -1416,10 +1540,53 @@ namespace gfx
                                 pendingDraw.vertexData.empty() ||
                                 pendingDraw.indices.empty() ||
                                 pendingDraw.batches.empty())
+                            {
+                                skippedDeferredDraws += 1u;
                                 continue;
+                            }
+
+                            std::uint64_t totalDeferredIndexCount = 0u;
+                            for (const TexturedIndexedBatchDesc &batch : pendingDraw.batches)
+                                totalDeferredIndexCount += static_cast<std::uint64_t>(batch.indexCount);
+
+                            if (totalDeferredIndexCount == 0u)
+                            {
+                                skippedDeferredDraws += 1u;
+                                if (EnableVulkanUiDebugLogs)
+                                    VulkanTrace("[Vulkan][UI2D] skipping deferred draw: batch index count is zero\n");
+                                continue;
+                            }
+
+                            VkDescriptorImageInfo textureImageInfo = pendingDraw.textureImageInfo;
+                            if (!IsDescriptorImageInfoValid(textureImageInfo))
+                            {
+                                const bool resolvedFallback =
+                                    ResolveSwapchainTriangleTextureDescriptorInfo(nullptr, textureImageInfo) &&
+                                    IsDescriptorImageInfoValid(textureImageInfo);
+
+                                if (!resolvedFallback)
+                                {
+                                    skippedDeferredDraws += 1u;
+
+                                    if (EnableVulkanUiDebugLogs)
+                                        VulkanTrace("[Vulkan][UI2D] skipping deferred draw: no valid texture descriptor (source/fallback)\n");
+
+                                    continue;
+                                }
+                            }
 
                             const VkDeviceSize transientVertexUploadSize = static_cast<VkDeviceSize>(pendingDraw.vertexData.size());
                             const VkDeviceSize transientIndexUploadSize = static_cast<VkDeviceSize>(pendingDraw.indices.size() * sizeof(std::uint32_t));
+
+                            if ((transientVertexUploadSize == 0u) || (transientIndexUploadSize == 0u))
+                            {
+                                skippedDeferredDraws += 1u;
+
+                                if (EnableVulkanUiDebugLogs)
+                                    VulkanTrace("[Vulkan][UI2D] skipping deferred draw: transient upload size is zero\n");
+
+                                continue;
+                            }
 
                             EnsureTransientBuffer(
                                 transientVertexUploadSize,
@@ -1435,10 +1602,35 @@ namespace gfx
                                 texturedBatchIndexBufferMemory,
                                 texturedBatchIndexBufferCapacity);
 
+                            if (
+                                (texturedBatchVertexBuffer == VK_NULL_HANDLE) ||
+                                (texturedBatchVertexBufferMemory == VK_NULL_HANDLE) ||
+                                (texturedBatchIndexBuffer == VK_NULL_HANDLE) ||
+                                (texturedBatchIndexBufferMemory == VK_NULL_HANDLE))
+                            {
+                                skippedDeferredDraws += 1u;
+
+                                if (EnableVulkanUiDebugLogs)
+                                    VulkanTrace("[Vulkan][UI2D] skipping deferred draw: transient upload buffers are unavailable\n");
+
+                                continue;
+                            }
+
                             void *mappedTransientVertexData = nullptr;
                             CheckVkResult(
                                 vkMapMemory(device, texturedBatchVertexBufferMemory, 0, transientVertexUploadSize, 0, &mappedTransientVertexData),
                                 "vkMapMemory(flushTexturedBatchVertexBuffer)");
+
+                            if (mappedTransientVertexData == nullptr)
+                            {
+                                vkUnmapMemory(device, texturedBatchVertexBufferMemory);
+                                skippedDeferredDraws += 1u;
+
+                                if (EnableVulkanUiDebugLogs)
+                                    VulkanTrace("[Vulkan][UI2D] skipping deferred draw: mapped transient vertex pointer is null\n");
+
+                                continue;
+                            }
 
                             std::memcpy(mappedTransientVertexData, pendingDraw.vertexData.data(), pendingDraw.vertexData.size());
                             vkUnmapMemory(device, texturedBatchVertexBufferMemory);
@@ -1448,10 +1640,21 @@ namespace gfx
                                 vkMapMemory(device, texturedBatchIndexBufferMemory, 0, transientIndexUploadSize, 0, &mappedTransientIndexData),
                                 "vkMapMemory(flushTexturedBatchIndexBuffer)");
 
+                            if (mappedTransientIndexData == nullptr)
+                            {
+                                vkUnmapMemory(device, texturedBatchIndexBufferMemory);
+                                skippedDeferredDraws += 1u;
+
+                                if (EnableVulkanUiDebugLogs)
+                                    VulkanTrace("[Vulkan][UI2D] skipping deferred draw: mapped transient index pointer is null\n");
+
+                                continue;
+                            }
+
                             std::memcpy(mappedTransientIndexData, pendingDraw.indices.data(), static_cast<std::size_t>(transientIndexUploadSize));
                             vkUnmapMemory(device, texturedBatchIndexBufferMemory);
 
-                            UpdateSwapchainTriangleTextureDescriptor(pendingDraw.textureImageInfo);
+                            UpdateSwapchainTriangleTextureDescriptor(textureImageInfo);
                             vkCmdBindDescriptorSets(
                                 primaryCommandBuffer,
                                 VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -1483,13 +1686,14 @@ namespace gfx
                             if ((deferredFlushLogCounter <= 30u) || ((deferredFlushLogCounter % 240u) == 0u))
                             {
                                 VulkanTrace(
-                                    "[Vulkan][UI2D] flushed deferred draws: queued=%zu submittedDrawCalls=%zu\\n",
+                                    "[Vulkan][UI2D] flushed deferred draws: queued=%zu submittedDrawCalls=%zu skipped=%zu\n",
                                     pendingTexturedBatchDraws.size(),
-                                    submittedDeferredDrawCalls);
+                                    submittedDeferredDrawCalls,
+                                    skippedDeferredDraws);
                             }
                         }
 
-                        pendingTexturedBatchDraws.clear();
+                        ClearPendingTexturedBatchDraws();
                     }
                 }
 
@@ -1534,10 +1738,18 @@ namespace gfx
             return false;
 
         auto *vulkanTexture = dynamic_cast<VulkanTexture *>(textureToBind);
-        if ((vulkanTexture == nullptr) || (vulkanTexture->GetImageView() == VK_NULL_HANDLE) || (vulkanTexture->GetSampler() == VK_NULL_HANDLE))
+        if (
+            (vulkanTexture == nullptr) ||
+            (vulkanTexture->GetImageView() == VK_NULL_HANDLE) ||
+            (vulkanTexture->GetSampler() == VK_NULL_HANDLE) ||
+            (vulkanTexture->GetCurrentLayout() != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL))
         {
             vulkanTexture = dynamic_cast<VulkanTexture *>(swapchainTriangleFallbackTexture.get());
-            if ((vulkanTexture == nullptr) || (vulkanTexture->GetImageView() == VK_NULL_HANDLE) || (vulkanTexture->GetSampler() == VK_NULL_HANDLE))
+            if (
+                (vulkanTexture == nullptr) ||
+                (vulkanTexture->GetImageView() == VK_NULL_HANDLE) ||
+                (vulkanTexture->GetSampler() == VK_NULL_HANDLE) ||
+                (vulkanTexture->GetCurrentLayout() != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL))
                 return false;
         }
 
@@ -1550,7 +1762,7 @@ namespace gfx
 
     void VulkanGraphicsBackend::UpdateSwapchainTriangleTextureDescriptor(const VkDescriptorImageInfo &textureImageInfo)
     {
-        if ((device == VK_NULL_HANDLE) || (swapchainTriangleDescriptorSet == VK_NULL_HANDLE))
+        if ((device == VK_NULL_HANDLE) || (swapchainTriangleDescriptorSet == VK_NULL_HANDLE) || !IsDescriptorImageInfoValid(textureImageInfo))
             return;
 
         VkWriteDescriptorSet descriptorWrite{};
@@ -1578,6 +1790,9 @@ namespace gfx
 
     void VulkanGraphicsBackend::SetSwapchainTriangleTexture(ITexture *texture)
     {
+        if ((swapchainTriangleTexture != texture) && !pendingTexturedBatchDraws.empty())
+            ClearPendingTexturedBatchDraws();
+
         swapchainTriangleTexture = texture;
         UpdateSwapchainTriangleTextureDescriptor(swapchainTriangleTexture);
     }
@@ -1588,6 +1803,23 @@ namespace gfx
             return;
 
         UpdateSwapchainTriangleTextureDescriptor(texture);
+    }
+
+    ITexture *VulkanGraphicsBackend::GetSwapchainTriangleFallbackTexture() const
+    {
+        return swapchainTriangleFallbackTexture.get();
+    }
+
+    void VulkanGraphicsBackend::ClearPendingTexturedBatchDraws()
+    {
+        if (EnableVulkanUiDebugLogs && !pendingTexturedBatchDraws.empty())
+        {
+            VulkanTrace(
+                "[Vulkan][UI2D] clearing deferred draws: queued=%zu\n",
+                pendingTexturedBatchDraws.size());
+        }
+
+        pendingTexturedBatchDraws.clear();
     }
 
     VkFormat VulkanGraphicsBackend::FindSupportedDepthFormat() const
@@ -1745,6 +1977,8 @@ namespace gfx
         if ((buffer != VK_NULL_HANDLE) && (memory != VK_NULL_HANDLE) && (capacity >= requestedSize))
             return;
 
+        // Request HOST_COHERENT so mapped memcpy writes are visible without
+        // explicit vkFlushMappedMemoryRanges for transient UI uploads.
         CreateBuffer(
             requestedSize,
             usage,
@@ -1976,7 +2210,7 @@ namespace gfx
             fallbackTextureCI.mipLevels = 1u;
             fallbackTextureCI.arrayLayers = 1u;
             fallbackTextureCI.usage = TextureUsage::Sampled | TextureUsage::TransferDst;
-            fallbackTextureCI.debugName = "SwapchainTriangleFallbackTexture";
+            fallbackTextureCI.debugName = "UiWhitePixelFallbackTexture";
 
             swapchainTriangleFallbackTexture = CreateTexture(fallbackTextureCI);
             if (swapchainTriangleFallbackTexture != nullptr)
@@ -1989,6 +2223,17 @@ namespace gfx
                 };
 
                 swapchainTriangleFallbackTexture->Upload(0u, 0u, std::span<const std::byte>(whitePixel.data(), whitePixel.size()));
+
+                auto *fallbackVulkanTexture = dynamic_cast<VulkanTexture *>(swapchainTriangleFallbackTexture.get());
+                if (
+                    (fallbackVulkanTexture == nullptr) ||
+                    (fallbackVulkanTexture->GetImage() == VK_NULL_HANDLE) ||
+                    (fallbackVulkanTexture->GetImageView() == VK_NULL_HANDLE) ||
+                    (fallbackVulkanTexture->GetSampler() == VK_NULL_HANDLE) ||
+                    (fallbackVulkanTexture->GetCurrentLayout() != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL))
+                {
+                    throw std::runtime_error("VulkanGraphicsBackend: UI white fallback texture is not fully initialized for shader sampling");
+                }
             }
 
             UpdateSwapchainTriangleTextureDescriptor(swapchainTriangleTexture);
@@ -3238,6 +3483,9 @@ namespace gfx
 
             VkPipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo{};
             depthStencilStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+            // Primitive/UI textured batches are strictly 2D overlays.
+            // Keep depth testing and writes disabled so this pipeline does not
+            // depend on depth contents.
             depthStencilStateCreateInfo.depthTestEnable = VK_FALSE;
             depthStencilStateCreateInfo.depthWriteEnable = VK_FALSE;
             depthStencilStateCreateInfo.depthCompareOp = VK_COMPARE_OP_ALWAYS;
