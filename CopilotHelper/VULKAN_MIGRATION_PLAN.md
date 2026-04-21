@@ -242,6 +242,29 @@ Verification completed for this phase:
 2. `cmake --build build --target engine_smoketest --parallel $(sysctl -n hw.logicalcpu)`
 3. `ctest --test-dir build --output-on-failure -R smoketest`
 
+### [COMPLETE] Vulkan UI Bridge and Startup Stabilization (macOS/MoltenVK)
+Goal: Stabilize the Vulkan startup menu/UI path and contain legacy OpenGL assumptions.
+
+Completed architecture decisions and fixes:
+1. Deferred UI queue hardening in `VulkanGraphicsBackend`:
+	- Deferred draws no longer retain raw texture pointers.
+	- Descriptor image payload is resolved immediately and stored as `VkDescriptorImageInfo` by value.
+	- Descriptor validation and fallback descriptor recovery are performed before queue submission.
+2. Legacy OpenGL containment:
+	- Startup systems with OpenGL-only assumptions are gated behind `if (HasOpenGLBackend())`.
+	- Applied to SelMenuVFS archive background scanning (`SelectMenu.cpp`) and LuaVFSDownload initialization (`SpringApp.cpp`).
+3. `agui` primitive bridge and fallback texture safety:
+	- Solid-color primitives (for example `GuiElement::DrawBox`) are routed through `DrawTexturedIndexedBatches`.
+	- A white-pixel fallback texture is bound when needed so descriptor submissions always reference a valid texture.
+	- This prevents MoltenVK device-loss failures (`VK_ERROR_DEVICE_LOST`, `-4`) caused by invalid/missing texture descriptors.
+4. Apple Silicon and MoltenVK strictness guardrails:
+	- Index element type must exactly match the submitted index stream width.
+	- 32-bit indices must bind as `VK_INDEX_TYPE_UINT32` to avoid `_ioGPUResourceListAddResourceEntry` abort traps.
+
+Current frontier after stabilization:
+1. Vulkan UI now renders stably, but font atlas output is still corrupted ("TV static").
+2. Leading hypothesis: CPU-to-GPU upload format mismatch in `CFontTexture` (1-byte luminance-style data interpreted through a 4-byte RGBA path).
+
 ### [PENDING] Phase 4: Bottom-Up Migration (Leaf Nodes)
 Goal: Migrate the simplest rendering subsystems (least dependencies) to use `graphicsBackend` instead of direct OpenGL wrappers.
 

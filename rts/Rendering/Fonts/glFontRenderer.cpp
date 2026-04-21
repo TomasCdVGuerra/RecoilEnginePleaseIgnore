@@ -414,9 +414,10 @@ void CglNoShaderFontRenderer::DrawTraingleElements()
 	const bool normalizeTexCoords = !useOpenGLState && (activeTexture != nullptr);
 	float invTextureWidth = 1.0f;
 	float invTextureHeight = 1.0f;
+	gfx::Extent3D textureExtent{};
 	if (normalizeTexCoords)
 	{
-		const gfx::Extent3D textureExtent = activeTexture->GetExtent();
+		textureExtent = activeTexture->GetExtent();
 		if ((textureExtent.width > 0u) && (textureExtent.height > 0u))
 		{
 			invTextureWidth = 1.0f / static_cast<float>(textureExtent.width);
@@ -451,6 +452,21 @@ void CglNoShaderFontRenderer::DrawTraingleElements()
 		if (verts[idx].empty() || indcs[idx].empty())
 			continue;
 
+		bool texCoordsLookNormalized = normalizeTexCoords;
+		if (texCoordsLookNormalized)
+		{
+			for (const VA_TYPE_TC &vertex : verts[idx])
+			{
+				if ((vertex.s < -0.25f) || (vertex.s > 1.25f) || (vertex.t < -0.25f) || (vertex.t > 1.25f))
+				{
+					texCoordsLookNormalized = false;
+					break;
+				}
+			}
+		}
+
+		const bool convertTexCoordsToNormalized = normalizeTexCoords && !texCoordsLookNormalized;
+
 		bool positionsLookNormalized = !useOpenGLState;
 		if (positionsLookNormalized)
 		{
@@ -465,7 +481,22 @@ void CglNoShaderFontRenderer::DrawTraingleElements()
 		}
 
 		const bool convertPositionsToPixels = (!useOpenGLState) && positionsLookNormalized;
-		const bool rewriteVertices = normalizeTexCoords || convertPositionsToPixels;
+		const bool rewriteVertices = convertTexCoordsToNormalized || convertPositionsToPixels;
+
+		static bool loggedUvNormalizationMode = false;
+		if (!loggedUvNormalizationMode && normalizeTexCoords)
+		{
+			const VA_TYPE_TC &sample = verts[idx].front();
+			LOG(
+				"[CglNoShaderFontRenderer::%s] textureExtent=%ux%u uvMode=%s sampleST=(%.3f, %.3f)",
+				__func__,
+				textureExtent.width,
+				textureExtent.height,
+				convertTexCoordsToNormalized ? "pixels-to-normalized" : "already-normalized",
+				sample.s,
+				sample.t);
+			loggedUvNormalizationMode = true;
+		}
 
 		const VA_TYPE_TC *uploadVerticesData = verts[idx].data();
 		const std::size_t uploadVertexCount = verts[idx].size();
@@ -475,12 +506,12 @@ void CglNoShaderFontRenderer::DrawTraingleElements()
 
 			for (VA_TYPE_TC &vertex : uploadVertices)
 			{
-				if (normalizeTexCoords)
+				if (convertTexCoordsToNormalized)
 				{
 					const float normalizedS = std::clamp(vertex.s * invTextureWidth, 0.0f, 1.0f);
 					const float normalizedT = std::clamp(vertex.t * invTextureHeight, 0.0f, 1.0f);
 					vertex.s = normalizedS;
-					vertex.t = 1.0f - normalizedT;
+					vertex.t = normalizedT;
 				}
 
 				if (convertPositionsToPixels)

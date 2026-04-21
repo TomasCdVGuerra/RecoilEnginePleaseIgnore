@@ -123,6 +123,9 @@ namespace gfx
         void UpdateSwapchainTriangleProjection();
         void UpdateSwapchainTriangleTextureDescriptor(ITexture *texture);
         void UpdateSwapchainTriangleTextureDescriptor(const VkDescriptorImageInfo &textureImageInfo);
+        void UpdateSwapchainTriangleTextureDescriptor(VkDescriptorSet descriptorSet, const VkDescriptorImageInfo &textureImageInfo);
+        void ResetSwapchainTriangleDescriptorSetCursor() noexcept;
+        [[nodiscard]] VkDescriptorSet AcquireSwapchainTriangleDescriptorSet();
         bool ResolveSwapchainTriangleTextureDescriptorInfo(ITexture *texture, VkDescriptorImageInfo &textureImageInfo) const;
         void EnsureTransientBuffer(
             VkDeviceSize requiredSize,
@@ -151,6 +154,7 @@ namespace gfx
         void DestroySwapchain() noexcept;
 
         static constexpr std::uint32_t InvalidQueueFamilyIndex = std::numeric_limits<std::uint32_t>::max();
+        static constexpr std::size_t SwapchainTriangleDescriptorSetCapacity = 512u;
 
         SDL_Window *window = nullptr;
 
@@ -174,6 +178,8 @@ namespace gfx
         VkDescriptorSetLayout swapchainTriangleDescriptorSetLayout = VK_NULL_HANDLE;
         VkDescriptorPool swapchainTriangleDescriptorPool = VK_NULL_HANDLE;
         VkDescriptorSet swapchainTriangleDescriptorSet = VK_NULL_HANDLE;
+        std::vector<VkDescriptorSet> swapchainTriangleDescriptorSets;
+        std::size_t swapchainTriangleDescriptorSetCursor = 0u;
         VkBuffer swapchainTriangleVertexBuffer = VK_NULL_HANDLE;
         VkDeviceMemory swapchainTriangleVertexBufferMemory = VK_NULL_HANDLE;
         VkBuffer swapchainTriangleUniformBuffer = VK_NULL_HANDLE;

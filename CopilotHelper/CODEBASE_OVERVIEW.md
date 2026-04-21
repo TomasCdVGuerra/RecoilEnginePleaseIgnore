@@ -83,6 +83,40 @@ These classes provide backend-specific implementations for the shared `gfx` inte
   - Non-Vulkan builds instantiate `GLGraphicsBackend`.
 - Presentation follows the selected backend path (Vulkan swapchain presentation vs OpenGL swap-window flow).
 
+### Vulkan UI Bridge And Startup Stabilization (macOS/MoltenVK)
+
+The Vulkan startup and menu/UI path now includes explicit containment and safety mechanisms to avoid legacy OpenGL coupling and MoltenVK driver faults.
+
+#### Deferred UI queue hardening
+
+- Deferred UI draws in `VulkanGraphicsBackend` no longer keep raw texture pointers for later submission.
+- The deferred path now resolves descriptor image data immediately and stores `VkDescriptorImageInfo` by value, removing the use-after-free risk that previously caused SIGSEGV crashes.
+- Descriptor image data is validated again before submission, and fallback descriptor recovery is applied when needed to keep descriptor bindings valid at `vkQueueSubmit` time.
+
+#### Legacy OpenGL gating (containment)
+
+- Legacy startup systems that assume OpenGL are now gated behind `if (HasOpenGLBackend())` so Vulkan startup does not execute GL-only code paths.
+- Gated components include:
+  - SelMenuVFS archive background scanning in `SelectMenu.cpp`.
+  - LuaVFSDownload initialization in `SpringApp.cpp`.
+
+#### agui primitive bridge and white fallback
+
+- `agui` solid-color primitives (for example `GuiElement::DrawBox`) are routed through the Vulkan textured batch bridge via `DrawTexturedIndexedBatches`.
+- A UI white-pixel fallback texture is created and used when needed so descriptor submission always has a valid texture.
+- This fallback behavior prevents MoltenVK device-loss failures (`VK_ERROR_DEVICE_LOST`, `-4`) caused by invalid or missing texture descriptors.
+
+#### Apple Silicon / MoltenVK strictness
+
+- MoltenVK on macOS is strict about resource-state correctness and draw parameter consistency.
+- Index buffer element types must exactly match the bound Vulkan index type.
+- 32-bit index streams must be bound as `VK_INDEX_TYPE_UINT32`; mismatches can trigger `_ioGPUResourceListAddResourceEntry` abort traps.
+
+#### Current frontier (known issue)
+
+- UI rendering is now stable and native on Vulkan, but the active blocker is font atlas corruption that appears as "TV static".
+- The current hypothesis is a CPU-to-GPU pixel-format mismatch during `CFontTexture` upload, likely involving 1-byte luminance-style data being interpreted through a 4-byte RGBA path.
+
 ## 4) Submodule Ecosystem (13 Entries)
 
 The repository currently declares 13 top-level Git submodules in `.gitmodules`:

@@ -882,6 +882,14 @@ void CglFont::RenderStringImpl(float x, float y, float scaleX, float scaleY, con
 		const float tx1 = tc.x1() * texScaleX;
 		const float ty1 = tc.y1() * texScaleY;
 
+		const bool flipGlyphTexCoordY =
+			(globalRendering != nullptr) &&
+			(globalRendering->graphicsBackend != nullptr) &&
+			(globalRendering->graphicsBackend->Type() != gfx::BackendType::OpenGL);
+
+		const float glyphTy0 = flipGlyphTexCoordY ? ty1 : ty0;
+		const float glyphTy1 = flipGlyphTexCoordY ? ty0 : ty1;
+
 		if constexpr (shiftXC > 0 || shiftYC > 0 || outline)
 		{
 			const auto &stc = prvGlyphPtr->shadowTexCord;
@@ -889,6 +897,8 @@ void CglFont::RenderStringImpl(float x, float y, float scaleX, float scaleY, con
 			const float sty0 = stc.y0() * texScaleY;
 			const float stx1 = stc.x1() * texScaleX;
 			const float sty1 = stc.y1() * texScaleY;
+			const float shadowTy0 = flipGlyphTexCoordY ? sty1 : sty0;
+			const float shadowTy1 = flipGlyphTexCoordY ? sty0 : sty1;
 
 			float shiftX = 0.0f;
 			float shiftY = 0.0f;
@@ -907,17 +917,17 @@ void CglFont::RenderStringImpl(float x, float y, float scaleX, float scaleY, con
 			}
 
 			fontRenderer->AddQuadTrianglesOB(
-				{{dx0 + shiftX - ssX, dy0 - shiftY + ssY, textDepth.y}, stx0, sty0, (&outlineColor.x)},
-				{{dx1 + shiftX + ssX, dy0 - shiftY + ssY, textDepth.y}, stx1, sty0, (&outlineColor.x)},
-				{{dx1 + shiftX + ssX, dy1 - shiftY - ssY, textDepth.y}, stx1, sty1, (&outlineColor.x)},
-				{{dx0 + shiftX - ssX, dy1 - shiftY - ssY, textDepth.y}, stx0, sty1, (&outlineColor.x)});
+				{{dx0 + shiftX - ssX, dy0 - shiftY + ssY, textDepth.y}, stx0, shadowTy0, (&outlineColor.x)},
+				{{dx1 + shiftX + ssX, dy0 - shiftY + ssY, textDepth.y}, stx1, shadowTy0, (&outlineColor.x)},
+				{{dx1 + shiftX + ssX, dy1 - shiftY - ssY, textDepth.y}, stx1, shadowTy1, (&outlineColor.x)},
+				{{dx0 + shiftX - ssX, dy1 - shiftY - ssY, textDepth.y}, stx0, shadowTy1, (&outlineColor.x)});
 		}
 
 		fontRenderer->AddQuadTrianglesPB(
-			{{dx0, dy0, textDepth.x}, tx0, ty0, (&textColor.x)},
-			{{dx1, dy0, textDepth.x}, tx1, ty0, (&textColor.x)},
-			{{dx1, dy1, textDepth.x}, tx1, ty1, (&textColor.x)},
-			{{dx0, dy1, textDepth.x}, tx0, ty1, (&textColor.x)});
+			{{dx0, dy0, textDepth.x}, tx0, glyphTy0, (&textColor.x)},
+			{{dx1, dy0, textDepth.x}, tx1, glyphTy0, (&textColor.x)},
+			{{dx1, dy1, textDepth.x}, tx1, glyphTy1, (&textColor.x)},
+			{{dx0, dy1, textDepth.x}, tx0, glyphTy1, (&textColor.x)});
 	}
 }
 
