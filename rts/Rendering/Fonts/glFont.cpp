@@ -1006,34 +1006,36 @@ void CglFont::glPrint(float x, float y, float s, const int options, const std::s
 	}
 
 	// vertical alignment
-	y += (sizeY * GetDescender()); // move to baseline (note: descender is negative)
+	// vertical alignment
+    const bool isVulkan = (globalRendering != nullptr) && 
+                          (globalRendering->graphicsBackend != nullptr) && 
+                          (globalRendering->graphicsBackend->Type() != gfx::BackendType::OpenGL);
 
-	if (options & FONT_BASELINE)
-	{
-		// nothing
-	}
-	else if (options & FONT_DESCENDER)
-	{
-		y -= (sizeY * GetDescender());
-	}
-	else if (options & FONT_VCENTER)
-	{
-		y -= (sizeY * 0.5f * GetTextHeight(text, &textDescender));
-		y -= (sizeY * 0.5f * textDescender);
-	}
-	else if (options & FONT_TOP)
-	{
-		y -= sizeY * GetTextHeight(text);
-	}
-	else if (options & FONT_ASCENDER)
-	{
-		y -= (sizeY * (GetDescender() + 1.0f));
-	}
-	else if (options & FONT_BOTTOM)
-	{
-		GetTextHeight(text, &textDescender);
-		y -= (sizeY * textDescender);
-	}
+    // Calculate the total required Y-offset
+    float yOffset = sizeY * GetDescender(); // base offset
+
+    if (options & FONT_BASELINE) {
+        // nothing
+    } else if (options & FONT_DESCENDER) {
+        yOffset -= (sizeY * GetDescender());
+    } else if (options & FONT_VCENTER) {
+        yOffset -= (sizeY * 0.5f * GetTextHeight(text, &textDescender));
+        yOffset -= (sizeY * 0.5f * textDescender);
+    } else if (options & FONT_TOP) {
+        yOffset -= sizeY * GetTextHeight(text);
+    } else if (options & FONT_ASCENDER) {
+        yOffset -= (sizeY * (GetDescender() + 1.0f));
+    } else if (options & FONT_BOTTOM) {
+        GetTextHeight(text, &textDescender);
+        yOffset -= (sizeY * textDescender);
+    }
+
+    // Apply the offset according to the coordinate system
+    if (isVulkan) {
+        y -= yOffset; // Vulkan (Y-Down): Subtract negative offsets to move DOWN the screen
+    } else {
+        y += yOffset; // OpenGL (Y-Up): Add negative offsets to move DOWN the screen
+    }
 
 	if (options & FONT_NEAREST)
 	{

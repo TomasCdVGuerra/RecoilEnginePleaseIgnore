@@ -1364,18 +1364,38 @@ void CFontTexture::LoadGlyph(std::shared_ptr<FontFace> &f, char32_t ch, unsigned
 	int height = slot->bitmap.rows;
 
 	const float xbearing = slot->metrics.horiBearingX * normScale;
+
+	// 1. Calculate the exact dimensions of the actual ink
 	const float bitmapScale = normScale * FT_INTERNAL_DPI;
 	const float bitmapTop = slot->bitmap_top * bitmapScale;
 	const float bitmapWidth = static_cast<float>(width) * bitmapScale;
 	const float bitmapHeight = static_cast<float>(height) * bitmapScale;
+
+	// 2. Calculate the abstract typographical bounding box
 	const float metricHeight = slot->metrics.height * normScale;
 	const float metricDescender = (slot->metrics.horiBearingY - slot->metrics.height) * normScale;
 
+	// 3. Apply the physical quad sizes
 	glyph.size.x = xbearing;
-	glyph.size.y = bitmapTop - fontDescender;
 	glyph.size.w = bitmapWidth;
-	glyph.size.h = -bitmapHeight;
 
+	const bool isVulkan = (globalRendering != nullptr) &&
+						  (globalRendering->graphicsBackend != nullptr) &&
+						  (globalRendering->graphicsBackend->Type() != gfx::BackendType::OpenGL);
+
+	if (isVulkan) {
+        // Vulkan (Y-Down) + UV Flip Compensation:
+        // We must anchor the physical *bottom* of the quad to the baseline, 
+        // accounting for letters with hanging descenders (like 'g' or 'y').
+        glyph.size.y = bitmapHeight - bitmapTop + fontDescender; 
+        glyph.size.h = -bitmapHeight;
+    } else {
+        // OpenGL (Y-Up): Legacy inverted math
+        glyph.size.y = bitmapTop - fontDescender;
+        glyph.size.h = -bitmapHeight;
+    }
+
+	// 4. Apply the abstract bounding box metrics so the cursor advances correctly
 	glyph.advance = slot->advance.x * normScale;
 	glyph.height = metricHeight;
 	glyph.descender = metricDescender;
