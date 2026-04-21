@@ -1360,24 +1360,29 @@ void CFontTexture::LoadGlyph(std::shared_ptr<FontFace> &f, char32_t ch, unsigned
 	if (slot->bitmap.pixel_mode == FT_PIXEL_MODE_BGRA)
 		needsColor = true;
 
+	int width = slot->bitmap.width;
+	int height = slot->bitmap.rows;
+
 	const float xbearing = slot->metrics.horiBearingX * normScale;
-	const float ybearing = slot->metrics.horiBearingY * normScale;
+	const float bitmapScale = normScale * FT_INTERNAL_DPI;
+	const float bitmapTop = slot->bitmap_top * bitmapScale;
+	const float bitmapWidth = static_cast<float>(width) * bitmapScale;
+	const float bitmapHeight = static_cast<float>(height) * bitmapScale;
+	const float metricHeight = slot->metrics.height * normScale;
+	const float metricDescender = (slot->metrics.horiBearingY - slot->metrics.height) * normScale;
 
 	glyph.size.x = xbearing;
-	glyph.size.y = ybearing - fontDescender;
-	glyph.size.w = slot->metrics.width * normScale;
-	glyph.size.h = -slot->metrics.height * normScale;
+	glyph.size.y = bitmapTop - fontDescender;
+	glyph.size.w = bitmapWidth;
+	glyph.size.h = -bitmapHeight;
 
 	glyph.advance = slot->advance.x * normScale;
-	glyph.height = slot->metrics.height * normScale;
-	glyph.descender = ybearing - glyph.height;
+	glyph.height = metricHeight;
+	glyph.descender = metricDescender;
 
 	// workaround bugs in FreeSansBold (in range 0x02B0 - 0x0300)
 	if (glyph.advance == 0 && glyph.size.w > 0)
 		glyph.advance = glyph.size.w;
-
-	int width = slot->bitmap.width;
-	int height = slot->bitmap.rows;
 
 	if (width <= 0 || height <= 0)
 		return;
@@ -1408,8 +1413,7 @@ void CFontTexture::LoadGlyph(std::shared_ptr<FontFace> &f, char32_t ch, unsigned
 		height = std::floor(height * ratio);
 		glyph.advance = glyph.advance * ratio;
 		glyph.descender = glyph.descender * ratio;
-		glyph.size.y = glyph.size.y * ratio;
-		glyph.size.y = ybearing * ratio - fontDescender;
+		glyph.size.y = bitmapTop * ratio - fontDescender;
 		glyph.size.x = glyph.size.x * ratio;
 		glyph.size.w = glyph.size.w * ratio;
 		glyph.size.h = glyph.size.h * ratio;
