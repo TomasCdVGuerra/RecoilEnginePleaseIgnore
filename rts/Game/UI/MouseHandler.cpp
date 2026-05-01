@@ -37,6 +37,7 @@
 #include "System/SpringMath.h"
 #include "System/SafeUtil.h"
 #include "System/StringUtil.h"
+#include "System/Log/ILog.h"
 #include "System/Input/KeyInput.h"
 #include "System/Input/MouseInput.h"
 #include "Rml/Backends/RmlUi_Backend.h"
@@ -93,9 +94,21 @@ CMouseHandler::CMouseHandler()
 	const int2 viewMouseCenter = GetViewMouseCenter();
 
 	lastx = viewMouseCenter.x;
-	lasty = viewMouseCenter.y;
+
+	// Initial coordinate setup
+	const int localY = viewMouseCenter.y - globalRendering->viewWindowOffsetY;
+
+	if (HasVulkanBackend())
+	{
+		lasty = localY;
+	}
+	else
+	{
+		lasty = globalRendering->viewSizeY - localY;
+	}
 
 	UpdateCursorCameraDir();
+	// ... rest of constructor ...
 
 #ifndef __APPLE__
 	hardwareCursor = configHandler->GetBool("HardwareCursor");
@@ -247,7 +260,18 @@ void CMouseHandler::WindowLeave()
 	const int2 viewMouseCenter = GetViewMouseCenter();
 
 	lastx = viewMouseCenter.x;
-	lasty = viewMouseCenter.y;
+
+	// Consistent Vulkan math for the center point
+	const int localY = viewMouseCenter.y - globalRendering->viewWindowOffsetY;
+
+	if (HasVulkanBackend())
+	{
+		lasty = localY;
+	}
+	else
+	{
+		lasty = globalRendering->viewSizeY - localY;
+	}
 }
 
 /******************************************************************************/
@@ -255,10 +279,21 @@ void CMouseHandler::WindowLeave()
 void CMouseHandler::MouseMove(int x, int y, int dx, int dy)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	// FIXME: don't update if locked?
 	lastx = x;
-	// Origin for mousecursor on internal coordinates is top border of view screen
-	lasty = y - globalRendering->viewWindowOffsetY;
+
+	// Calculate the local Y relative to the view offset
+	const int localY = y - globalRendering->viewWindowOffsetY;
+
+	if (HasVulkanBackend())
+	{
+		// Vulkan (Y-Down): Use the raw coordinate directly
+		lasty = localY;
+	}
+	else
+	{
+		// OpenGL (Y-Up): Invert the coordinate so 0 is at the bottom
+		lasty = globalRendering->viewSizeY - localY;
+	}
 
 	UpdateCursorCameraDir();
 
@@ -320,8 +355,19 @@ void CMouseHandler::MousePress(int x, int y, int button)
 	if (button > NUM_BUTTONS)
 		return;
 
-	// Origin for mousecursor on internal coordinates is lower border of view screen
-	y = y - globalRendering->viewWindowOffsetY;
+	const int localY = y - globalRendering->viewWindowOffsetY;
+
+	if (HasVulkanBackend())
+	{
+		y = localY;
+	}
+	else
+	{
+		// Invert for OpenGL so hitboxes align with bottom-origin
+		y = globalRendering->viewSizeY - localY;
+	}
+
+	LOG_L(L_INFO, "Mouse Click at: %d, %d", x, y);
 
 	if (game != nullptr && !game->IsGameOver())
 		playerHandler.Player(gu->myPlayerNum)->currentStats.mouseClicks++;
