@@ -1,0 +1,5643 @@
+# Recoil Engine Architecture Context: rts/aGui
+This file contains the macro directory tree and the specific source code for this subsystem.
+
+## 1. Complete Directory Tree
+```text
+./
+    gpl-2.0.txt
+    CMakeLists.txt
+    gpl-3.0.txt
+    architecture_context_rts_Rendering_Gfx.txt
+    architecture_context_rts_Game_UI.txt
+    architecture_context_rts_aGui.txt
+    CopilotHelper/
+    tools/
+        CMakeLists.txt
+        benchmark/
+            script_benchmark_zwzsg.txt
+            script_benchmark.txt
+        pr-downloader/
+            CMakeLists.txt
+            test/
+                CMakeLists.txt
+                test.cpp
+                download/
+            cmake/
+            scripts/
+            .github/
+                workflows/
+            src/
+                Util.cpp
+                Version.h
+                CMakeLists.txt
+                Version.cpp
+                Tracer.h
+                Util.h
+                Logger.cpp
+                pr-downloader.cpp
+                Tracer.cpp
+                Logger.h
+                main.cpp
+                pr-downloader.h
+                Downloader/
+                    DownloadEnum.cpp
+                    CurlWrapper.cpp
+                    DownloadEnum.h
+                    IDownloader.h
+                    IDownloader.cpp
+                    Download.h
+                    CurlWrapper.h
+                    Download.cpp
+                    Rapid/
+                        Repo.cpp
+                        Sdp.cpp
+                        Repo.h
+                        RapidDownloader.cpp
+                        Sdp.h
+                        RapidDownloader.h
+                    Http/
+                        ETag.cpp
+                        ETag.h
+                        DownloadData.h
+                        Throttler.h
+                        Throttler.cpp
+                        HttpDownloader.cpp
+                        IOThreadPool.cpp
+                        HttpDownloader.h
+                        DownloadData.cpp
+                        IOThreadPool.h
+                FileSystem/
+                    FileSystem.h
+                    ZipArchive.cpp
+                    HashMD5.h
+                    IHash.cpp
+                    ZipArchive.h
+                    IArchive.h
+                    File.h
+                    HashGzip.cpp
+                    HashGzip.h
+                    HashMD5.cpp
+                    FileSystem.cpp
+                    File.cpp
+                    IHash.h
+                    SevenZipArchive.cpp
+                    SevenZipArchive.h
+                    FileData.h
+        scripts/
+            param_types.lua
+            lua_localizer.lua
+            genflags.lua
+            obj2lua.lua
+        sync-test/
+            CMakeLists.txt
+            streflop_float_test.cpp
+            reference/
+                streflop_results_NEON_arm64.txt
+                streflop_results_SSE_x86_64.txt
+        DemoTool/
+            CMakeLists.txt
+            DemoTool.cpp
+            StringSerializer.h
+        dirchange/
+            CMakeLists.txt
+            dirchange.cpp
+        unitsync/
+            CMakeLists.txt
+            unitsync.h
+            LuaParserAPI.cpp
+            unitsync.cpp
+            unitsync_api.h
+            JavaUnitsyncTest/
+                nbproject/
+                    private/
+                src/
+                    aflobby/
+                    unitsynctest/
+            test/
+                CMakeLists.txt
+                test.cpp
+                lua2php.cpp
+            python/
+                CMakeLists.txt
+                pybindgen/
+                    typehandlers/
+                        ctypeparser/
+    test/
+        CMakeLists.txt
+        smoke/
+            CMakeLists.txt
+            smoketest.cpp
+        headercheck/
+            CMakeLists.txt
+        tools/
+            SpringTimerTest/
+                TimerTest.cpp
+            CompileFailTest/
+                CMakeLists.txt
+        other/
+            benchmarkMemPoolTypes.cpp
+            benchmarkMimalloc.cpp
+            testMemPoolTypes.cpp
+            testMutex.cpp
+        engine/
+            System/
+                Nullerrorhandler.cpp
+                testMatrix44f.cpp
+                testFloat3.cpp
+                NullGlobalConfig.cpp
+                EventClient.cpp
+                testRotationMatrix44f.cpp
+                testTransform.cpp
+                testThreadPool.cpp
+                testClampRad.cpp
+                testSQRT.cpp
+                testSerializeLuaState.cpp
+                Misc/
+                    testSpringTime.cpp
+                    RectangleOverlapHandler.cpp
+                    TestBitwiseEnum.cpp
+                Net/
+                    TestUDPListener.cpp
+                FileSystem/
+                    TestFileSystem.cpp
+                LoadSave/
+                    testCregLoadSave.cpp
+                Log/
+                    TestILog.cpp
+                Sync/
+                    TestSyncedPrimitive.cpp
+            Sim/
+                Misc/
+                    testEllipsoid.cpp
+                    testQuadField.cpp
+        validation/
+            LuaUI/
+                Config/
+                    ZK_data.lua
+                    BA.lua
+                Widgets/
+                    test.lua
+        unitsync/
+            testUnitSync.cpp
+    rts/
+        CMakeLists.txt
+        Net/
+            CMakeLists.txt
+            AutohostInterface.cpp
+            GameServer.h
+            GameParticipant.cpp
+            AutohostInterface.h
+            GameSkirmishAI.h
+            NetCommands.cpp
+            GameParticipant.h
+            GameServer.cpp
+            Protocol/
+                BaseNetProtocol.cpp
+                NetProtocol.h
+                NetMessageTypes.h
+                NetProtocol.cpp
+                BaseNetProtocol.h
+        Game/
+            LoadScreen.h
+            GameData.h
+            ClientData.cpp
+            ConsoleHistory.h
+            GameInputReceiver.cpp
+            Console.h
+            InMapDraw.h
+            SelectedUnitsAI.h
+            WaitCommandsAI.cpp
+            LoadScreen.cpp
+            SelectedUnitsHandler.h
+            GameControllerTextInput.cpp
+            CMakeLists.txt
+            SyncedGameCommands.cpp
+            InMapDrawModel.cpp
+            ChatMessage.cpp
+            WordCompletion.h
+            SyncedGameCommands.h
+            CommandMessage.cpp
+            PreGame.h
+            Camera.cpp
+            InMapDrawModel.h
+            ConsoleHistory.cpp
+            CameraHandler.h
+            Console.cpp
+            UnsyncedGameCommands.cpp
+            Camera.h
+            WordCompletion.cpp
+            PreGame.cpp
+            ChatMessage.h
+            TraceRay.h
+            AviVideoCapturing.cpp
+            AviVideoCapturing.h
+            GameControllerTextInput.h
+            GlobalUnsynced.h
+            SelectedUnitsHandler.cpp
+            InMapDraw.cpp
+            DummyVideoCapturing.cpp
+            GameHelper.cpp
+            Action.h
+            ClientSetup.cpp
+            GameHelper.h
+            GameVersion.cpp
+            Game.h
+            GameController.cpp
+            UnsyncedActionExecutor.h
+            CameraHandler.cpp
+            GameVersion.h
+            FPSUnitController.cpp
+            UnsyncedGameCommands.h
+            GameJobDispatcher.h
+            TraceRay.cpp
+            ClientSetup.h
+            ClientData.h
+            WaitCommandsAI.h
+            SelectedUnitsAI.cpp
+            IGameCommands.h
+            IVideoCapturing.h
+            IVideoCapturing.cpp
+            GameController.h
+            Action.cpp
+            GameData.cpp
+            IActionExecutor.h
+            DummyVideoCapturing.h
+            GlobalUnsynced.cpp
+            GameSetup.h
+            FPSUnitController.h
+            GameSetup.cpp
+            SyncedActionExecutor.h
+            Game.cpp
+            GameInputReceiver.h
+            CommandMessage.h
+            UI/
+                InfoConsole.h
+                ScanCodes.h
+                ResourceBar.h
+                MouseHandler.h
+                PlayerRosterDrawer.h
+                QuitBox.cpp
+                CursorIcons.cpp
+                GameSetupDrawer.cpp
+                SelectionKeyHandler.h
+                KeySet.cpp
+                KeySet.h
+                PlayerRosterDrawer.cpp
+                IKeys.cpp
+                InputReceiver.cpp
+                GameInfo.cpp
+                CommandColors.cpp
+                MouseCursor.cpp
+                ProfileDrawer.h
+                InputReceiver.h
+                MouseHandler.cpp
+                QuitBox.h
+                KeyCodes.h
+                StartPosSelecter.cpp
+                EndGameBox.h
+                KeyBindings.cpp
+                IKeys.h
+                GameSetupDrawer.h
+                KeyCodes.cpp
+                PlayerRoster.cpp
+                CommandColors.h
+                PlayerRoster.h
+                SelectionKeyHandler.cpp
+                GameInfo.h
+                HwMouseCursor.h
+                KeyBindings.h
+                ProfileDrawer.cpp
+                UnitTracker.cpp
+                ResourceBar.cpp
+                EndGameBox.cpp
+                ScanCodes.cpp
+                CursorIcons.h
+                StartPosSelecter.h
+                InfoConsole.cpp
+                ShareBox.cpp
+                MouseCursor.h
+                GuiHandler.h
+                MiniMap.h
+                HwMouseCursor.cpp
+                GuiHandler.cpp
+                UnitTracker.h
+                MiniMap.cpp
+                ShareBox.h
+                TooltipConsole.cpp
+                TooltipConsole.h
+                Groups/
+                    GroupHandler.h
+                    Group.h
+                    GroupHandler.cpp
+                    Group.cpp
+            Players/
+                TeamController.cpp
+                Player.cpp
+                PlayerHandler.cpp
+                PlayerBase.h
+                PlayerHandler.h
+                Player.h
+                PlayerBase.cpp
+                PlayerStatistics.cpp
+                PlayerStatistics.h
+                TeamController.h
+            Camera/
+                DollyController.cpp
+                CameraController.h
+                SpringController.cpp
+                DollyController.h
+                RotOverheadController.cpp
+                SpringController.h
+                DummyController.h
+                FPSController.cpp
+                FPSController.h
+                OverviewController.h
+                FreeController.cpp
+                FreeController.h
+                OverviewController.cpp
+                CameraController.cpp
+                OverheadController.h
+                OverheadController.cpp
+                RotOverheadController.h
+        builds/
+            CMakeLists.txt
+            legacy/
+                CMakeLists.txt
+            dedicated/
+                CMakeLists.txt
+                main.cpp
+            headless/
+                CMakeLists.txt
+        Rml/
+            CMakeLists.txt
+            Rml_MathTypes_Conversions.h
+            RmlInputReceiver.h
+            SVG/
+                SVGPlugin.cpp
+                ElementSVG.h
+                ElementSVG.cpp
+                SVGPlugin.h
+            SolLua/
+                CMakeLists.txt
+                TranslationTable.h
+                RmlSolLua.cpp
+                RmlSolLua.h
+                plugin/
+                    SolLuaDataModel.h
+                    SolLuaDocument.cpp
+                    SolLuaPlugin.cpp
+                    SolLuaInstancer.h
+                    SolLuaDataModel.cpp
+                    SolLuaDocument.h
+                    SolLuaEventListener.h
+                    SolLuaPlugin.h
+                    SolLuaInstancer.cpp
+                    SolLuaEventListener.cpp
+                bind/
+                    ElementForm.cpp
+                    StyleSheet.cpp
+                    bind.cpp
+                    Convert.cpp
+                    Context.cpp
+                    Vector.cpp
+                    ElementDerived.cpp
+                    Colour.cpp
+                    Element.cpp
+                    Event.cpp
+                    Global.cpp
+                    DataModel.cpp
+                    Document.cpp
+                    bind.h
+            Backends/
+                RmlUi_Backend.cpp
+                RmlUi_Renderer_Headless.h
+                RmlUi_Renderer_GL3_Recoil.cpp
+                RmlUi_SystemInterface.cpp
+                RmlUi_VFSFileInterface.cpp
+                RmlUi_SystemInterface.h
+                RmlUi_Backend.h
+                RmlUi_Renderer_GL3_Recoil.h
+                RmlUi_VFSFileInterface.h
+            Components/
+                ElementLuaTexture.cpp
+                ElementLuaTexture.h
+        Lua/
+            LuaShaders.cpp
+            LuaMaterial.cpp
+            LuaZip.cpp
+            LuaFonts.cpp
+            LuaZip.h
+            LuaHashString.h
+            LuaHandle.h
+            LuaConstCMDTYPE.h
+            LuaVFS.cpp
+            LuaPathFinder.cpp
+            LuaConstEngine.cpp
+            LuaFBOs.h
+            LuaVAO.h
+            LuaVBOImpl.h
+            LuaVBOImpl.cpp
+            LuaConstEngine.h
+            LuaUICommand.h
+            CMakeLists.txt
+            LuaConstCMD.h
+            LuaAtlasTextures.h
+            LuaMathExtra.h
+            LuaRBOs.h
+            LuaConstCOB.cpp
+            LuaGarbageCollectCtrl.h
+            LuaShaders.h
+            LuaLibs.h
+            LuaUnitDefs.h
+            LuaMemPool.cpp
+            LuaRules.h
+            LuaMathExtra.cpp
+            LuaFeatureDefs.h
+            LuaScream.h
+            LuaAtlasTextures.cpp
+            LuaConstPlatform.h
+            LuaUnsyncedCtrl.cpp
+            LuaInterCall.cpp
+            LuaTableExtra.cpp
+            LuaConstGame.h
+            LuaRBOs.cpp
+            LuaRulesParams.cpp
+            LuaSyncedRead.cpp
+            LuaFBOs.cpp
+            LuaEncoding.h
+            LuaVBO.cpp
+            LuaPathFinder.h
+            LuaUI.cpp
+            LuaInputReceiver.h
+            LuaArchive.h
+            LuaSyncedMoveCtrl.cpp
+            LuaUtils.cpp
+            LuaObjectRendering.cpp
+            LuaDefs.h
+            LuaIntro.h
+            LuaObjectRendering.h
+            LuaConstCOB.h
+            LuaEncoding.cpp
+            LuaUnitDefs.cpp
+            LuaVFSDownload.cpp
+            LuaObjectMaterial.h
+            LuaMaterial.h
+            LuaUI.h
+            LuaInterCall.h
+            LuaArchive.cpp
+            LuaVFSDownload.h
+            LuaConstGL.h
+            LuaInputReceiver.cpp
+            LuaRules.cpp
+            LuaOpenGL.h
+            LuaWeaponDefs.cpp
+            LuaConstGL.cpp
+            LuaUnsyncedRead.cpp
+            LuaTableExtra.h
+            LuaWeaponDefs.h
+            LuaMemPool.h
+            LuaVAOImpl.h
+            LuaREADME.txt
+            LuaTracyExtra.cpp
+            LuaVAOImpl.cpp
+            LuaConfig.h
+            LuaOpenGLUtils.cpp
+            LuaCallInCheck.h
+            LuaUnsyncedCtrl.h
+            LuaSyncedRead.h
+            LuaHandle.cpp
+            LuaLibs.cpp
+            LuaSyncedTable.cpp
+            LuaOpenGL.cpp
+            LuaVAO.cpp
+            LuaConstCMD.cpp
+            LuaConstGame.cpp
+            LuaTracyExtra.h
+            LuaParser.cpp
+            LuaConstPlatform.cpp
+            LuaTextures.h
+            LuaIO.cpp
+            LuaFeatureDefs.cpp
+            LuaSyncedMoveCtrl.h
+            LuaHandleSynced.h
+            LuaUICommand.cpp
+            LuaMetalMap.cpp
+            LuaContextData.h
+            LuaFonts.h
+            LuaVFS.h
+            LuaGaia.h
+            LuaMenu.cpp
+            LuaUnsyncedRead.h
+            LuaRulesParams.h
+            LuaMenu.h
+            LuaScream.cpp
+            LuaHandleSynced.cpp
+            LuaUtils.h
+            LuaParser.h
+            LuaDisplayLists.h
+            LuaAllocState.h
+            LuaSyncedCtrl.h
+            LuaConstCMDTYPE.cpp
+            LuaIO.h
+            LuaTextures.cpp
+            LuaSyncedTable.h
+            LuaVBO.h
+            LuaMetalMap.h
+            LuaOpenGLUtils.h
+            LuaGaia.cpp
+            LuaSyncedCtrl.cpp
+            LuaIntro.cpp
+            library/
+                RulesSyncedCallins.lua
+                tracy.lua
+                RulesUnsyncedCallins.lua
+                Spring.lua
+                Script.lua
+                Types.lua
+        System/
+            UnorderedSet.hpp
+            TdfParser.cpp
+            MemoryOverride.cpp
+            UriParser.cpp
+            SpringMath.cpp
+            GflagsExt.h
+            CRC.cpp
+            TypeToStr.h
+            SafeVector.cpp
+            GameLoadThread.h
+            SafeUtil.h
+            type2.cpp
+            SplashScreen.hpp
+            GameLoadThread.cpp
+            TimeProfiler.h
+            GlobalRNG.h
+            SafeCStrings.h
+            EventHandler.h
+            CMakeLists.txt
+            StringConvertibleOptionalValue.h
+            AIScriptHandler.h
+            SpringApp.cpp
+            MsgStrings.h
+            GlobalConfig.h
+            SafeVector.h
+            StartScriptGen.cpp
+            MainDefines.h
+            StringHash.h
+            TimeProfiler.cpp
+            EventClient.cpp
+            GlobalConfig.cpp
+            BranchPrediction.h
+            CRC.h
+            XSimdOps.hpp
+            float3.cpp
+            Object.cpp
+            Transform.hpp
+            Exceptions.h
+            CompactVector.h
+            Matrix44f.h
+            Quaternion.h
+            AABB.cpp
+            Color.h
+            TemplateUtils.hpp
+            type2.h
+            StartScriptGen.h
+            TimeUtil.cpp
+            StringUtil.h
+            FastMath.h
+            SpringHashMap.hpp
+            MathConstants.h
+            Color.cpp
+            float4.cpp
+            AIScriptHandler.cpp
+            Cpp17Compat.hpp
+            Option.h
+            Option.cpp
+            float3.h
+            ObjectDependenceTypes.h
+            ExportDefines.h
+            SpringHash.h
+            SpringExitCode.h
+            TdfParser.h
+            Transform.cpp
+            LogOutput.h
+            TimeUtil.h
+            SpringFormat.h
+            AABB.hpp
+            MemPoolTypes.h
+            ContainerUtil.h
+            Cpp11Compat.hpp
+            SpringRegex.h
+            FreeListMap.h
+            ScopedResource.h
+            ForceInline.hpp
+            Quaternion.cpp
+            simd_compat.h
+            Rectangle.cpp
+            Object.h
+            SafeCStrings.c
+            SpringHashSet.hpp
+            LoadLock.h
+            EventClient.h
+            Matrix44f.cpp
+            float4.h
+            SpringMath.h
+            MemoryOverride.hpp
+            SpringApp.h
+            ScopedFPUSettings.h
+            QueueToMain.h
+            UnorderedMap.hpp
+            Rectangle.h
+            StringUtil.cpp
+            ChunkedArray.hpp
+            SplashScreen.cpp
+            Info.h
+            Info.cpp
+            LogOutput.cpp
+            SpringMacros.h
+            Main.cpp
+            TraceMemory.cpp
+            UriParser.h
+            ConcurrentQueue.h
+            EventHandler.cpp
+            HashSpec.h
+            Misc/
+                RectangleOverlapHandler.h
+                RectangleOverlapHandler.cpp
+                BitwiseEnum.h
+                SpringTime.h
+                NonCopyable.h
+                SpringTime.cpp
+                TracyDefs.h
+                UnfreezeSpring.h
+                Win/
+                    FpuExceptions.h
+            Net/
+                Connection.h
+                LoopbackConnection.h
+                LocalConnection.h
+                UDPConnection.h
+                CMakeLists.txt
+                RawPacket.cpp
+                RawPacket.h
+                Socket.cpp
+                UnpackPacket.h
+                ProtocolDef.cpp
+                LoopbackConnection.cpp
+                UDPListener.cpp
+                ProtocolDef.h
+                UnpackPacket.cpp
+                UDPListener.h
+                LocalConnection.cpp
+                PackPacket.cpp
+                UDPConnection.cpp
+                Exception.h
+                Socket.h
+                PackPacket.h
+            Config/
+                ConfigSource.h
+                ConfigVariable.h
+                ConfigLocater.cpp
+                ConfigHandler.cpp
+                ConfigSource.cpp
+                ConfigLocater.h
+                ConfigVariable.cpp
+                ConfigHandler.h
+            Input/
+                InputHandler.cpp
+                KeyInput.h
+                KeyInput.cpp
+                MouseInput.h
+                InputHandler.h
+                MouseInput.cpp
+            Platform/
+                MessageBox.h
+                ConsoleInit.cpp
+                errorhandler.h
+                SharedLib.h
+                Watchdog.h
+                errorhandler.cpp
+                byteorder.h
+                CpuID.h
+                Misc.cpp
+                Misc.h
+                Threading.h
+                WindowManagerHelper.h
+                CrashHandler.h
+                SharedLib.cpp
+                Watchdog.cpp
+                SDL1_keysym.cpp
+                ScopedFileLock.cpp
+                CpuTopologyCommon.cpp
+                SDL1_keysym.h
+                Clipboard.h
+                ScopedFileLock.h
+                ConsoleInit.hpp
+                ThreadAffinityGuard.cpp
+                Threading.cpp
+                Hardware.h
+                CpuTopology.h
+                Clipboard.cpp
+                CpuID.cpp
+                WindowManagerHelper.cpp
+                ThreadAffinityGuard.h
+                Win/
+                    Hardware.cpp
+                    WinVersion.h
+                    CriticalSection.cpp
+                    Future.h
+                    DllLib.cpp
+                    DllLib.h
+                    win32.h
+                    MessageBox.cpp
+                    seh.cpp
+                    CrashHandler.cpp
+                    CpuTopology.cpp
+                    Once.h
+                    CriticalSection.h
+                    WinVersion.cpp
+                    seh.h
+                    WindowManagerHelper.cpp
+                    Future.cpp
+                Mac/
+                    ThreadSupport.cpp
+                    SDLMain.h
+                    Signal.h
+                    MessageBox.cpp
+                    Signal.cpp
+                    CrashHandler.cpp
+                    CpuTopology.cpp
+                    WindowManagerHelper.cpp
+                Linux/
+                    ThreadSupport.cpp
+                    Hardware.cpp
+                    Futex.h
+                    Futex.cpp
+                    MessageBox.cpp
+                    SoLib.h
+                    CrashHandler.cpp
+                    CpuTopology.cpp
+                    WindowManagerHelper.cpp
+                    SoLib.cpp
+                    ThreadSupport.h
+            FileSystem/
+                FileSystem.h
+                GZFileHandler.h
+                ArchiveLoader.h
+                CMakeLists.txt
+                CacheDir.cpp
+                ArchiveNameResolver.h
+                GZFileHandler.cpp
+                FileFilter.h
+                VFSModes.h
+                Misc.cpp
+                ArchiveNameResolver.cpp
+                FileFilter.cpp
+                FileQueryFlags.h
+                FileSystemInitializer.h
+                RapidHandler.h
+                SimpleParser.h
+                ArchiveScanner.h
+                VFSHandler.h
+                DataDirLocater.cpp
+                FileHandler.h
+                CacheDir.h
+                FileSystem.cpp
+                SimpleParser.cpp
+                ArchiveScanner.cpp
+                DataDirsAccess.cpp
+                RapidHandler.cpp
+                FileSystemInitializer.cpp
+                VFSHandler.cpp
+                DataDirsAccess.h
+                ArchiveLoader.cpp
+                Misc.hpp
+                DataDirLocater.h
+                FileHandler.cpp
+                Archives/
+                    ZipArchive.cpp
+                    PoolArchive.cpp
+                    CMakeLists.txt
+                    IArchiveFactory.h
+                    BufferedArchive.h
+                    ZipArchive.h
+                    IArchive.h
+                    DirArchive.cpp
+                    DirArchive.h
+                    SevenZipArchive.cpp
+                    VirtualArchive.h
+                    SevenZipArchive.h
+                    IArchive.cpp
+                    ArchiveTypes.h
+                    BufferedArchive.cpp
+                    VirtualArchive.cpp
+                    PoolArchive.h
+            Ecs/
+                SlowUpdate.h
+                EcsMain.h
+                Utils/
+                    DoubleLinkedList.h
+                    SystemUtils.cpp
+                    SystemUtils.h
+                    SystemGlobalUtils.h
+                Components/
+                    BaseComponents.h
+            Math/
+                SpringDampers.cpp
+                expDecay.h
+                SpringDampers.h
+                NURBS.h
+                NURBS.cpp
+            LoadSave/
+                LuaLoadSaveHandler.h
+                CregLoadSaveHandler.cpp
+                CregLoadSaveHandler.h
+                Demo.h
+                DemoReader.h
+                DemoReader.cpp
+                LuaLoadSaveHandler.cpp
+                DemoRecorder.cpp
+                LoadSaveHandler.cpp
+                DemoRecorder.h
+                Demo.cpp
+                demofile.h
+                LoadSaveHandler.h
+            Log/
+                DefaultFilter.cpp
+                Backend.cpp
+                DefaultFormatter.cpp
+                DefaultFilter.h
+                FramePrefixer.cpp
+                StreamSink.cpp
+                Backend.h
+                LogSinkHandler.h
+                OutputDebugStringSink.cpp
+                FileSink.h
+                Section.h
+                LogUtil.c
+                TracySink.cpp
+                Level.h
+                ConsoleSink.h
+                FramePrefixer.h
+                DefaultFormatter.h
+                StreamSink.h
+                ConsoleSink.cpp
+                FileSink.cpp
+                ILog.h
+                LogUtil.h
+                LogSinkHandler.cpp
+            Sync/
+                Upcast.h
+                SyncedPrimitiveBase.h
+                SyncChecker.cpp
+                FPUCheck.cpp
+                DumpHistory.h
+                DumpHistory.cpp
+                DumpState.h
+                get_executable_name.c
+                SHA512.cpp
+                SyncedPrimitive.h
+                backtrace.c
+                SyncDebugger.h
+                FPUCheck.h
+                SHA512.hpp
+                SyncChecker.h
+                SyncedFloat3.h
+                SyncedPrimitiveIO.h
+                Logger.cpp
+                SyncedFloat3.cpp
+                SyncDebugger.cpp
+                Logger.h
+                DumpState.cpp
+            Threading/
+                ThreadPool.h
+                ThreadPool.cpp
+                WrappedSync.h
+                SpringThreading.h
+                AtomicFirstIndex.hpp
+            Sound/
+                CMakeLists.txt
+                ISound.cpp
+                ISound.h
+                IAudioChannel.h
+                SoundLog.h
+                ISoundChannels.h
+                IAudioChannel.cpp
+                OpenAL/
+                    EFXfuncs.cpp
+                    Sound.h
+                    SoundBuffer.h
+                    MusicStream.h
+                    Mp3Decoder.h
+                    MusicStream.cpp
+                    VorbisShared.cpp
+                    SoundChannels.cpp
+                    OggDecoder.cpp
+                    ALShared.cpp
+                    AudioChannel.h
+                    Mp3Decoder.cpp
+                    EFX.h
+                    EFXPresets.h
+                    SoundSource.cpp
+                    Sound.cpp
+                    ALShared.h
+                    SoundItem.cpp
+                    EFXfuncs.h
+                    SoundBuffer.cpp
+                    AudioChannel.cpp
+                    VorbisShared.h
+                    EFXPresets.cpp
+                    EFX.cpp
+                    SoundItem.h
+                    OggDecoder.h
+                    SoundSource.h
+                Null/
+                    SoundChannels.cpp
+                    NullSound.h
+                    NullSound.cpp
+                    NullAudioChannel.h
+            creg/
+                creg_cond.h
+                STL_Pair.h
+                STL_Queue.h
+                creg.h
+                STL_List.h
+                DefTypes.h
+                STL_Deque.h
+                creg_runtime_tests.h
+                SerializeLuaState.cpp
+                STL_Tuple.h
+                STL_Map.h
+                ISerializer.h
+                creg_runtime_tests.cpp
+                Serializer.h
+                STL_Variant.h
+                cregex.h
+                SerializeLuaState.h
+                STL_Bitset.h
+                STL_Set.h
+                BasicTypes.h
+                VarTypes.cpp
+                VarTypes.h
+                creg.cpp
+                Serializer.cpp
+                TypeDeduction.h
+        aGui/
+            LineEdit.cpp
+            Picture.h
+            VerticalLayout.cpp
+            CMakeLists.txt
+            Button.cpp
+            TextElement.cpp
+            VerticalLayout.h
+            Picture.cpp
+            Window.cpp
+            TextElement.h
+            Window.h
+            HorizontalLayout.h
+            Gui.h
+            List.h
+            Layout.h
+            Gui.cpp
+            List.cpp
+            Button.h
+            GuiElement.h
+            LineEdit.h
+            GuiElement.cpp
+            HorizontalLayout.cpp
+        Map/
+            MetalMap.cpp
+            BasicMapDamage.h
+            MapDamage.cpp
+            BasicMapDamage.cpp
+            MapDamage.h
+            MapDimensions.h
+            CMakeLists.txt
+            ReadMap.h
+            MapParser.h
+            Ground.cpp
+            HeightLinePalette.h
+            MapInfo.h
+            BaseGroundDrawer.h
+            NoMapDamage.h
+            MapTexture.h
+            MapDrawPassTypes.h
+            BaseGroundDrawer.cpp
+            MapParser.cpp
+            HeightLinePalette.cpp
+            Ground.h
+            ReadMap.cpp
+            MapInfo.cpp
+            BaseGroundTextures.h
+            MetalMap.h
+            SMF/
+                SMFReadMap.cpp
+                SMFMapFile.h
+                SMFGroundTextures.cpp
+                SMFGroundDrawer.h
+                SMFMapFile.cpp
+                SMFGroundTextures.h
+                SMFReadMap.h
+                IMeshDrawer.h
+                SMFFormat.h
+                SMFRenderState.h
+                SMFRenderState.cpp
+                SMFGroundDrawer.cpp
+                ROAM/
+                    Patch.cpp
+                    RoamMeshDrawer.h
+                    Patch.h
+                    RoamMeshDrawer.cpp
+                Basic/
+                    BasicMeshDrawer.h
+                    BasicMeshDrawer.cpp
+            Generation/
+                BlankMapGenerator.cpp
+                BlankMapGenerator.h
+        ExternalAI/
+            SAIInterfaceCallbackImpl.h
+            SkirmishAIWrapper.h
+            SkirmishAIBase.h
+            EngineOutHandler.cpp
+            SkirmishAIKey.h
+            SkirmishAILibrary.h
+            CMakeLists.txt
+            AILibraryManager.h
+            SkirmishAILibrary.cpp
+            AICallback.cpp
+            AILegacySupport.h
+            LuaAIImplHandler.h
+            AIInterfaceLibraryInfo.cpp
+            SAIInterfaceCallbackImpl.cpp
+            SkirmishAIHandler.cpp
+            SkirmishAIKey.cpp
+            AIInterfaceLibrary.cpp
+            SSkirmishAICallbackImpl.cpp
+            AICheats.cpp
+            AIInterfaceLibraryInfo.h
+            AISCommands.cpp
+            AICallback.h
+            LuaAIImplHandler.cpp
+            SkirmishAILibraryInfo.h
+            AIInterfaceLibrary.h
+            SSkirmishAICallbackImpl.h
+            SkirmishAIWrapper.cpp
+            AILibraryManager.cpp
+            SkirmishAIData.h
+            SkirmishAILibraryInfo.cpp
+            SkirmishAIData.cpp
+            AICheats.h
+            SkirmishAIHandler.h
+            AIInterfaceKey.h
+            AIInterfaceKey.cpp
+            EngineOutHandler.h
+            Interface/
+                SSkirmishAILibrary.h
+                ELevelOfSupport.h
+                SAIInterfaceCallback.h
+                SSkirmishAICallback.h
+                SAIInterfaceLibrary.h
+                aidefines.h
+                AISEvents.h
+                AISCommands.h
+        Menu/
+            SelectionWidget.h
+            CMakeLists.txt
+            alphanum.hpp
+            SelectionWidget.cpp
+            UpdaterWindow.h
+            SelectMenu.h
+            LuaMenuController.h
+            LuaMenuController.cpp
+            SelectMenu.cpp
+        Rendering/
+            HAPFSPathDrawer.h
+            CommandDrawer.h
+            InMapDrawView.cpp
+            GlobalRendering.h
+            DebugDrawerQuadField.h
+            HUDDrawer.h
+            CommandDrawer.cpp
+            ShadowHandler.cpp
+            WorldDrawer.h
+            GroundFlash.h
+            CMakeLists.txt
+            GlobalRenderingInfo.h
+            Screenshot.h
+            TeamHighlight.cpp
+            InMapDrawView.h
+            GroundFlash.cpp
+            QTPFSPathDrawer.cpp
+            DepthBufferCopy.cpp
+            IconHandler.h
+            Colors.h
+            DebugDrawerAI.cpp
+            QTPFSPathDrawer.h
+            HAPFSPathDrawer.cpp
+            VerticalSync.h
+            UniformConstants.cpp
+            UnitDefImage.h
+            IPathDrawer.h
+            SmoothHeightMeshDrawer.cpp
+            WorldDrawer.cpp
+            LineDrawer.cpp
+            LuaObjectDrawer.h
+            AVIGenerator.cpp
+            DebugDrawerQuadField.cpp
+            SmoothHeightMeshDrawer.h
+            AVIGenerator.h
+            IPathDrawer.cpp
+            IconHandler.cpp
+            ModelsDataUploader.cpp
+            DebugVisibilityDrawer.h
+            LuaObjectDrawer.cpp
+            DebugVisibilityDrawer.cpp
+            Screenshot.cpp
+            VerticalSync.cpp
+            DebugColVolDrawer.h
+            GroundFlashInfo.h
+            HUDDrawer.cpp
+            ModelsDataUploader.h
+            DebugDrawerAI.h
+            DebugColVolDrawer.cpp
+            ShadowHandler.h
+            GlobalRendering.cpp
+            UniformConstants.h
+            TeamHighlight.h
+            DepthBufferCopy.h
+            LineDrawer.h
+            Textures/
+                ColorMap.cpp
+                Bitmap.cpp
+                TextureCreationParams.hpp
+                RowAtlasAlloc.h
+                RowAtlasAlloc.cpp
+                Texture.cpp
+                AtlasedTexture.hpp
+                NamedTextures.h
+                TextureFormat.h
+                3DOTextureHandler.cpp
+                TextureRenderAtlas.cpp
+                TextureCreationParams.cpp
+                S3OTextureHandler.h
+                LegacyAtlasAlloc.cpp
+                TAPalette.cpp
+                nv_dds.cpp
+                AtlasedTexture.cpp
+                Texture.hpp
+                MultiPageAtlasAlloc.hpp
+                IAtlasAllocator.h
+                S3OTextureHandler.cpp
+                3DOTextureHandler.h
+                TextureAtlas.h
+                TextureAtlas.cpp
+                TextureRenderAtlas.h
+                ColorMap.h
+                NamedTextures.cpp
+                nv_dds.h
+                Bitmap.h
+                TextureCollection.cpp
+                QuadtreeAtlasAlloc.h
+                TextureFormat.cpp
+                QuadtreeAtlasAlloc.cpp
+                TextureCollection.h
+                IAtlasAllocator.cpp
+                TAPalette.h
+                LegacyAtlasAlloc.h
+            Features/
+                FeatureDrawer.h
+                FeatureDrawerData.h
+                FeatureDrawerData.cpp
+                FeatureDrawer.cpp
+            Models/
+                3DModel.hpp
+                AssParser.h
+                3DModelPiece.hpp
+                ModelsMemStorage.cpp
+                VertexData.cpp
+                ModelsMemStorageDefs.h
+                AssIO.h
+                3DModelDefs.hpp
+                3DModelVAO.hpp
+                S3OParser.h
+                3DOParser.h
+                LocalModelPiece.hpp
+                IModelParser.cpp
+                3DModelMisc.hpp
+                LocalModel.hpp
+                ModelsMemStorageDefs.cpp
+                3DModelVAO.cpp
+                LocalModelPiece.cpp
+                3DModelLog.h
+                s3o.h
+                IModelParser.h
+                3DModelMisc.cpp
+                3DOParser.cpp
+                LocalModel.cpp
+                ModelsLock.h
+                ModelsMemStorage.h
+                S3OParser.cpp
+                AssIO.cpp
+                3DModel.cpp
+                GLTFParser.h
+                3DModelPiece.cpp
+                VertexData.hpp
+                ModelUtils.h
+                ModelRenderContainer.h
+                GLTFParser.cpp
+                AssParser.cpp
+                ModelUtils.cpp
+            Env/
+                BumpWater.h
+                IWater.h
+                AdvWater.cpp
+                CubeMapHandler.cpp
+                BasicWater.h
+                SkyBox.h
+                RefractWater.h
+                AdvWater.h
+                IGroundDecalDrawer.cpp
+                SunLighting.h
+                IWater.cpp
+                IGroundDecalDrawer.h
+                DynWater.cpp
+                DebugCubeMapTexture.h
+                WaterRendering.cpp
+                ISky.h
+                MapRendering.h
+                SkyBox.cpp
+                BumpWater.cpp
+                SkyLight.h
+                GrassDrawer.cpp
+                SunLighting.cpp
+                NullSky.h
+                DynWater.h
+                RefractWater.cpp
+                MapRendering.cpp
+                ModernSky.h
+                NullSky.cpp
+                GrassDrawer.h
+                ISky.cpp
+                SkyLight.cpp
+                ModernSky.cpp
+                BasicWater.cpp
+                CubeMapHandler.h
+                DebugCubeMapTexture.cpp
+                WaterRendering.h
+                Particles/
+                    ProjectileDrawer.h
+                    ProjectileDrawer.cpp
+                    Classes/
+                        SimpleParticleSystem.h
+                        RepulseGfx.h
+                        ShieldSegmentProjectile.h
+                        TracerProjectile.cpp
+                        MuzzleFlame.cpp
+                        GeoSquareProjectile.cpp
+                        BubbleProjectile.h
+                        ExploSpikeProjectile.cpp
+                        BitmapMuzzleFlame.cpp
+                        SmokeProjectile.cpp
+                        TracerProjectile.h
+                        WakeProjectile.cpp
+                        RepulseGfx.cpp
+                        SimpleParticleSystem.cpp
+                        GeoSquareProjectile.h
+                        SmokeProjectile.h
+                        DirtProjectile.h
+                        DirtProjectile.cpp
+                        WreckProjectile.h
+                        BitmapMuzzleFlame.h
+                        HeatCloudProjectile.h
+                        ExploSpikeProjectile.h
+                        SmokeProjectile2.h
+                        SmokeTrailProjectile.h
+                        FlyingPiece.h
+                        MuzzleFlame.h
+                        NanoProjectile.cpp
+                        WreckProjectile.cpp
+                        SmokeTrailProjectile.cpp
+                        SmokeProjectile2.cpp
+                        FlyingPiece.cpp
+                        SpherePartProjectile.cpp
+                        WakeProjectile.h
+                        HeatCloudProjectile.cpp
+                        NanoProjectile.h
+                        SpherePartProjectile.h
+                        GeoThermSmokeProjectile.h
+                        ShieldSegmentProjectile.cpp
+                        BubbleProjectile.cpp
+                        GeoThermSmokeProjectile.cpp
+                Decals/
+                    GroundDecalHandler.h
+                    GroundDecal.cpp
+                    GroundDecal.h
+                    GroundDecalHandler.cpp
+            Units/
+                UnitDrawerData.h
+                UnitDrawer.h
+                UnitDrawer.cpp
+                UnitDrawerData.cpp
+            Common/
+                ModelDrawerHelpers.cpp
+                ModelDrawer.h
+                ModelDrawerData.cpp
+                ModelDrawerState.cpp
+                ModelDrawer.cpp
+                UpdateList.cpp
+                UpdateList.h
+                ModelDrawerData.h
+                ModelDrawerState.hpp
+                ModelDrawerHelpers.h
+            Map/
+                InfoTexture/
+                    IInfoTextureHandler.cpp
+                    IInfoTextureHandler.h
+                    InfoTexture.h
+                    InfoTexture.cpp
+                    Modern/
+                        Los.cpp
+                        ModernInfoTexture.h
+                        InfoTextureHandler.h
+                        MetalExtraction.h
+                        Los.h
+                        AirLos.h
+                        Path.h
+                        AirLos.cpp
+                        Height.cpp
+                        ModernInfoTexture.cpp
+                        MetalExtraction.cpp
+                        Height.h
+                        InfoTextureHandler.cpp
+                        Radar.cpp
+                        Combiner.h
+                        Combiner.cpp
+                        Path.cpp
+                        Metal.h
+                        Metal.cpp
+                        Radar.h
+            GL/
+                LightHandler.cpp
+                StreamBuffer.cpp
+                FBO.cpp
+                TexBind.h
+                myGL.h
+                Light.h
+                glxHandler.h
+                VertexArrayTypes.h
+                VertexArray.cpp
+                glDebugGroup.hpp
+                VAO.cpp
+                State.cpp
+                VBO.h
+                myGL.cpp
+                FBO.h
+                GeometryBuffer.h
+                PBO.h
+                RenderBuffersFwd.h
+                StreamBuffer.h
+                glDebugGroup.cpp
+                RenderBuffers.h
+                SubState.h
+                glExtra.cpp
+                VBO.cpp
+                glStateDebug.cpp
+                VertexArray.h
+                glExtra.h
+                VAO.h
+                RenderBuffers.cpp
+                glHelpers.h
+                VertexArrayTypes.cpp
+                State.h
+                GeometryBuffer.cpp
+                glxHandler.cpp
+                MatrixStateTracker.h
+                LightHandler.h
+                glStateDebug.h
+            Shaders/
+                LuaShaderContainer.cpp
+                ShaderStates.h
+                Shader.h
+                ShaderHandler.cpp
+                ShaderHandler.h
+                LuaShaderContainer.h
+                GLSLCopyState.cpp
+                Shader.cpp
+                GLSLCopyState.h
+                ShaderStates.cpp
+            Fonts/
+                glFontRenderer.cpp
+                FontHandler.h
+                ustring.h
+                CFontTexture.h
+                FontHandler.cpp
+                glFont.h
+                TextWrap.h
+                glFont.cpp
+                TextWrap.cpp
+                glFontRenderer.h
+                CFontTexture.cpp
+                FontLogSection.h
+            Gfx/
+                IFramebuffer.h
+                IRenderTarget.h
+                IVertexBuffer.h
+                IShaderProgram.h
+                IGraphicsBackend.h
+                IVertexArray.h
+                IShader.h
+                ITexture.h
+                GfxTypes.h
+                Vulkan/
+                    VulkanShaderProgram.cpp
+                    VulkanFramebuffer.h
+                    VulkanShaderProgram.h
+                    VulkanFramebuffer.cpp
+                    VulkanVertexArray.cpp
+                    VulkanTexturedBatchShaders.h
+                    VulkanGraphicsBackend.cpp
+                    VulkanShader.cpp
+                    VulkanVertexBuffer.cpp
+                    VulkanVertexBuffer.h
+                    VulkanTexture.h
+                    VulkanGraphicsBackend.h
+                    VulkanVertexArray.h
+                    VulkanTexture.cpp
+                    VulkanShader.h
+                GL/
+                    GLVertexArray.cpp
+                    GLShaderProgram.h
+                    GLFramebuffer.cpp
+                    GLTexture.cpp
+                    GLShader.cpp
+                    GLShaderProgram.cpp
+                    GLFramebuffer.h
+                    GLGraphicsBackend.h
+                    GLVertexBuffer.h
+                    GLVertexArray.h
+                    GLGraphicsBackend.cpp
+                    GLVertexBuffer.cpp
+                    GLTexture.h
+                    GLShader.h
+        Sim/
+            CMakeLists.txt
+            Misc/
+                CollisionVolume.cpp
+                TeamBase.cpp
+                QuadField.cpp
+                CollisionHandler.cpp
+                NanoPieceCache.cpp
+                BuildingMaskMap.cpp
+                TeamHandler.h
+                LosHandler.cpp
+                GlobalSynced.h
+                ModInfo.cpp
+                QuadField.h
+                DefinitionTag.h
+                TeamHandler.cpp
+                CollisionHandler.h
+                Resource.cpp
+                GeometricObjects.h
+                InterceptHandler.h
+                YardmapStatusEffectsMap.cpp
+                LosHandler.h
+                DamageArrayHandler.cpp
+                ResourceHandler.h
+                DamageArray.cpp
+                ResourceHandler.cpp
+                DamageArray.h
+                TeamStatistics.cpp
+                CommonDefHandler.cpp
+                SideParser.cpp
+                SimObjectIDPool.h
+                LosMap.cpp
+                AllyTeam.cpp
+                ResourceMapAnalyzer.h
+                LosMap.h
+                Wind.cpp
+                BuildingMaskMap.h
+                GroundBlockingObjectMap.h
+                Resource.h
+                DamageArrayHandler.h
+                CategoryHandler.h
+                CollisionVolume.h
+                GeometricObjects.cpp
+                GlobalConstants.h
+                CommonDefHandler.h
+                GuiSoundSet.h
+                NanoPieceCache.h
+                GroundBlockingObjectMap.cpp
+                Wind.h
+                Team.cpp
+                SmoothHeightMesh.cpp
+                InterceptHandler.cpp
+                SmoothHeightMesh.h
+                AllyTeam.h
+                SideParser.h
+                ResourceMapAnalyzer.cpp
+                CategoryHandler.cpp
+                YardmapStatusEffectsMap.h
+                ModInfo.h
+                DefinitionTag.cpp
+                TeamBase.h
+                TeamStatistics.h
+                Team.h
+                SimObjectIDPool.cpp
+                GlobalSynced.cpp
+            Path/
+                IPathManager.h
+                IPathManager.cpp
+                IPathController.cpp
+                PFSTypes.h
+                IPathController.h
+                QTPFS/
+                    NodeHeap.h
+                    PathManager.cpp
+                    Path.h
+                    PathManager.h
+                    Node.cpp
+                    PathSearch.cpp
+                    PathCache.h
+                    PathDefines.h
+                    Node.h
+                    PathSearch.h
+                    PathThreads.h
+                    Registry.h
+                    PathEnums.h
+                    Registry.cpp
+                    PathCache.cpp
+                    NodeLayer.cpp
+                    NodeLayer.h
+                    Utils/
+                        PathSpeedModInfoSystemUtils.h
+                        DestroyEntityUtils.h
+                        SyncUpdatedPathsSystemUtils.h
+                    Components/
+                        Path.h
+                        PathSpeedModInfo.h
+                        SyncUpdatedPaths.h
+                        RemoveDeadPaths.h
+                    Systems/
+                        SyncUpdatedPathsSystem.h
+                        RequeuePathsSystem.cpp
+                        SyncUpdatedPathsSystem.cpp
+                        RemoveDeadPathsSystem.cpp
+                        PathSpeedModInfoSystem.cpp
+                        RemoveDeadPathsSystem.h
+                        RequeuePathsSystem.h
+                        PathSpeedModInfoSystem.h
+                HAPFS/
+                    PathEstimator.h
+                    PathFlowMap.cpp
+                    PathHeatMap.h
+                    PathFinder.cpp
+                    PathManager.cpp
+                    IPath.h
+                    PathManager.h
+                    PathCache.h
+                    PathLog.h
+                    PathFinderDef.h
+                    PathSearch.h
+                    Registry.h
+                    IPathFinder.h
+                    PathHeatMap.cpp
+                    PathEstimator.cpp
+                    Registry.cpp
+                    PathCache.cpp
+                    PathFinder.h
+                    PathFinderDef.cpp
+                    PathingState.h
+                    PathDataTypes.h
+                    PathingState.cpp
+                    PathConstants.h
+                    PathMemPool.h
+                    PathGlobal.h
+                    PathFlowMap.hpp
+                    IPathFinder.cpp
+            Features/
+                FeatureHandler.cpp
+                FeatureDef.h
+                Feature.h
+                FeatureDefHandler.h
+                FeatureDef.cpp
+                FeatureHandler.h
+                FeatureMemPool.h
+                FeatureDefHandler.cpp
+                Feature.cpp
+            Objects/
+                SolidObject.h
+                SolidObjectDef.h
+                WorldObject.h
+                WorldObject.cpp
+                SolidObjectDef.cpp
+                SolidObject.cpp
+            Weapons/
+                WeaponTarget.h
+                FlameThrower.cpp
+                TorpedoLauncher.cpp
+                WeaponDef.h
+                DGunWeapon.cpp
+                StarburstLauncher.cpp
+                WeaponLoader.h
+                Rifle.h
+                LightningCannon.cpp
+                BombDropper.cpp
+                NoWeapon.cpp
+                BeamLaser.cpp
+                LaserCannon.cpp
+                Weapon.cpp
+                PlasmaRepulser.cpp
+                FlameThrower.h
+                BombDropper.h
+                TorpedoLauncher.h
+                EmgCannon.h
+                Cannon.cpp
+                MeleeWeapon.h
+                Weapon.h
+                WeaponTarget.cpp
+                MissileLauncher.cpp
+                Cannon.h
+                WeaponMemPool.h
+                NoWeapon.h
+                LaserCannon.h
+                StarburstLauncher.h
+                WeaponDef.cpp
+                PlasmaRepulser.h
+                MissileLauncher.h
+                EmgCannon.cpp
+                BeamLaser.h
+                Rifle.cpp
+                WeaponDefHandler.h
+                LightningCannon.h
+                MeleeWeapon.cpp
+                WeaponLoader.cpp
+                DGunWeapon.h
+                WeaponDefHandler.cpp
+            Ecs/
+                Helper.h
+                SaveLoadUtils.cpp
+                Helper.cpp
+                Registry.h
+                Registry.cpp
+                SaveLoadUtils.h
+            Units/
+                BuildInfo.cpp
+                UnitDefHandler.h
+                BuildInfo.h
+                UnitToolTipMap.cpp
+                UnitLoader.h
+                UnitHandler.cpp
+                Unit.h
+                UnitDefHandler.cpp
+                Unit.cpp
+                UnitLoader.cpp
+                UnitHandler.h
+                UnitMemPool.h
+                UnitToolTipMap.hpp
+                UnitDef.h
+                UnitDef.cpp
+                UnitTypes/
+                    Building.cpp
+                    Builder.cpp
+                    ExtractorBuilding.cpp
+                    Building.h
+                    Builder.h
+                    ExtractorBuilding.h
+                    Factory.cpp
+                    Factory.h
+                CommandAI/
+                    BuilderCAI.h
+                    AirCAI.h
+                    CommandAI.cpp
+                    CommandDescription.h
+                    FactoryCAI.cpp
+                    CommandAI.h
+                    CommandDescription.cpp
+                    FactoryCAI.h
+                    BuilderCaches.h
+                    Command.cpp
+                    CommandParamsPool.hpp
+                    BuilderCaches.cpp
+                    MobileCAI.h
+                    Command.h
+                    AirCAI.cpp
+                    CommandQueue.h
+                    BuilderCAI.cpp
+                    MobileCAI.cpp
+                Scripts/
+                    CobInstance.cpp
+                    UnitScriptFactory.h
+                    UnitScriptEngine.cpp
+                    CobFile.cpp
+                    LuaScriptNames.cpp
+                    CobThread.h
+                    NullUnitScript.h
+                    CobThread.cpp
+                    CobDefines.h
+                    UnitScriptEngine.h
+                    CobOpCodes.h
+                    CobDeferredCallin.cpp
+                    UnitScript.cpp
+                    LuaUnitScript.h
+                    CobScriptNames.cpp
+                    LuaUnitScript.cpp
+                    UnitScript.h
+                    LuaScriptNames.h
+                    UnitScriptFactory.cpp
+                    CobFileHandler.cpp
+                    NullUnitScript.cpp
+                    CobEngine.h
+                    CobFileHandler.h
+                    CobFile.h
+                    CobScriptNames.h
+                    CobEngine.cpp
+                    CobInstance.h
+                    CobDeferredCallin.h
+            Projectiles/
+                ExplosionListener.cpp
+                Projectile.h
+                ExplosionGenerator.cpp
+                ProjectileMemPool.h
+                ProjectileHandler.h
+                ExpGenSpawnable.h
+                FlareProjectile.h
+                FlareProjectile.cpp
+                PieceProjectile.h
+                Projectile.cpp
+                ExplosionGenerator.h
+                ExpGenSpawnable.cpp
+                ExpGenSpawner.cpp
+                PieceProjectile.cpp
+                ProjectileHandler.cpp
+                ExpGenSpawnableMemberInfo.h
+                FireProjectile.h
+                ProjectileParams.h
+                ExplosionListener.h
+                ExpGenSpawner.h
+                FireProjectile.cpp
+                WeaponProjectiles/
+                    ExplosiveProjectile.cpp
+                    FireBallProjectile.h
+                    FireBallProjectile.cpp
+                    LargeBeamLaserProjectile.h
+                    WeaponProjectileFactory.h
+                    BeamLaserProjectile.h
+                    BeamLaserProjectile.cpp
+                    FlameProjectile.h
+                    ExplosiveProjectile.h
+                    LaserProjectile.cpp
+                    WeaponProjectileTypes.h
+                    MissileProjectile.h
+                    EmgProjectile.cpp
+                    WeaponProjectileFactory.cpp
+                    TorpedoProjectile.cpp
+                    FlameProjectile.cpp
+                    MissileProjectile.cpp
+                    LaserProjectile.h
+                    WeaponProjectile.cpp
+                    LargeBeamLaserProjectile.cpp
+                    EmgProjectile.h
+                    StarburstProjectile.cpp
+                    LightningProjectile.h
+                    StarburstProjectile.h
+                    LightningProjectile.cpp
+                    WeaponProjectile.h
+                    TorpedoProjectile.h
+            MoveTypes/
+                MoveTypeFactory.h
+                StrafeAirMoveType.h
+                MoveTypeFactory.cpp
+                MoveType.cpp
+                AAirMoveType.cpp
+                AAirMoveType.h
+                StaticMoveType.h
+                GroundMoveType.h
+                MoveType.h
+                StrafeAirMoveType.cpp
+                GroundMoveType.cpp
+                MoveDefHandler.cpp
+                MoveDefHandler.h
+                HoverAirMoveType.cpp
+                ScriptMoveType.cpp
+                StaticMoveType.cpp
+                ScriptMoveType.h
+                HoverAirMoveType.h
+                MoveMath/
+                    GroundMoveMath.cpp
+                    HoverMoveMath.cpp
+                    MoveMath.cpp
+                    MoveMath.h
+                    ShipMoveMath.cpp
+                Utils/
+                    UnitTrapCheckUtils.cpp
+                    UnitTrapCheckUtils.h
+                Components/
+                    MoveTypesComponents.h
+                    MoveTypesEvents.h
+                Systems/
+                    UnitTrapCheckSystem.h
+                    GroundMoveSystem.cpp
+                    GroundMoveSystem.h
+                    GeneralMoveSystem.h
+                    UnitTrapCheckSystem.cpp
+                    GeneralMoveSystem.cpp
+    run_game/
+        include/
+            tracy/
+                TracyOpenGL.hpp
+                Tracy.hpp
+                TracyD3D11.hpp
+                TracyD3D12.hpp
+                TracyVulkan.hpp
+                TracyOpenCL.hpp
+                TracyLua.hpp
+                TracyC.h
+            RmlUi/
+                Core.h
+                Debugger.h
+                Lua.h
+                SVG/
+                    ElementSVG.h
+                Core/
+                    RenderInterfaceCompatibility.h
+                    Box.h
+                    Tween.h
+                    RenderManager.h
+                    Vertex.h
+                    DataStructHandle.h
+                    Animation.h
+                    Input.h
+                    Debug.h
+                    Core.h
+                    Traits.h
+                    XMLParser.h
+                    FontMetrics.h
+                    Plugin.h
+                    TextShapingContext.h
+                    PropertySpecification.h
+                    ElementText.h
+                    StyleSheetSpecification.h
+                    Header.h
+                    ComputedValues.h
+                    FontGlyph.h
+                    PropertyIdSet.h
+                    ScrollTypes.h
+                    EventListener.h
+                    TransformPrimitive.h
+                    Vector2.h
+                    ObserverPtr.h
+                    FontEffectInstancer.h
+                    DataModelHandle.h
+                    Event.h
+                    Types.h
+                    ElementScroll.h
+                    PropertyDictionary.h
+                    PropertyParser.h
+                    FontEngineInterface.h
+                    CompiledFilterShader.h
+                    FontEffect.h
+                    StyleTypes.h
+                    Utilities.h
+                    Colour.h
+                    Context.h
+                    ContextInstancer.h
+                    ID.h
+                    StyleSheetTypes.h
+                    TextInputHandler.h
+                    DataVariable.h
+                    Unit.h
+                    ElementUtilities.h
+                    ScriptInterface.h
+                    Stream.h
+                    Mesh.h
+                    CallbackTexture.h
+                    DataTypes.h
+                    Matrix4.h
+                    DataTypeRegister.h
+                    Element.h
+                    Dictionary.h
+                    EventInstancer.h
+                    Log.h
+                    URL.h
+                    FileInterface.h
+                    MeshUtilities.h
+                    BaseXMLParser.h
+                    StringUtilities.h
+                    Vector4.h
+                    StreamMemory.h
+                    TypeConverter.h
+                    Transform.h
+                    XMLNodeHandler.h
+                    RenderInterface.h
+                    SystemInterface.h
+                    ElementInstancer.h
+                    Math.h
+                    UniqueRenderResource.h
+                    Decorator.h
+                    Profiling.h
+                    Texture.h
+                    Span.h
+                    StyleSheetContainer.h
+                    RenderBox.h
+                    PropertiesIteratorView.h
+                    Spritesheet.h
+                    Property.h
+                    Rectangle.h
+                    DecorationTypes.h
+                    EventListenerInstancer.h
+                    StableVector.h
+                    Filter.h
+                    Platform.h
+                    EffectSpecification.h
+                    TextInputContext.h
+                    Vector3.h
+                    NumericValue.h
+                    Geometry.h
+                    ConvolutionFilter.h
+                    Factory.h
+                    ElementDocument.h
+                    Variant.h
+                    PropertyDefinition.h
+                    StyleSheet.h
+                    Elements/
+                        ElementTabSet.h
+                        ElementFormControlInput.h
+                        ElementForm.h
+                        ElementFormControlSelect.h
+                        ElementProgress.h
+                        ElementFormControl.h
+                        ElementFormControlTextArea.h
+                    Containers/
+                        robin_hood.h
+                        LICENSE.txt
+                        itlib/
+                            flat_map.hpp
+                            flat_set.hpp
+                Config/
+                    Config.h
+                Lua/
+                    Header.h
+                    LuaType.h
+                    Interpreter.h
+                    Utilities.h
+                    IncludeLua.h
+                    Lua.h
+                Lottie/
+                    ElementLottie.h
+                Debugger/
+                    Header.h
+                    Debugger.h
+            plutovg/
+                plutovg.h
+            common/
+                TracyYield.hpp
+                tracy_lz4hc.hpp
+                TracySystem.hpp
+                TracyProtocol.hpp
+                TracyQueue.hpp
+                TracyUwp.hpp
+                TracyAlloc.hpp
+                TracyAlign.hpp
+                TracyForceInline.hpp
+                TracyColor.hpp
+                tracy_lz4.hpp
+                TracyStackFrames.hpp
+                TracySocket.hpp
+                TracyApi.h
+                TracyMutex.hpp
+            lunasvg/
+                lunasvg.h
+            mimalloc-3.2/
+                mimalloc.h
+                mimalloc-stats.h
+                mimalloc-override.h
+                mimalloc-new-delete.h
+            fastgltf/
+                dxmath_element_traits.hpp
+                tools.hpp
+                math.hpp
+                glm_element_traits.hpp
+                util.hpp
+                types.hpp
+                core.hpp
+                base64.hpp
+            client/
+                TracyScoped.hpp
+                TracyStringHelpers.hpp
+                TracyCpuid.hpp
+                TracySysTrace.hpp
+                TracyDxt1.hpp
+                tracy_concurrentqueue.h
+                TracyRingBuffer.hpp
+                tracy_rpmalloc.hpp
+                TracyDebug.hpp
+                TracyKCore.hpp
+                TracyLock.hpp
+                TracyThread.hpp
+                TracyArmCpuTable.hpp
+                TracyProfiler.hpp
+                TracyCallstack.hpp
+                TracySysTime.hpp
+                TracyFastVector.hpp
+                tracy_SPSCQueue.h
+                TracySysPower.hpp
+                TracyCallstack.h
+    AI/
+        CMakeLists.txt
+        Wrappers/
+            CMakeLists.txt
+            CUtils/
+                SharedLibrary.h
+                SimpleProfiler.cpp
+                CMakeLists.txt
+                Util.c
+                SimpleLog.h
+                TimeUtil.cpp
+                SimpleProfiler.h
+                SharedLibrary.c
+                TimeUtil.h
+                Util.h
+                SimpleLog.c
+                bin/
+            Cpp/
+                CMakeLists.txt
+                bin/
+                src/
+                    AIEvent.cpp
+                    AIColor.h
+                    AIFloat3.cpp
+                    AIException.cpp
+                    AIEvent.h
+                    CallbackAIException.h
+                    AIColor.cpp
+                    EventAIException.cpp
+                    AIException.h
+                    AIFloat3.h
+                    EventAIException.h
+                    CallbackAIException.cpp
+            JavaOO/
+                CMakeLists.txt
+                bin/
+                jlib/
+                src/
+                    main/
+                        java/
+                            com/
+                                springrts/
+                                    ai/
+                                        oo/
+            LegacyCpp/
+                AIAI.h
+                WeaponDef.h
+                CMakeLists.txt
+                FeatureDef.h
+                AIGlobalAICallback.h
+                MoveData.h
+                aibase.h
+                IGlobalAICallback.h
+                AIAICheats.cpp
+                IAICallback.h
+                DamageArray.cpp
+                DamageArray.h
+                AIAI.cpp
+                AIAICallback.h
+                AIAICallback.cpp
+                AIAICheats.h
+                AIGlobalAICallback.cpp
+                MoveData.cpp
+                IAICheats.h
+                CommandQueue.h
+                UnitDef.h
+                UnitDef.cpp
+                IGlobalAI.h
+                Event/
+                    AISeismicPingEvent.h
+                    AIUnitCreatedEvent.h
+                    AIEnemyDestroyedEvent.h
+                    AIEnemyLeaveLOSEvent.h
+                    AIEnemyFinishedEvent.h
+                    AIUnitIdleEvent.h
+                    AIChatMessageEvent.h
+                    AIUnitDamagedEvent.h
+                    AIUpdateEvent.h
+                    AIWeaponFiredEvent.h
+                    AIUnitFinishedEvent.h
+                    AIPlayerCommandEvent.h
+                    AIEnemyLeaveRadarEvent.h
+                    AIUnitGivenEvent.h
+                    AIEvent.h
+                    AIUnitMoveFailedEvent.h
+                    AIEnemyEnterRadarEvent.h
+                    AIReleaseEvent.h
+                    AINullEvent.h
+                    AIEnemyDamagedEvent.h
+                    AIUnitCapturedEvent.h
+                    AIUnitDestroyedEvent.h
+                    AILuaMessageEvent.h
+                    AIEnemyCreatedEvent.h
+                    AIEnemyEnterLOSEvent.h
+                    AIInitEvent.h
+        Skirmish/
+            CMakeLists.txt
+            BARb/
+                CMakeLists.txt
+                util/
+                    tracy.txt
+                    cpu_load.cpp
+                    fibR.lua
+                    weight_normal.txt
+                    LuaRules/
+                        Gadgets/
+                            ai_chokepoint.lua
+                            ai_dbg_map.lua
+                platform/
+                    angelscript/
+                        jit/
+                            virtual_asm_linux.cpp
+                            virtual_asm_x86.cpp
+                            as_jit.cpp
+                            virtual_asm_windows.cpp
+                            virtual_asm_x64.cpp
+                            virtual_asm.h
+                doc/
+                data/
+                    AIInfo.lua
+                    AIOptions.lua
+                    config/
+                        dev/
+                    script/
+                        dev/
+                            misc/
+                            manager/
+                src/
+                    AIExport.h
+                    AIExport.cpp
+                    circuit/
+                        CircuitAI.cpp
+                        CircuitAI.h
+                        unit/
+                            FactoryData.cpp
+                            CircuitUnit.cpp
+                            CircuitDef.cpp
+                            CircuitUnit.h
+                            CircuitWDef.cpp
+                            CoreUnit.h
+                            CircuitWDef.h
+                            FactoryData.h
+                            CircuitDef.h
+                            ally/
+                                AllyUnit.h
+                                AllyTeam.cpp
+                                AllyTeam.h
+                                AllyUnit.cpp
+                            enemy/
+                                EnemyManager.cpp
+                                EnemyUnit.h
+                                EnemyUnit.cpp
+                                EnemyManager.h
+                            action/
+                                WaitAction.h
+                                DGunAction.h
+                                SupportAction.h
+                                CaptureAction.cpp
+                                AntiCapAction.cpp
+                                WaitAction.cpp
+                                SupportAction.cpp
+                                MoveAction.cpp
+                                CaptureAction.h
+                                DGunAction.cpp
+                                FightAction.h
+                                MoveAction.h
+                                AntiCapAction.h
+                                FightAction.cpp
+                                IdleAction.cpp
+                                UnitAction.h
+                                RearmAction.h
+                                RearmAction.cpp
+                                TravelAction.cpp
+                                TravelAction.h
+                                IdleAction.h
+                                UnitAction.cpp
+                        util/
+                            ActionList.h
+                            FileSystem.h
+                            MaskHandler.cpp
+                            GameAttribute.h
+                            Utils.h
+                            MultiQueue.h
+                            Profiler.cpp
+                            AvailList.h
+                            Data.h
+                            Container.h
+                            ActionList.cpp
+                            GameAttribute.cpp
+                            Defines.h
+                            Action.h
+                            DebugDrawer.h
+                            MaskHandler.h
+                            DebugDrawer.cpp
+                            Profiler.h
+                            Action.cpp
+                            MultiQueue.hpp
+                            math/
+                                poly1tri.cpp
+                                QuadField.cpp
+                                EncloseCircle.h
+                                HierarchCluster.cpp
+                                GaussSolver.h
+                                QuadField.h
+                                ApproxMNK.h
+                                EncloseCircle.cpp
+                                LagrangeInterPol.cpp
+                                KMeansCluster.cpp
+                                ApproxMNK.cpp
+                                RayBox.h
+                                LagrangeInterPol.h
+                                poly1tri.h
+                                GaussSolver.cpp
+                                RagMatrix.h
+                                HierarchCluster.h
+                                ConvexHull.cpp
+                                KMeansCluster.h
+                                Region.cpp
+                                Region.h
+                                ConvexHull.h
+                                RayBox.cpp
+                                Geometry.h
+                        module/
+                            EconomyManager.cpp
+                            Module.cpp
+                            EconomyManager.h
+                            BuilderManager.cpp
+                            BuilderManager.h
+                            MilitaryManager.h
+                            TaskModule.cpp
+                            FactoryManager.cpp
+                            Module.h
+                            TaskModule.h
+                            MilitaryManager.cpp
+                            FactoryManager.h
+                        setup/
+                            DefenceData.h
+                            SetupData.cpp
+                            SetupManager.h
+                            SetupManager.cpp
+                            SetupData.h
+                            DefenceData.cpp
+                        scheduler/
+                            SchedulerJob.h
+                            Scheduler.h
+                            Scheduler.cpp
+                        script/
+                            FactoryScript.cpp
+                            ModuleScript.h
+                            MilitaryScript.h
+                            EconomyScript.h
+                            Script.h
+                            EconomyScript.cpp
+                            Script.cpp
+                            SetupScript.cpp
+                            BuilderScript.h
+                            TaskModuleScript.h
+                            BuilderScript.cpp
+                            FactoryScript.h
+                            SetupScript.h
+                            TaskModuleScript.cpp
+                            InitScript.cpp
+                            ScriptManager.cpp
+                            MilitaryScript.cpp
+                            ScriptManager.h
+                            InitScript.h
+                            ModuleScript.cpp
+                            RefCounter.cpp
+                            RefCounter.h
+                        map/
+                            InfluenceMap.cpp
+                            MapManager.h
+                            ThreatMap.h
+                            ThreatMap.cpp
+                            GridAnalyzer.cpp
+                            GridAnalyzer.h
+                            InfluenceMap.h
+                            MapManager.cpp
+                        task/
+                            RetreatTask.h
+                            UnitTask.cpp
+                            RearmTask.cpp
+                            UnitTask.h
+                            IdleTask.cpp
+                            RearmTask.h
+                            RetreatTask.cpp
+                            PlayerTask.h
+                            PlayerTask.cpp
+                            NilTask.cpp
+                            NilTask.h
+                            IdleTask.h
+                            fighter/
+                                AntiHeavyTask.h
+                                RaidTask.cpp
+                                FighterTask.h
+                                ScoutTask.cpp
+                                ArtilleryTask.cpp
+                                SquadTask.h
+                                ScoutTask.h
+                                BombTask.cpp
+                                RaidTask.h
+                                AntiAirTask.cpp
+                                AttackTask.h
+                                GuardTask.h
+                                ArtilleryTask.h
+                                DefendTask.h
+                                DefendTask.cpp
+                                BombTask.h
+                                GuardTask.cpp
+                                RallyTask.cpp
+                                AntiAirTask.h
+                                FighterTask.cpp
+                                AttackTask.cpp
+                                AntiHeavyTask.cpp
+                                SupportTask.cpp
+                                SquadTask.cpp
+                                SupportTask.h
+                                RallyTask.h
+                            common/
+                                ReclaimTask.h
+                                WaitTask.h
+                                ReclaimTask.cpp
+                                SensorTask.h
+                                SensorTask.cpp
+                                RepairTask.cpp
+                                RepairTask.h
+                                PatrolTask.cpp
+                                WaitTask.cpp
+                                PatrolTask.h
+                            static/
+                                ReclaimTask.h
+                                WaitTask.h
+                                RecruitTask.h
+                                ReclaimTask.cpp
+                                SuperTask.cpp
+                                RepairTask.cpp
+                                RepairTask.h
+                                RecruitTask.cpp
+                                PatrolTask.cpp
+                                SuperTask.h
+                                WaitTask.cpp
+                                PatrolTask.h
+                            builder/
+                                ReclaimTask.h
+                                ConvertTask.h
+                                WaitTask.h
+                                MexUpTask.cpp
+                                MexTask.h
+                                StoreTask.cpp
+                                BuilderTask.h
+                                ReclaimTask.cpp
+                                BuildChain.h
+                                BunkerTask.h
+                                SonarTask.h
+                                DefenceTask.cpp
+                                TerraformTask.cpp
+                                MexUpTask.h
+                                GeoTask.cpp
+                                SonarTask.cpp
+                                PylonTask.cpp
+                                NanoTask.cpp
+                                PylonTask.h
+                                MexTask.cpp
+                                GuardTask.h
+                                RepairTask.cpp
+                                TerraformTask.h
+                                RadarTask.cpp
+                                EnergyTask.cpp
+                                RepairTask.h
+                                DefenceTask.h
+                                GuardTask.cpp
+                                NanoTask.h
+                                FactoryTask.h
+                                CombatTask.cpp
+                                GenericTask.h
+                                BunkerTask.cpp
+                                ResurrectTask.cpp
+                                GeoTask.h
+                                GenericTask.cpp
+                                PatrolTask.cpp
+                                CombatTask.h
+                                ResurrectTask.h
+                                BuildChain.cpp
+                                StoreTask.h
+                                ConvertTask.cpp
+                                BuilderTask.cpp
+                                WaitTask.cpp
+                                PatrolTask.h
+                                RadarTask.h
+                                BigGunTask.cpp
+                                EnergyTask.h
+                                FactoryTask.cpp
+                                BigGunTask.h
+                        terrain/
+                            TerrainManager.cpp
+                            BlockRectangle.h
+                            BlockMask.h
+                            BlockRectangle.cpp
+                            BlockingMap.hpp
+                            BlockCircle.cpp
+                            TerrainManager.h
+                            TerrainData.cpp
+                            BlockingMap.cpp
+                            BlockingMap.h
+                            BlockMask.cpp
+                            BlockCircle.h
+                            TerrainData.h
+                            path/
+                                PathQuery.cpp
+                                QueryLineMap.cpp
+                                MicroPather.h
+                                QueryPathSingle.cpp
+                                PathQuery.h
+                                QueryCostMap.cpp
+                                PathFinder.cpp
+                                PathInfo.h
+                                QueryPathSingle.h
+                                PathInfo.cpp
+                                QueryPathMulti.h
+                                QueryPathWide.cpp
+                                QueryPathMulti.cpp
+                                QueryCostMap.h
+                                PathFinder.h
+                                MicroPather.cpp
+                                QueryPathWide.h
+                                QueryLineMap.h
+                        resource/
+                            GridLink.h
+                            EnergyLink.h
+                            EnergyLink.cpp
+                            EnergyGrid.cpp
+                            EnergyNode.h
+                            MetalManager.h
+                            MetalManager.cpp
+                            EnergyNode.cpp
+                            MetalData.h
+                            EnergyGrid.h
+                            MetalData.cpp
+                            EnergyData.cpp
+                            EnergyData.h
+                            GridLink.cpp
+                            EnergyManager.cpp
+                            EnergyManager.h
+                        spring/
+                            SpringDebug.cpp
+                            SpringMap.cpp
+                            SpringEngine.h
+                            SpringMap.h
+                            SpringCallback.cpp
+                            SpringCallback.h
+                            SpringEngine.cpp
+                            SpringDebug.h
+            NullJavaAI/
+                CMakeLists.txt
+                bin/
+                data/
+                    AIInfo.lua
+                    AIOptions.lua
+                src/
+                    nulljavaai/
+            CppTestAI/
+                CMakeLists.txt
+                data/
+                    AIInfo.lua
+                    AIOptions.lua
+                src/
+                    CppTestAI.h
+                    AIExport.h
+                    CppTestAI.cpp
+                    AIExport.cpp
+            NullOOJavaAI/
+                CMakeLists.txt
+                bin/
+                data/
+                    AIInfo.lua
+                    AIOptions.lua
+                src/
+                    main/
+                        java/
+                            nulloojavaai/
+            CircuitAI/
+                CMakeLists.txt
+                util/
+                    cpu_load.cpp
+                    fibR.lua
+                    weight_normal.txt
+                    LuaRules/
+                        Gadgets/
+                            ai_dbg_map.lua
+                data/
+                    AIInfo.lua
+                    AIOptions.lua
+                    config/
+                        easy/
+                        previous/
+                    script/
+                src/
+                    AIExport.h
+                    AIExport.cpp
+                    circuit/
+                        CircuitAI.cpp
+                        CircuitAI.h
+                        unit/
+                            FactoryData.cpp
+                            CircuitUnit.cpp
+                            UnitManager.h
+                            CircuitDef.cpp
+                            CircuitUnit.h
+                            CircuitWDef.cpp
+                            CoreUnit.h
+                            UnitManager.cpp
+                            CircuitWDef.h
+                            FactoryData.h
+                            CircuitDef.h
+                            ally/
+                                AllyUnit.h
+                                AllyTeam.cpp
+                                AllyTeam.h
+                                AllyUnit.cpp
+                            enemy/
+                                EnemyManager.cpp
+                                EnemyUnit.h
+                                EnemyUnit.cpp
+                                EnemyManager.h
+                            action/
+                                WaitAction.h
+                                DGunAction.h
+                                SupportAction.h
+                                WaitAction.cpp
+                                SupportAction.cpp
+                                MoveAction.cpp
+                                DGunAction.cpp
+                                FightAction.h
+                                MoveAction.h
+                                FightAction.cpp
+                                IdleAction.cpp
+                                UnitAction.h
+                                RearmAction.h
+                                RearmAction.cpp
+                                TravelAction.cpp
+                                TravelAction.h
+                                IdleAction.h
+                                UnitAction.cpp
+                        util/
+                            ActionList.h
+                            FileSystem.h
+                            MaskHandler.cpp
+                            GameAttribute.h
+                            Utils.h
+                            MultiQueue.h
+                            Point.h
+                            AvailList.h
+                            GameTask.cpp
+                            Container.h
+                            Scheduler.h
+                            GameTask.h
+                            ActionList.cpp
+                            GameAttribute.cpp
+                            Defines.h
+                            Scheduler.cpp
+                            Action.h
+                            DebugDrawer.h
+                            MaskHandler.h
+                            DebugDrawer.cpp
+                            Action.cpp
+                            MultiQueue.hpp
+                            math/
+                                QuadField.cpp
+                                EncloseCircle.h
+                                HierarchCluster.cpp
+                                GaussSolver.h
+                                QuadField.h
+                                ApproxMNK.h
+                                EncloseCircle.cpp
+                                LagrangeInterPol.cpp
+                                KMeansCluster.cpp
+                                ApproxMNK.cpp
+                                RayBox.h
+                                LagrangeInterPol.h
+                                GaussSolver.cpp
+                                RagMatrix.h
+                                RagMatrix.cpp
+                                HierarchCluster.h
+                                KMeansCluster.h
+                                RayBox.cpp
+                        module/
+                            EconomyManager.cpp
+                            Module.cpp
+                            UnitModule.cpp
+                            UnitModule.h
+                            EconomyManager.h
+                            BuilderManager.cpp
+                            BuilderManager.h
+                            MilitaryManager.h
+                            FactoryManager.cpp
+                            Module.h
+                            MilitaryManager.cpp
+                            FactoryManager.h
+                        setup/
+                            SetupData.cpp
+                            DefenceMatrix.cpp
+                            SetupManager.h
+                            SetupManager.cpp
+                            SetupData.h
+                            DefenceMatrix.h
+                        script/
+                            InitScript.cpp
+                            ScriptManager.cpp
+                            ScriptManager.h
+                            InitScript.h
+                            RefCounter.cpp
+                            RefCounter.h
+                        map/
+                            InfluenceMap.cpp
+                            MapManager.h
+                            ThreatMap.h
+                            ThreatMap.cpp
+                            InfluenceMap.h
+                            MapManager.cpp
+                        task/
+                            RetreatTask.h
+                            TaskManager.h
+                            UnitTask.cpp
+                            RearmTask.cpp
+                            UnitTask.h
+                            IdleTask.cpp
+                            TaskManager.cpp
+                            RearmTask.h
+                            RetreatTask.cpp
+                            PlayerTask.h
+                            PlayerTask.cpp
+                            NilTask.cpp
+                            NilTask.h
+                            IdleTask.h
+                            fighter/
+                                AntiHeavyTask.h
+                                RaidTask.cpp
+                                FighterTask.h
+                                ScoutTask.cpp
+                                ArtilleryTask.cpp
+                                SquadTask.h
+                                ScoutTask.h
+                                BombTask.cpp
+                                RaidTask.h
+                                AntiAirTask.cpp
+                                AttackTask.h
+                                GuardTask.h
+                                ArtilleryTask.h
+                                DefendTask.h
+                                DefendTask.cpp
+                                BombTask.h
+                                GuardTask.cpp
+                                RallyTask.cpp
+                                AntiAirTask.h
+                                FighterTask.cpp
+                                AttackTask.cpp
+                                AntiHeavyTask.cpp
+                                SupportTask.cpp
+                                SquadTask.cpp
+                                SupportTask.h
+                                RallyTask.h
+                            common/
+                                ReclaimTask.h
+                                WaitTask.h
+                                ReclaimTask.cpp
+                                SensorTask.h
+                                SensorTask.cpp
+                                RepairTask.cpp
+                                RepairTask.h
+                                WaitTask.cpp
+                            static/
+                                ReclaimTask.h
+                                WaitTask.h
+                                RecruitTask.h
+                                ReclaimTask.cpp
+                                SuperTask.cpp
+                                RepairTask.cpp
+                                RepairTask.h
+                                RecruitTask.cpp
+                                SuperTask.h
+                                WaitTask.cpp
+                            builder/
+                                ReclaimTask.h
+                                WaitTask.h
+                                MexTask.h
+                                StoreTask.cpp
+                                BuilderTask.h
+                                ReclaimTask.cpp
+                                BuildChain.h
+                                BunkerTask.h
+                                SonarTask.h
+                                DefenceTask.cpp
+                                TerraformTask.cpp
+                                SonarTask.cpp
+                                PylonTask.cpp
+                                NanoTask.cpp
+                                PylonTask.h
+                                MexTask.cpp
+                                GuardTask.h
+                                RepairTask.cpp
+                                TerraformTask.h
+                                RadarTask.cpp
+                                EnergyTask.cpp
+                                RepairTask.h
+                                DefenceTask.h
+                                GuardTask.cpp
+                                NanoTask.h
+                                FactoryTask.h
+                                CombatTask.cpp
+                                GenericTask.h
+                                BunkerTask.cpp
+                                ResurrectTask.cpp
+                                GenericTask.cpp
+                                PatrolTask.cpp
+                                CombatTask.h
+                                ResurrectTask.h
+                                BuildChain.cpp
+                                StoreTask.h
+                                BuilderTask.cpp
+                                WaitTask.cpp
+                                PatrolTask.h
+                                RadarTask.h
+                                BigGunTask.cpp
+                                EnergyTask.h
+                                FactoryTask.cpp
+                                BigGunTask.h
+                        terrain/
+                            TerrainManager.cpp
+                            BlockRectangle.h
+                            BlockMask.h
+                            BlockRectangle.cpp
+                            BlockingMap.hpp
+                            BlockCircle.cpp
+                            TerrainManager.h
+                            TerrainData.cpp
+                            BlockingMap.cpp
+                            BlockingMap.h
+                            BlockMask.cpp
+                            BlockCircle.h
+                            TerrainData.h
+                            path/
+                                PathQuery.cpp
+                                QueryLineMap.cpp
+                                MicroPather.h
+                                QueryPathSingle.cpp
+                                PathQuery.h
+                                QueryCostMap.cpp
+                                PathFinder.cpp
+                                QueryPathSingle.h
+                                QueryPathMulti.h
+                                QueryPathMulti.cpp
+                                QueryCostMap.h
+                                PathFinder.h
+                                MicroPather.cpp
+                                QueryLineMap.h
+                        resource/
+                            GridLink.h
+                            EnergyLink.h
+                            EnergyLink.cpp
+                            EnergyGrid.cpp
+                            EnergyNode.h
+                            MetalManager.h
+                            MetalManager.cpp
+                            EnergyNode.cpp
+                            MetalData.h
+                            EnergyGrid.h
+                            MetalData.cpp
+                            GridLink.cpp
+                        spring/
+                            SpringDebug.cpp
+                            SpringMap.cpp
+                            SpringEngine.h
+                            SpringMap.h
+                            SpringCallback.cpp
+                            SpringCallback.h
+                            SpringEngine.cpp
+                            SpringDebug.h
+            NullAI/
+                CMakeLists.txt
+                data/
+                    AIInfo.lua
+                    AIOptions.lua
+                src/
+                    AIExport.h
+                    AIExport.c
+        Interfaces/
+            CMakeLists.txt
+            Java/
+                CMakeLists.txt
+                bin/
+                data/
+                    InterfaceInfo.lua
+                src/
+                    main/
+                        native/
+                            JavaBridge.c
+                            JvmLocater_common.h
+                            JvmLocater_linux.c
+                            JniUtil.h
+                            InterfaceExport.c
+                            JvmLocater_common.c
+                            JavaBridge.h
+                            InterfaceDefines.h
+                            JvmLocater_windows.c
+                            JniUtil.c
+                            InterfaceExport.h
+                            JvmLocater.h
+                        java/
+                            com/
+                                springrts/
+                                    ai/
+            C/
+                CMakeLists.txt
+                data/
+                    InterfaceInfo.lua
+                src/
+                    SSkirmishAISpecifier.h
+                    InterfaceExport.cpp
+                    SSkirmishAISpecifier.cpp
+                    Interface.h
+                    Interface.cpp
+                    InterfaceExport.h
+    .github/
+        workflows/
+        ISSUE_TEMPLATE/
+    doc/
+        uikeys.txt
+        CMakeLists.txt
+        changelog.txt
+        StartScriptFormat.txt
+        site/
+            archetypes/
+            content/
+                development/
+                articles/
+                docs/
+                    lua-api/
+                    guides/
+                        yardmaps/
+                        getting-started/
+                            blender-gltf-import/
+                        rendering/
+                            lua-vbo-vao/
+                changelogs/
+            layouts/
+                docs/
+                shortcodes/
+                partials/
+            static/
+                showcase/
+            scripts/
+            docgen/
+            i18n/
+            data/
+            assets/
+                css/
+    .vscode/
+    installer/
+        sections/
+        include/
+        nsis_plugins/
+            README.txt
+        Mac/
+        graphics/
+    docker-build-v2/
+        images/
+            all-linux/
+            all/
+            amd64-linux/
+            arm64-linux/
+            amd64-windows/
+        scripts/
+```
+
+## 2. Source Files for rts/aGui
+
+### File: rts/aGui/LineEdit.cpp
+```cpp
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#include "LineEdit.h"
+
+#include "Rendering/GL/myGL.h"
+#include "Rendering/Fonts/glFont.h"
+#include "Rendering/GlobalRendering.h"
+#include "System/Misc/SpringTime.h"
+
+namespace agui
+{
+
+	namespace
+	{
+		bool HasOpenGLBackend()
+		{
+			return ((globalRendering != nullptr) &&
+					(globalRendering->graphicsBackend != nullptr) &&
+					(globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL));
+		}
+	}
+
+	LineEdit::LineEdit(GuiElement *parent)
+		: GuiElement(parent), hasFocus(false), crypt(false), cursorPos(0)
+	{
+	}
+
+	void LineEdit::SetFocus(bool focus)
+	{
+		hasFocus = focus;
+	}
+
+	void LineEdit::SetCrypt(bool focus)
+	{
+		crypt = focus;
+	}
+
+	void LineEdit::SetContent(const std::string &line, bool moveCursor)
+	{
+		content = line;
+		if (moveCursor)
+		{
+			cursorPos = content.size();
+		}
+	}
+
+#ifdef HEADLESS
+	void LineEdit::DrawSelf() {}
+#else
+	void LineEdit::DrawSelf()
+	{
+		const float opacity = Opacity();
+		const bool useOpenGLState = HasOpenGLBackend();
+		DrawBox(GL_QUADS, {1.0f, 1.0f, 1.0f, opacity});
+
+		if (useOpenGLState)
+			glLineWidth(1.49f);
+		if (hasFocus)
+		{
+			DrawBox(GL_LINE_LOOP, {0.0f, 0.0f, 0.0f, opacity});
+		}
+		else
+		{
+			DrawBox(GL_LINE_LOOP, {0.5f, 0.5f, 0.5f, opacity});
+		}
+
+		std::string tempText;
+		if (crypt)
+		{
+			tempText.resize(content.size(), '*');
+		}
+		else
+		{
+			tempText = content;
+		}
+
+		const float textCenter = pos[1] + size[1] / 2;
+		if (hasFocus)
+		{
+			// draw the caret
+			const std::string caretStr = tempText.substr(0, cursorPos);
+			float caretWidth = font->GetSize() * font->GetTextWidth(caretStr) / float(screensize[0]);
+
+			char c = tempText[cursorPos];
+			if (c == 0)
+			{
+				c = ' ';
+			}
+
+			float cursorHeight = font->GetSize() * font->GetLineHeight() / float(screensize[1]);
+			float cw = font->GetSize() * font->GetCharacterWidth(c) / float(screensize[0]);
+			float csx = pos[0] + 0.01 + caretWidth;
+			float f = 0.5f * (1.0f + fastmath::sin(spring_now().toMilliSecsf() * 0.015f));
+
+			if (useOpenGLState)
+			{
+				glColor4f(f, f, f, opacity);
+				glRectf(csx, textCenter + cursorHeight / 2, csx + cw, textCenter - cursorHeight / 2);
+				glColor4f(0.0f, 0.0f, 0.0f, 1.0f); // black
+			}
+			else
+			{
+				GuiElement caret;
+				caret.SetPos(csx, textCenter - cursorHeight / 2);
+				caret.SetSize(cw, cursorHeight);
+				caret.DrawBox(GL_QUADS, {f, f, f, opacity});
+			}
+		}
+
+		font->SetTextColor(); // default
+		font->glPrint(pos[0] + 0.01, textCenter, 1.0, FONT_VCENTER | FONT_SCALE | FONT_NORM, tempText);
+	}
+#endif
+
+	bool LineEdit::HandleEventSelf(const SDL_Event &ev)
+	{
+		switch (ev.type)
+		{
+		case SDL_MOUSEBUTTONDOWN:
+		{
+			if (MouseOver(ev.button.x, ev.button.y))
+			{
+				hasFocus = true;
+			}
+			else
+			{
+				hasFocus = false;
+			}
+			break;
+		}
+		case SDL_TEXTINPUT:
+		{
+			content.insert(cursorPos, ev.text.text);
+			cursorPos += strlen(ev.text.text);
+		}
+		break;
+		case SDL_KEYDOWN:
+		{
+			if (!hasFocus)
+			{
+				break;
+			}
+			switch (ev.key.keysym.sym)
+			{
+			case SDLK_BACKSPACE:
+			{
+				if (cursorPos > 0)
+				{
+					content.erase(--cursorPos, 1);
+				}
+				break;
+			}
+			case SDLK_DELETE:
+			{
+				if (cursorPos < content.size())
+				{
+					content.erase(cursorPos, 1);
+				}
+				break;
+			}
+			case SDLK_ESCAPE:
+			{
+				hasFocus = false;
+				break;
+			}
+			case SDLK_RIGHT:
+			{
+				if (cursorPos < content.size())
+				{
+					++cursorPos;
+				}
+				break;
+			}
+			case SDLK_LEFT:
+			{
+				if (cursorPos > 0)
+				{
+					--cursorPos;
+				}
+				break;
+			}
+			case SDLK_HOME:
+			{
+				cursorPos = 0;
+				break;
+			}
+			case SDLK_END:
+			{
+				cursorPos = content.size();
+				break;
+			}
+			case SDLK_RETURN:
+			{
+				DefaultAction();
+				return true;
+			}
+			}
+			break;
+		}
+		}
+		return false;
+	}
+
+} // namespace agui
+
+```
+
+### File: rts/aGui/Picture.h
+```cpp
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#ifndef PICTURE_H
+#define PICTURE_H
+
+#include <string>
+#include <memory>
+
+#include "GuiElement.h"
+
+namespace gfx
+{
+	class ITexture;
+	class IVertexBuffer;
+}
+
+namespace agui
+{
+
+	class Picture : public GuiElement
+	{
+	public:
+		Picture(GuiElement *parent = NULL);
+		~Picture();
+
+		void Load(const std::string &file);
+
+	private:
+		virtual void DrawSelf();
+
+		unsigned texture;
+		std::unique_ptr<gfx::ITexture> backendTexture;
+		std::unique_ptr<gfx::IVertexBuffer> backendVertexBuffer;
+		std::unique_ptr<gfx::IVertexBuffer> backendIndexBuffer;
+		std::string file;
+	};
+
+}
+
+#endif
+
+```
+
+### File: rts/aGui/VerticalLayout.cpp
+```cpp
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#include "VerticalLayout.h"
+
+#include "Rendering/GlobalRendering.h"
+#include "Rendering/GL/myGL.h"
+
+namespace agui
+{
+
+	namespace
+	{
+		bool HasOpenGLBackend()
+		{
+			return ((globalRendering != nullptr) &&
+					(globalRendering->graphicsBackend != nullptr) &&
+					(globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL));
+		}
+	}
+
+	VerticalLayout::VerticalLayout(GuiElement *parent) : GuiElement(parent)
+	{
+	}
+
+#ifdef HEADLESS
+	void VerticalLayout::DrawSelf() {}
+#else
+	void VerticalLayout::DrawSelf()
+	{
+		if (borderWidth > 0)
+		{
+			if (HasOpenGLBackend())
+				glLineWidth(borderWidth);
+			DrawBox(GL_LINE_LOOP, {1.f, 1.f, 1.f, Opacity()});
+		}
+	}
+#endif
+
+	void VerticalLayout::GeometryChangeSelf()
+	{
+		if (children.empty())
+			return;
+		unsigned numFixed = 0;
+		float totalFixedSize = 0.0;
+		for (ChildList::const_iterator it = children.begin(); it != children.end(); ++it)
+		{
+			if ((*it)->SizeFixed())
+			{
+				numFixed++;
+				totalFixedSize += (*it)->GetSize()[1];
+			}
+		}
+
+		const float vspacePerObject = (size[1] - float(children.size() - 1) * itemSpacing - 2 * borderSpacing - totalFixedSize) / float(children.size() - numFixed);
+		float startY = pos[1] + borderSpacing;
+		for (ChildList::reverse_iterator i = children.rbegin(); i != children.rend(); ++i)
+		{
+			(*i)->SetPos(pos[0] + borderSpacing, startY);
+			if ((*i)->SizeFixed())
+			{
+				(*i)->SetSize(size[0] - 2.0f * borderSpacing, (*i)->GetSize()[1], true);
+				startY += (*i)->GetSize()[1] + itemSpacing;
+			}
+			else
+			{
+				(*i)->SetSize(size[0] - 2.0f * borderSpacing, vspacePerObject);
+				startY += vspacePerObject + itemSpacing;
+			}
+		}
+	}
+
+}
+
+```
+
+### File: rts/aGui/CMakeLists.txt
+```cpp
+set(sources_engine_aGui
+		"${CMAKE_CURRENT_SOURCE_DIR}/Button.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/Gui.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/GuiElement.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/HorizontalLayout.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/LineEdit.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/List.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/Picture.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/TextElement.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/VerticalLayout.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/Window.cpp"
+		PARENT_SCOPE
+)
+
+```
+
+### File: rts/aGui/Button.cpp
+```cpp
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#include "Button.h"
+
+#include "Gui.h"
+#include "Rendering/Fonts/glFont.h"
+#include "Rendering/GlobalRendering.h"
+#include "Rendering/GL/myGL.h"
+#include "System/Log/ILog.h"
+
+namespace agui
+{
+
+	namespace
+	{
+		bool HasOpenGLBackend()
+		{
+			return ((globalRendering != nullptr) &&
+					(globalRendering->graphicsBackend != nullptr) &&
+					(globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL));
+		}
+	}
+
+	Button::Button(const std::string &_label, GuiElement *_parent)
+		: GuiElement(_parent)
+	{
+		Label(_label);
+	}
+
+	void Button::Label(const std::string &_label)
+	{
+		label = _label;
+		clicked = false;
+		hovered = false;
+	}
+
+#ifdef HEADLESS
+	void Button::DrawSelf() {}
+#else
+	void Button::DrawSelf()
+	{
+		const float opacity = Opacity();
+		const bool useOpenGLState = HasOpenGLBackend();
+
+		DrawBox(GL_QUADS, {0.8f, 0.8f, 0.8f, opacity});
+
+		if (clicked)
+		{
+			if (useOpenGLState)
+				glBlendFunc(GL_ONE, GL_ONE); // additive blending
+
+			DrawBox(GL_QUADS, {0.2f, 0.0f, 0.0f, opacity});
+			if (useOpenGLState)
+				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+			if (useOpenGLState)
+				glLineWidth(1.49f);
+			DrawBox(GL_LINE_LOOP, {1.0f, 0.0f, 0.0f, opacity / 2.f});
+			if (useOpenGLState)
+				glLineWidth(1.0f);
+		}
+		else if (hovered)
+		{
+			if (useOpenGLState)
+				glBlendFunc(GL_ONE, GL_ONE); // additive blending
+			DrawBox(GL_QUADS, {0.0f, 0.0f, 0.2f, opacity});
+			if (useOpenGLState)
+				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+			if (useOpenGLState)
+				glLineWidth(1.49f);
+			DrawBox(GL_LINE_LOOP, {1.0f, 1.0f, 1.0f, opacity / 2.0f});
+			if (useOpenGLState)
+				glLineWidth(1.0f);
+		}
+
+		font->Begin();
+		font->SetTextColor(1.0f, 1.0f, 1.0f, opacity);
+		font->SetOutlineColor(0.0f, 0.0f, 0.0f, opacity);
+		font->glPrint(pos[0] + size[0] / 2, pos[1] + size[1] / 2, 1.0, FONT_CENTER | FONT_VCENTER | FONT_SHADOW | FONT_SCALE | FONT_NORM, label);
+		font->End();
+	}
+#endif
+
+	bool Button::HandleEventSelf(const SDL_Event &ev)
+	{
+		switch (ev.type)
+		{
+		case SDL_MOUSEBUTTONDOWN:
+		{
+			if ((ev.button.button == SDL_BUTTON_LEFT) && MouseOver(ev.button.x, ev.button.y) && gui->MouseOverElement(GetRoot(), ev.button.x, ev.button.y))
+			{
+				clicked = true;
+			}
+			break;
+		}
+		case SDL_MOUSEBUTTONUP:
+		{
+			if ((ev.button.button == SDL_BUTTON_LEFT) && MouseOver(ev.button.x, ev.button.y) && clicked)
+			{
+				if (Clicked)
+				{
+					Clicked();
+				}
+				else
+				{
+					LOG_L(L_WARNING, "Button %s clicked without callback", label.c_str());
+				}
+				clicked = false;
+				return true;
+			}
+			break;
+		}
+		case SDL_MOUSEMOTION:
+		{
+			if (MouseOver(ev.motion.x, ev.motion.y) && gui->MouseOverElement(GetRoot(), ev.motion.x, ev.motion.y))
+			{
+				hovered = true;
+			}
+			else
+			{
+				hovered = false;
+				clicked = false;
+			}
+			break;
+		}
+		}
+		return false;
+	}
+
+} // namespace agui
+
+```
+
+### File: rts/aGui/TextElement.cpp
+```cpp
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#include "TextElement.h"
+
+#include "Rendering/Fonts/glFont.h"
+
+namespace agui
+{
+
+TextElement::TextElement(const std::string& _text, GuiElement* parent) : GuiElement(parent), text(_text)
+{
+}
+
+void TextElement::SetText(const std::string& str)
+{
+	text = str;
+}
+
+#ifdef HEADLESS
+void TextElement::DrawSelf() {}
+#else
+void TextElement::DrawSelf()
+{
+	const float opacity = Opacity();
+	font->Begin();
+	font->SetTextColor(1.0f, 1.0f, 1.0f, opacity);
+	font->SetOutlineColor(0.0f, 0.0f, 0.0f, opacity);
+	std::string mytext = text;
+
+	font->WrapInPlace(mytext, font->GetSize(), GlToPixelX(size[0]), GlToPixelY(size[1]));
+	font->glPrint(pos[0]+size[0]/2, pos[1]+size[1]/2, 1.f, FONT_CENTER | FONT_VCENTER | FONT_SHADOW | FONT_SCALE | FONT_NORM, mytext);
+	font->End();
+}
+#endif
+
+}
+
+```
+
+### File: rts/aGui/VerticalLayout.h
+```cpp
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#ifndef VERTICALLAYOUT_H
+#define VERTICALLAYOUT_H
+
+#include "GuiElement.h"
+#include "Layout.h"
+
+namespace agui
+{
+
+class VerticalLayout : public GuiElement, public Layout
+{
+public:
+	VerticalLayout(GuiElement* parent = NULL);
+
+private:
+	virtual void DrawSelf();
+	virtual void GeometryChangeSelf();
+};
+
+}
+
+#endif
+
+```
+
+### File: rts/aGui/Picture.cpp
+```cpp
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#include "Picture.h"
+
+#include "Rendering/GL/myGL.h"
+#include "Rendering/GlobalRendering.h"
+#include "Rendering/Gfx/IGraphicsBackend.h"
+#include "Rendering/Gfx/ITexture.h"
+#include "Rendering/Gfx/IVertexBuffer.h"
+#ifdef ENABLE_VULKAN
+#include "Rendering/Gfx/Vulkan/VulkanGraphicsBackend.h"
+#endif
+#include "Rendering/GL/RenderBuffers.h"
+#include "Rendering/Shaders/Shader.h"
+#include "Rendering/Textures/Bitmap.h"
+#include "System/Log/ILog.h"
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <span>
+
+namespace
+{
+	bool HasOpenGLBackend()
+	{
+		return ((globalRendering != nullptr) &&
+				(globalRendering->graphicsBackend != nullptr) &&
+				(globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL));
+	}
+
+	gfx::IGraphicsBackend *GetGraphicsBackend()
+	{
+		if ((globalRendering == nullptr) || (globalRendering->graphicsBackend == nullptr))
+			return nullptr;
+
+		return globalRendering->graphicsBackend.get();
+	}
+
+#ifndef HEADLESS
+	void ResolveUiViewportSize(float &width, float &height)
+	{
+		width = 1.0f;
+		height = 1.0f;
+
+		if (globalRendering == nullptr)
+			return;
+
+		int sx = globalRendering->viewSizeX;
+		int sy = globalRendering->viewSizeY;
+
+		if ((sx <= 16) || (sy <= 16))
+		{
+			sx = globalRendering->winSizeX;
+			sy = globalRendering->winSizeY;
+		}
+
+		if ((sx > 16) && (sy > 16))
+		{
+			width = static_cast<float>(sx);
+			height = static_cast<float>(sy);
+		}
+	}
+#endif
+
+	struct PictureBatchVertex
+	{
+		float x = 0.0f;
+		float y = 0.0f;
+		float z = 0.0f;
+		float u = 0.0f;
+		float v = 0.0f;
+		std::uint8_t r = 255u;
+		std::uint8_t g = 255u;
+		std::uint8_t b = 255u;
+		std::uint8_t a = 255u;
+	};
+}
+
+namespace agui
+{
+
+	Picture::Picture(GuiElement *parent)
+		: GuiElement(parent), texture(0)
+	{
+	}
+
+	Picture::~Picture()
+	{
+		if (texture && HasOpenGLBackend())
+		{
+			glDeleteTextures(1, &texture);
+		}
+	}
+
+	void Picture::Load(const std::string &_file)
+	{
+		file = _file;
+
+		if (!HasOpenGLBackend())
+		{
+			auto *backend = GetGraphicsBackend();
+			if (backend == nullptr)
+			{
+				backendTexture.reset();
+				texture = 0;
+				return;
+			}
+
+#ifdef ENABLE_VULKAN
+			if (backendTexture != nullptr)
+			{
+				if (auto *vulkanBackend = dynamic_cast<gfx::VulkanGraphicsBackend *>(backend); vulkanBackend != nullptr)
+					vulkanBackend->ClearPendingTexturedBatchDraws();
+			}
+#endif
+
+			backendTexture.reset();
+
+			CBitmap bmp;
+			if (bmp.Load(file))
+			{
+				backendTexture = bmp.CreateBackendTexture();
+				if (backendTexture == nullptr)
+					LOG_L(L_WARNING, "[Picture::%s] failed to create backend texture for '%s'", __func__, file.c_str());
+			}
+			else
+			{
+				LOG_L(L_WARNING, "Failed to load: %s", file.c_str());
+			}
+
+			texture = 0;
+			return;
+		}
+
+		backendTexture.reset();
+
+		CBitmap bmp;
+		if (bmp.Load(file))
+		{
+			texture = bmp.CreateTexture();
+		}
+		else
+		{
+			LOG_L(L_WARNING, "Failed to load: %s", file.c_str());
+			texture = 0;
+		}
+	}
+
+#ifdef HEADLESS
+	void Picture::DrawSelf() {}
+#else
+	void Picture::DrawSelf()
+	{
+		if (!HasOpenGLBackend())
+		{
+			auto *backend = GetGraphicsBackend();
+			if ((backend == nullptr) || (backendTexture == nullptr))
+				return;
+
+			if (backendVertexBuffer == nullptr)
+			{
+				gfx::BufferCreateInfo ci;
+				ci.sizeBytes = 1;
+				ci.usage = gfx::BufferUsage::Dynamic;
+				ci.memoryAccess = gfx::MemoryAccess::CpuToGpu;
+				ci.debugName = "aGuiPictureVertices";
+				backendVertexBuffer = backend->CreateVertexBuffer(ci);
+			}
+
+			if (backendIndexBuffer == nullptr)
+			{
+				gfx::BufferCreateInfo ci;
+				ci.sizeBytes = 1;
+				ci.usage = gfx::BufferUsage::Dynamic;
+				ci.memoryAccess = gfx::MemoryAccess::CpuToGpu;
+				ci.debugName = "aGuiPictureIndices";
+				backendIndexBuffer = backend->CreateVertexBuffer(ci);
+			}
+
+			if ((backendVertexBuffer == nullptr) || (backendIndexBuffer == nullptr))
+				return;
+
+			float viewWidth = 1.0f;
+			float viewHeight = 1.0f;
+			ResolveUiViewportSize(viewWidth, viewHeight);
+
+			const float leftPx = pos[0] * viewWidth;
+			const float rightPx = (pos[0] + size[0]) * viewWidth;
+			const float topPx = viewHeight - ((pos[1] + size[1]) * viewHeight);
+			const float bottomPx = viewHeight - (pos[1] * viewHeight);
+
+			const std::array<PictureBatchVertex, 4> vertices = {{
+				{leftPx, topPx, 0.0f, 0.0f, 1.0f, 255u, 255u, 255u, 255u},
+				{rightPx, topPx, 0.0f, 1.0f, 1.0f, 255u, 255u, 255u, 255u},
+				{rightPx, bottomPx, 0.0f, 1.0f, 0.0f, 255u, 255u, 255u, 255u},
+				{leftPx, bottomPx, 0.0f, 0.0f, 0.0f, 255u, 255u, 255u, 255u},
+			}};
+
+			const std::array<std::uint16_t, 6> indices = {
+				3u,
+				0u,
+				1u,
+				3u,
+				1u,
+				2u,
+			};
+
+			const std::size_t vertexBytes = vertices.size() * sizeof(PictureBatchVertex);
+			const std::size_t indexBytes = indices.size() * sizeof(std::uint16_t);
+
+			if (backendVertexBuffer->SizeBytes() < vertexBytes)
+				backendVertexBuffer->Resize(vertexBytes, false);
+
+			if (backendIndexBuffer->SizeBytes() < indexBytes)
+				backendIndexBuffer->Resize(indexBytes, false);
+
+			backendVertexBuffer->Update(std::span<const std::byte>(reinterpret_cast<const std::byte *>(vertices.data()), vertexBytes));
+			backendIndexBuffer->Update(std::span<const std::byte>(reinterpret_cast<const std::byte *>(indices.data()), indexBytes));
+
+			gfx::TexturedVertexLayout vertexLayout;
+			vertexLayout.strideBytes = sizeof(PictureBatchVertex);
+			vertexLayout.positionOffsetBytes = offsetof(PictureBatchVertex, x);
+			vertexLayout.texCoordOffsetBytes = offsetof(PictureBatchVertex, u);
+			vertexLayout.colorOffsetBytes = offsetof(PictureBatchVertex, r);
+
+			gfx::TexturedIndexedBatchDesc batch;
+			batch.firstIndex = 0;
+			batch.indexCount = static_cast<std::uint32_t>(indices.size());
+
+			gfx::TexturedBatchState state;
+			state.depthTest = false;
+			state.blend = true;
+			state.premultipliedAlpha = false;
+			state.useDefaultBlendFunc = true;
+
+			backend->DrawTexturedIndexedBatches(
+				*backendVertexBuffer,
+				*backendIndexBuffer,
+				*backendTexture,
+				std::span<const gfx::TexturedIndexedBatchDesc>(&batch, 1),
+				vertexLayout,
+				gfx::IndexElementType::UInt16,
+				state);
+
+			return;
+		}
+
+		if (texture)
+		{
+			auto &rb = RenderBuffer::GetTypedRenderBuffer<VA_TYPE_2DTC>();
+			auto &sh = rb.GetShader();
+			const SColor color = {1.0f, 1.0f, 1.0f, 1.0f};
+
+			rb.AddQuadTriangles(
+				{pos[0], pos[1], 0.0f, 1.0f, color},
+				{pos[0] + size[0], pos[1], 1.0f, 1.0f, color},
+				{pos[0] + size[0], pos[1] + size[1], 1.0f, 0.0f, color},
+				{pos[0], pos[1] + size[1], 0.0f, 0.0f, color});
+
+			glBindTexture(GL_TEXTURE_2D, texture);
+			sh.Enable();
+			rb.DrawElements(GL_TRIANGLES);
+			sh.Disable();
+			glBindTexture(GL_TEXTURE_2D, 0);
+		}
+	}
+#endif
+
+} // namespace agui
+
+```
+
+### File: rts/aGui/Window.cpp
+```cpp
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#include "Window.h"
+
+#include "Rendering/GlobalRendering.h"
+#include "Rendering/GL/myGL.h"
+#include "Rendering/Fonts/glFont.h"
+#include "Rendering/GL/RenderBuffers.h"
+
+namespace agui
+{
+
+	namespace
+	{
+		bool HasOpenGLBackend()
+		{
+			return ((globalRendering != nullptr) &&
+					(globalRendering->graphicsBackend != nullptr) &&
+					(globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL));
+		}
+	}
+
+	Window::Window(const std::string &_title, GuiElement *parent) : GuiElement(parent), title(_title)
+	{
+		titleHeight = 0.05f;
+		dragging = false;
+
+		size[0] = size[1] = 0.3f;
+		pos[0] = pos[1] = 0.2f;
+		dragPos[0] = dragPos[1] = 0.0f;
+	}
+
+	void Window::AddChild(GuiElement *elem)
+	{
+		children.push_back(elem);
+		elem->SetPos(pos[0], pos[1]);
+		elem->SetSize(size[0], size[1] - titleHeight);
+	}
+
+#ifdef HEADLESS
+	void Window::DrawSelf() {}
+#else
+	void Window::DrawSelf()
+	{
+		const float opacity = Opacity();
+		const bool useOpenGLState = HasOpenGLBackend();
+
+		DrawBox(GL_QUADS, {0.0f, 0.0f, 0.0f, opacity});
+
+		if (useOpenGLState)
+		{
+			auto &rb = RenderBuffer::GetTypedRenderBuffer<VA_TYPE_2DC>();
+			auto &sh = rb.GetShader();
+
+			const SColor color = {0.7f, 0.7f, 0.7f, opacity};
+			rb.AddQuadTriangles(
+				{pos[0], pos[1] + size[1] - titleHeight, color},
+				{pos[0], pos[1] + size[1], color},
+				{pos[0] + size[0], pos[1] + size[1], color},
+				{pos[0] + size[0], pos[1] + size[1] - titleHeight, color});
+			sh.Enable();
+			rb.DrawElements(GL_TRIANGLES);
+			sh.Disable();
+		}
+		else
+		{
+			GuiElement titleBar;
+			titleBar.SetPos(pos[0], pos[1] + size[1] - titleHeight);
+			titleBar.SetSize(size[0], titleHeight);
+			titleBar.DrawBox(GL_QUADS, {0.7f, 0.7f, 0.7f, opacity});
+		}
+
+		if (useOpenGLState)
+			glLineWidth(2.0f);
+		DrawBox(GL_LINE_LOOP, {1.0f, 1.0f, 1.0f, opacity});
+
+		/*
+		rb.AddVertices({
+			{pos[0]          , pos[1] - titleHeight, { 1.0f,1.0f,1.0f, opacity }},
+			{pos[0] + size[1], pos[1] - titleHeight, { 1.0f,1.0f,1.0f, opacity }},
+		});
+		rb.DrawArrays(GL_LINES);
+		*/
+
+		font->Begin();
+		font->SetTextColor(1.0f, 1.0f, 1.0f, opacity);
+		font->SetOutlineColor(0.0f, 0.0f, 0.0f, opacity);
+		font->glPrint(pos[0] + 0.01, pos[1] + size[1] - titleHeight / 2, 1.0, FONT_VCENTER | FONT_SCALE | FONT_SHADOW | FONT_NORM, title);
+		font->End();
+	}
+#endif
+
+	bool Window::HandleEventSelf(const SDL_Event &ev)
+	{
+		switch (ev.type)
+		{
+		case SDL_MOUSEBUTTONDOWN:
+		{
+			if (MouseOver(ev.button.x, ev.button.y))
+			{
+				float mouse[2] = {PixelToGlX(ev.button.x), PixelToGlY(ev.button.y)};
+				if (mouse[1] > pos[1] + size[1] - titleHeight)
+				{
+					dragPos[0] = mouse[0] - pos[0];
+					dragPos[1] = mouse[1] - pos[1];
+					dragging = true;
+					return true;
+				};
+			}
+			break;
+		}
+		case SDL_MOUSEBUTTONUP:
+		{
+			if (dragging)
+			{
+				dragging = false;
+				return true;
+			}
+			break;
+		}
+		case SDL_MOUSEMOTION:
+		{
+			if (dragging)
+			{
+				Move(PixelToGlX(ev.motion.xrel), PixelToGlY(ev.motion.yrel) - 1);
+				return true;
+			}
+			break;
+		}
+		case SDL_KEYDOWN:
+		{
+			if (ev.key.keysym.sym == SDLK_ESCAPE)
+			{
+				WantClose();
+				return true;
+			}
+			break;
+		}
+		}
+		return false;
+	}
+
+	float Window::Opacity() const
+	{
+		if (dragging)
+			return GuiElement::Opacity() / 2.f;
+		else
+			return GuiElement::Opacity();
+	}
+
+}
+
+```
+
+### File: rts/aGui/TextElement.h
+```cpp
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#ifndef TEXTELEMENT_H
+#define TEXTELEMENT_H
+
+#include <string>
+
+#include "GuiElement.h"
+
+namespace agui
+{
+
+class TextElement : public GuiElement
+{
+public:
+	TextElement(const std::string& text, GuiElement* parent = NULL);
+	void SetText(const std::string& str);
+
+private:
+	virtual void DrawSelf();
+
+	std::string text;
+};
+}
+#endif // TEXTELEMENT_H
+
+```
+
+### File: rts/aGui/Window.h
+```cpp
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#ifndef WINDOW_H
+#define WINDOW_H
+
+#include <string>
+
+#include "GuiElement.h"
+
+namespace agui {
+
+class Window : public GuiElement
+{
+public:
+	Window(const std::string& title = "", GuiElement* parent = NULL);
+
+	virtual void AddChild(GuiElement* elem);
+	OnClickVoidType WantClose;
+
+protected:
+	std::string title;
+
+private:
+	virtual void DrawSelf();
+	virtual bool HandleEventSelf(const SDL_Event& ev);
+
+	virtual float Opacity() const;
+	bool dragging;
+	float dragPos[2];
+	float titleHeight;
+};
+
+}
+
+#endif
+
+```
+
+### File: rts/aGui/HorizontalLayout.h
+```cpp
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#ifndef HORIZONTALLAYOUT_H
+#define HORIZONTALLAYOUT_H
+
+#include "GuiElement.h"
+#include "Layout.h"
+
+namespace agui
+{
+
+class HorizontalLayout : public GuiElement, public Layout
+{
+public:
+	HorizontalLayout(GuiElement* parent = NULL);
+
+private:
+	virtual void DrawSelf();
+	virtual void GeometryChangeSelf();
+};
+
+}
+
+#endif
+
+```
+
+### File: rts/aGui/Gui.h
+```cpp
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#ifndef GUI_H
+#define GUI_H
+
+#include <list>
+#include "System/Input/InputHandler.h"
+
+union SDL_Event;
+
+namespace agui
+{
+
+class GuiElement;
+
+class Gui
+{
+public:
+	Gui();
+	~Gui();
+
+	void Clean();
+	void Draw();
+	void AddElement(GuiElement*, bool asBackground = false);
+	/// deletes the element on the next draw
+	void RmElement(GuiElement*);
+
+	void UpdateScreenGeometry(int screenx, int screeny, int screenOffsetX, int screenOffsetY);
+
+	bool MouseOverElement(const GuiElement*, int x, int y) const;
+
+	bool HandleEvent(const SDL_Event& ev);
+private:
+	InputHandler::HandlerTokenT inputCon;
+
+	struct GuiItem
+	{
+		GuiItem(GuiElement* el, bool back) : element(el), asBackground(back) {};
+		GuiElement* element;
+		bool asBackground;
+	};
+	typedef std::list<GuiItem> ElList;
+	ElList elements;
+	ElList toBeRemoved;
+	ElList toBeAdded;
+};
+
+extern Gui* gui;
+
+}
+
+#endif
+
+```
+
+### File: rts/aGui/List.h
+```cpp
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#ifndef LIST_H
+#define LIST_H
+
+#include <string>
+#include <vector>
+
+#include "GuiElement.h"
+#include "System/Misc/SpringTime.h"
+
+
+namespace agui
+{
+
+class List : public GuiElement
+{
+public:
+	List(GuiElement* parent = NULL);
+	virtual ~List();
+
+	// CInputReceiver implementation
+	bool KeyPressed(int k, bool isRepeat);
+	bool MousePress(int x, int y, int button);
+	void MouseMove(int x, int y, int dx,int dy, int button);
+	void MouseRelease(int x, int y, int button);
+	virtual void DrawSelf();
+	virtual bool HandleEventSelf(const SDL_Event& ev);
+	std::string GetTooltip(int x, int y) const { return tooltip; }
+
+	void RemoveAllItems();
+	void AddItem(const std::string& name,const std::string& description);
+	std::vector<std::string> items;
+	std::string name;
+
+	std::string GetCurrentItem() const;
+	bool SetCurrentItem(const std::string& item);
+	void CenterSelected();
+
+	// when attempting to cancel (by pressing escape, clicking outside a button)
+	// place is set to cancelPlace (if it's positive) and Select is called.
+	int cancelPlace;
+	std::string tooltip;
+
+	OnClickVoidType FinishSelection; // Return or Double-Click
+	void SetFocus(bool focus);
+	void RefreshQuery();
+
+private:
+	bool Filter(bool reset);
+	void UpOne();
+	void DownOne();
+	void UpPage();
+	void DownPage();
+	bool MouseUpdate(int x, int y);
+	void UpdateTopIndex();
+	void ScrollUpOne();
+	void ScrollDownOne();
+	int NumDisplay();
+	float ScaleFactor();
+
+	spring_time clickedTime;
+	int place;
+
+	bool activeMousePress;
+
+	float mx;
+	float my;
+	float borderSpacing;
+	float itemSpacing;
+	float itemHeight;
+	bool hasFocus;
+	int topIndex;
+
+	GuiElement scrollbar;
+	bool activeScrollbar;
+	float scrollbarGrabPos;
+
+	// for filtering
+	std::string query;
+	std::vector<std::string>* filteredItems;
+	std::vector<std::string> temp1;
+	std::vector<std::string> temp2;
+};
+
+}
+
+#endif /* GLLIST_H */
+
+```
+
+### File: rts/aGui/Layout.h
+```cpp
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#ifndef LAYOUT_H
+#define LAYOUT_H
+
+class Layout
+{
+public:
+	Layout()
+	{
+		itemSpacing = 0.005f;
+		borderSpacing = 0.005f;
+		borderWidth = 0.0f;
+	};
+	
+	void SetBorder(float thickness)
+	{
+		borderWidth = thickness;
+	};
+	void SetBorderSpacing(float width)
+	{
+		borderSpacing = width;
+	};
+	void SetItemSpacing(float width)
+	{
+		itemSpacing = width;
+	};
+
+protected:
+	float borderSpacing;
+	float itemSpacing;
+	float borderWidth;
+};
+
+#endif
+
+```
+
+### File: rts/aGui/Gui.cpp
+```cpp
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#include "System/Input/InputHandler.h"
+#include "Gui.h"
+
+#include <SDL_events.h>
+
+#include "GuiElement.h"
+#include "Rendering/GlobalRendering.h"
+#include "Rendering/GL/myGL.h"
+#include "System/Log/ILog.h"
+
+namespace agui
+{
+
+	namespace
+	{
+		bool HasOpenGLBackend()
+		{
+			return ((globalRendering != nullptr) &&
+					(globalRendering->graphicsBackend != nullptr) &&
+					(globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL));
+		}
+	}
+
+	Gui::Gui()
+	{
+		inputCon = input.AddHandler([this](const SDL_Event &event)
+									{ return this->HandleEvent(event); });
+	}
+
+#ifdef HEADLESS
+	void Gui::Draw() {}
+#else
+	void Gui::Draw()
+	{
+		Clean();
+
+		static bool loggedGuiDrawOnce = false;
+		if (!loggedGuiDrawOnce)
+		{
+			const int backendType = ((globalRendering != nullptr) && (globalRendering->graphicsBackend != nullptr))
+										? static_cast<int>(globalRendering->graphicsBackend->Type())
+										: -1;
+
+			LOG("[Vulkan][Frontier12][Gui::Draw] first draw, elements=%zu backendType=%d", elements.size(), backendType);
+			loggedGuiDrawOnce = true;
+		}
+
+		if (HasOpenGLBackend())
+		{
+			glDisable(GL_TEXTURE_2D);
+			glDisable(GL_ALPHA_TEST);
+			glEnable(GL_BLEND);
+			glMatrixMode(GL_PROJECTION);
+			glLoadIdentity();
+			gluOrtho2D(0, 1, 0, 1);
+			glMatrixMode(GL_MODELVIEW);
+			glLoadIdentity();
+		}
+
+		for (ElList::reverse_iterator it = elements.rbegin(); it != elements.rend(); ++it)
+		{
+			(*it).element->Draw();
+		}
+	}
+#endif
+
+	void Gui::Clean()
+	{
+		for (ElList::iterator it = toBeAdded.begin(); it != toBeAdded.end(); ++it)
+		{
+			bool duplicate = false;
+			for (ElList::iterator elIt = elements.begin(); elIt != elements.end(); ++elIt)
+			{
+				if (it->element == elIt->element)
+				{
+					LOG_L(L_DEBUG, "Gui::AddElement: skipping duplicated object");
+					duplicate = true;
+					break;
+				}
+			}
+			if (!duplicate)
+			{
+				if (it->asBackground)
+					elements.push_back(*it);
+				else
+					elements.push_front(*it);
+			}
+		}
+		toBeAdded.clear();
+
+		for (ElList::iterator it = toBeRemoved.begin(); it != toBeRemoved.end(); ++it)
+		{
+			for (ElList::iterator elIt = elements.begin(); elIt != elements.end(); ++elIt)
+			{
+				if (it->element == elIt->element)
+				{
+					delete (elIt->element);
+					elements.erase(elIt);
+					break;
+				}
+			}
+		}
+		toBeRemoved.clear();
+	}
+
+	Gui::~Gui()
+	{
+		Clean();
+	}
+
+	void Gui::AddElement(GuiElement *elem, bool asBackground)
+	{
+		toBeAdded.push_back(GuiItem(elem, asBackground));
+	}
+
+	void Gui::RmElement(GuiElement *elem)
+	{
+		// has to be delayed, otherwise deleting a button during a callback would segfault
+		for (ElList::iterator it = elements.begin(); it != elements.end(); ++it)
+		{
+			if ((*it).element == elem)
+			{
+				toBeRemoved.push_back(GuiItem(elem, true));
+				break;
+			}
+		}
+	}
+
+	void Gui::UpdateScreenGeometry(int screenx, int screeny, int screenOffsetX, int screenOffsetY)
+	{
+		GuiElement::UpdateDisplayGeo(screenx, screeny, screenOffsetX, screenOffsetY);
+	}
+
+	bool Gui::MouseOverElement(const GuiElement *elem, int x, int y) const
+	{
+		for (ElList::const_iterator it = elements.begin(); it != elements.end(); ++it)
+		{
+			if (it->element->MouseOver(x, y))
+			{
+				if (it->element == elem)
+					return true;
+				else
+					return false;
+			}
+		}
+		return false;
+	}
+
+	bool Gui::HandleEvent(const SDL_Event &ev)
+	{
+		ElList::iterator handler = elements.end();
+		for (ElList::iterator it = elements.begin(); it != elements.end(); ++it)
+		{
+			if (it->element->HandleEvent(ev))
+			{
+				handler = it;
+				break;
+			}
+		}
+		if (handler != elements.end() && !handler->asBackground)
+		{
+			elements.push_front(*handler);
+			elements.erase(handler);
+		}
+		return false;
+	}
+
+	Gui *gui = nullptr;
+
+}
+
+```
+
+### File: rts/aGui/List.cpp
+```cpp
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#include "List.h"
+
+#include <SDL_mouse.h>
+
+#include "Rendering/Fonts/glFont.h"
+#include "Rendering/GlobalRendering.h"
+#include "Rendering/GL/myGL.h"
+#include "Game/GlobalUnsynced.h"
+#include "Gui.h"
+#include "System/StringUtil.h"
+
+namespace agui
+{
+
+	namespace
+	{
+		bool HasOpenGLBackend()
+		{
+			return ((globalRendering != nullptr) &&
+					(globalRendering->graphicsBackend != nullptr) &&
+					(globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL));
+		}
+	}
+
+	const float itemFontScale = 1.0f;
+
+	//////////////////////////////////////////////////////////////////////
+	// Construction/Destruction
+	//////////////////////////////////////////////////////////////////////
+
+	List::List(GuiElement *parent) : GuiElement(parent),
+									 cancelPlace(-1),
+									 tooltip("No tooltip defined"),
+									 clickedTime(spring_now()),
+									 place(0),
+									 activeMousePress(false),
+									 activeScrollbar(false),
+									 scrollbarGrabPos(0.0f),
+									 filteredItems(&items)
+	{
+		borderSpacing = 0.005f;
+		itemSpacing = 0.000f;
+		itemHeight = 0.04f;
+		hasFocus = true;
+		topIndex = 0;
+		mx = my = 0;
+	}
+
+	List::~List()
+	{
+	}
+
+	void List::SetFocus(bool focus)
+	{
+		hasFocus = focus;
+	}
+
+	void List::RemoveAllItems()
+	{
+		items.clear();
+	}
+
+	void List::RefreshQuery()
+	{
+		if (query != "")
+		{
+			int t = topIndex;
+			std::string q = query;
+			Filter(true);
+			query = q;
+			Filter(false);
+			topIndex = t;
+		}
+	}
+
+	void List::AddItem(const std::string &name, const std::string &description)
+	{
+		items.push_back(name);
+
+		// calculate width of text and resize box if necessary
+		float w = itemFontScale * font->GetSize() * font->GetTextWidth(name) * screensize[0] + 2 * itemSpacing;
+		if (w > (size[0]))
+		{
+			// box.x1 = 0.5f - 0.5f * w;
+			// box.x2 = 0.5f + 0.5f * w;
+		}
+	}
+
+	bool List::MousePress(int x, int y, int button)
+	{
+		switch (button)
+		{
+		case SDL_BUTTON_LEFT:
+		{
+			activeMousePress = true;
+			MouseUpdate(x, y); // make sure place is up to date
+			break;
+		}
+		}
+		return false;
+	}
+
+	int List::NumDisplay()
+	{
+		return std::max(1.0f, (size[1] - 2.0f * borderSpacing) / (itemHeight + itemSpacing));
+	}
+
+	void List::ScrollUpOne()
+	{
+		if (topIndex > 0)
+			--topIndex;
+	}
+
+	void List::ScrollDownOne()
+	{
+		if (topIndex + NumDisplay() < filteredItems->size())
+			++topIndex;
+	}
+
+	void List::MouseMove(int x, int y, int dx, int dy, int button)
+	{
+		mx = PixelToGlX(x);
+		my = PixelToGlY(y);
+	}
+
+	void List::MouseRelease(int x, int y, int button)
+	{
+		if (button & SDL_BUTTON_LEFT)
+		{
+			activeMousePress = false;
+			activeScrollbar = false;
+		}
+	}
+
+	float List::ScaleFactor()
+	{
+		return (float)std::max(1, globalRendering->winSizeY) * (size[1] - 2.0f * borderSpacing);
+	}
+
+	void List::UpdateTopIndex()
+	{
+		itemHeight = 18.0f / ScaleFactor();
+		const int numDisplay = NumDisplay();
+		if (topIndex + numDisplay > filteredItems->size())
+			topIndex = std::max(0, (int)filteredItems->size() - numDisplay);
+	}
+
+	bool List::MouseUpdate(int x, int y)
+	{
+		int nCurIndex = 0;	 // The item we're on
+		int nDrawOffset = 0; // The offset to the first draw item
+
+		GuiElement b;
+		b.SetPos(pos[0] + borderSpacing, pos[1] + size[1] - borderSpacing - itemHeight);
+		b.SetSize(size[0] - 2.0f * borderSpacing - ((scrollbar.GetSize()[0] < 0) ? 0 : (itemHeight + itemSpacing)), itemHeight);
+
+		// Get list started up here
+		std::vector<std::string>::iterator ii = filteredItems->begin();
+		UpdateTopIndex();
+
+		while (nCurIndex < topIndex)
+		{
+			++ii;
+			++nCurIndex;
+		}
+
+		const int numDisplay = NumDisplay();
+
+		float sbX = b.GetPos()[0];
+		float sbY1 = b.GetPos()[1] + (itemHeight + itemSpacing);
+
+		for (/*ii = items.begin()*/; ii != filteredItems->end() && nDrawOffset < numDisplay; ++ii)
+		{
+			if (b.MouseOver(mx, my))
+			{
+				if (nCurIndex == place && (clickedTime + spring_msecs(250)) > spring_now())
+				{
+					FinishSelection();
+				}
+				clickedTime = spring_now();
+				place = nCurIndex;
+				return true;
+			}
+
+			// Up our index's
+			nCurIndex++;
+			nDrawOffset++;
+			b.Move(0.0, -(itemHeight + itemSpacing));
+		}
+
+		if (nDrawOffset < filteredItems->size())
+		{
+			if (scrollbar.MouseOver(mx, my))
+			{
+				activeScrollbar = true;
+				scrollbarGrabPos = my - scrollbar.GetPos()[1];
+			}
+			else
+			{
+				float sbY2 = b.GetPos()[1] + (itemHeight + itemSpacing);
+				float sbHeight = sbY1 - sbY2;
+
+				b.SetPos(sbX + (size[0] - 2.0f * borderSpacing) - (itemHeight + itemSpacing), sbY2);
+				b.SetSize(itemHeight + itemSpacing, sbHeight);
+				if (b.MouseOver(mx, my))
+				{
+					if (my > scrollbar.GetPos()[1] + scrollbar.GetSize()[1])
+						topIndex = std::max(0, std::min(topIndex - NumDisplay(), (int)filteredItems->size() - NumDisplay()));
+					else if (my < scrollbar.GetPos()[1])
+						topIndex = std::max(0, std::min(topIndex + NumDisplay(), (int)filteredItems->size() - NumDisplay()));
+				}
+			}
+		}
+
+		return false;
+	}
+
+#ifdef HEADLESS
+	void List::DrawSelf() {}
+#else
+	void List::DrawSelf()
+	{
+		const float opacity = Opacity();
+		const bool useOpenGLState = HasOpenGLBackend();
+		font->Begin();
+		float hf = font->GetSize() / ScaleFactor();
+
+		font->SetTextColor(1, 1, 0.4f, opacity);
+
+		int nCurIndex = 0;	 // The item we're on
+		int nDrawOffset = 0; // The offset to the first draw item
+
+		GuiElement b;
+		b.SetPos(pos[0] + borderSpacing, pos[1] + size[1] - borderSpacing - itemHeight);
+		b.SetSize(size[0] - 2.0f * borderSpacing - ((scrollbar.GetSize()[0] < 0) ? 0 : (itemHeight + itemSpacing)), itemHeight);
+
+		// Get list started up here
+		std::vector<std::string>::iterator ii = filteredItems->begin();
+		// Skip to current selection - 3; ie: scroll
+		UpdateTopIndex();
+
+		while (nCurIndex < topIndex)
+		{
+			++ii;
+			nCurIndex++;
+		}
+
+		const int numDisplay = NumDisplay();
+
+		font->SetTextColor(1.0f, 1.0f, 1.0f, opacity); // default
+		font->SetOutlineColor(0.0f, 0.0f, 0.0f, opacity);
+		if (useOpenGLState)
+			glLineWidth(1.0f);
+
+		float sbX = b.GetPos()[0];
+		float sbY1 = b.GetPos()[1] + (itemHeight + itemSpacing);
+
+		for (/*ii = items.begin()*/; ii != filteredItems->end() && nDrawOffset < numDisplay; ++ii)
+		{
+			b.DrawBox(GL_LINE_LOOP, {1.0f, 1.0f, 1.0f, opacity / 4.0f});
+
+			if (nCurIndex == place)
+			{
+				if (useOpenGLState)
+					glBlendFunc(GL_ONE, GL_ONE); // additive blending
+				b.DrawBox(GL_QUADS, {0.2f, 0.0f, 0.0f, opacity});
+				if (useOpenGLState)
+					glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+				if (useOpenGLState)
+					glLineWidth(1.49f);
+				b.DrawBox(GL_LINE_LOOP, {1.0f, 0.0f, 0.0f, opacity / 2.0f});
+				if (useOpenGLState)
+					glLineWidth(1.0f);
+			}
+			else if (b.MouseOver(mx, my))
+			{
+				if (useOpenGLState)
+					glBlendFunc(GL_ONE, GL_ONE); // additive blending
+				b.DrawBox(GL_QUADS, {0.0f, 0.0f, 0.2f, opacity});
+				if (useOpenGLState)
+					glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+				if (useOpenGLState)
+					glLineWidth(1.49f);
+				b.DrawBox(GL_LINE_LOOP, {1.0f, 1.0f, 1.0f, opacity / 2.0f});
+				if (useOpenGLState)
+					glLineWidth(1.0f);
+			}
+
+			font->glPrint(pos[0] + borderSpacing + 0.002f, b.GetMidY() - hf * 0.15f, itemFontScale, FONT_BASELINE | FONT_SHADOW | FONT_SCALE | FONT_NORM, *ii);
+
+			// Up our index's
+			nCurIndex++;
+			nDrawOffset++;
+			b.Move(0.0, -(itemHeight + itemSpacing));
+		}
+
+		// scrollbar
+		if (nDrawOffset < filteredItems->size())
+		{
+			float sbY2 = b.GetPos()[1] + (itemHeight + itemSpacing);
+			float sbHeight = sbY1 - sbY2;
+			float sbSize = ((float)nDrawOffset / (float)filteredItems->size()) * sbHeight;
+
+			if (activeScrollbar)
+			{
+				topIndex = std::max(0, std::min((int)(((float)filteredItems->size() * ((sbY1 - sbSize) - (my - std::min(scrollbarGrabPos, sbSize))) / sbHeight) + 0.5f),
+												(int)filteredItems->size() - numDisplay));
+			}
+
+			scrollbar.SetPos(sbX + (size[0] - 2.0f * borderSpacing) - (itemHeight + itemSpacing),
+							 sbY1 - sbSize - ((float)topIndex / (float)filteredItems->size()) * sbHeight);
+			scrollbar.SetSize((itemHeight + itemSpacing), sbSize);
+
+			b.SetPos(scrollbar.GetPos()[0], sbY2);
+			b.SetSize(itemHeight + itemSpacing, sbHeight);
+
+			b.DrawBox(GL_LINE_LOOP, {1.0f, 1.0f, 1.0f, opacity / 4.0f});
+
+			if (useOpenGLState)
+				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+			scrollbar.DrawBox(GL_QUADS, {0.8f, 0.8f, 0.8f, opacity});
+			if (useOpenGLState)
+				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			if (useOpenGLState)
+				glLineWidth(1.49f);
+			scrollbar.DrawBox(GL_LINE_LOOP, {1.0f, 1.0f, 1.0f, opacity / 2.0f});
+			if (useOpenGLState)
+				glLineWidth(1.0f);
+		}
+		else
+			scrollbar.SetSize(-1, -1);
+		/**************
+		 * End insert *
+		 **************/
+
+		font->End();
+	}
+#endif
+
+	bool List::HandleEventSelf(const SDL_Event &ev)
+	{
+		switch (ev.type)
+		{
+		case SDL_MOUSEBUTTONDOWN:
+		{
+			hasFocus = gui->MouseOverElement(GetRoot(), ev.button.x, ev.button.y);
+			if (MouseOver(ev.button.x, ev.button.y))
+			{
+				if (hasFocus)
+				{
+					MousePress(ev.button.x, ev.button.y, ev.button.button);
+					return true;
+				}
+			}
+			break;
+		}
+		case SDL_MOUSEBUTTONUP:
+		{
+			if (!hasFocus)
+				break;
+			if (MouseOver(ev.button.x, ev.button.y) || activeScrollbar)
+			{
+				MouseRelease(ev.button.x, ev.button.y, ev.button.button);
+				return true;
+			}
+			break;
+		}
+		case SDL_MOUSEWHEEL:
+		{
+			int mousex, mousey;
+			SDL_GetMouseState(&mousex, &mousey);
+			if (hasFocus && MouseOver(mousex, mousey))
+			{
+				if (ev.wheel.y > 0)
+				{
+					ScrollUpOne();
+				}
+				else
+				{
+					ScrollDownOne();
+				}
+				return true;
+			}
+		}
+		break;
+		case SDL_MOUSEMOTION:
+		{
+			if (!hasFocus)
+				break;
+			if (MouseOver(ev.motion.x, ev.motion.y) || activeScrollbar)
+			{
+				MouseMove(ev.motion.x, ev.motion.y, ev.motion.xrel, ev.motion.yrel, ev.motion.state);
+				return true;
+			}
+			break;
+		}
+		case SDL_KEYDOWN:
+		{
+			if (!hasFocus)
+				break;
+			if (ev.key.keysym.sym == SDLK_ESCAPE)
+			{
+				hasFocus = false;
+				break;
+			}
+			return KeyPressed(ev.key.keysym.sym, false);
+		}
+		}
+		return false;
+	}
+
+	void List::UpOne()
+	{
+		place = std::max(0, place - 1);
+	}
+
+	void List::DownOne()
+	{
+		place = std::max(0, std::min(place + 1, int(filteredItems->size()) - 1));
+	}
+
+	void List::UpPage()
+	{
+		place = std::max(0, place - NumDisplay());
+	}
+
+	void List::DownPage()
+	{
+		place = std::max(0, std::min(place + NumDisplay(), int(filteredItems->size()) - 1));
+	}
+
+	std::string List::GetCurrentItem() const
+	{
+		if (place < filteredItems->size())
+		{
+			return ((*filteredItems)[place]);
+		}
+		return "";
+	}
+
+	bool List::SetCurrentItem(const std::string &newCurrent)
+	{
+		for (unsigned i = 0; i < items.size(); ++i)
+		{
+			if (newCurrent == items[i])
+			{
+				place = i;
+				CenterSelected();
+				return true;
+			}
+		}
+		return false;
+	}
+
+	void List::CenterSelected()
+	{
+		topIndex = std::max(0, place - NumDisplay() / 2);
+	}
+
+	bool List::KeyPressed(int k, bool isRepeat)
+	{
+		if (k == SDLK_ESCAPE)
+		{
+			if (cancelPlace >= 0)
+			{
+				place = cancelPlace;
+				return true;
+			}
+		}
+		else if (k == SDLK_UP)
+		{
+			UpOne();
+			CenterSelected();
+			return true;
+		}
+		else if (k == SDLK_DOWN)
+		{
+			DownOne();
+			CenterSelected();
+			return true;
+		}
+		else if (k == SDLK_PAGEUP)
+		{
+			UpPage();
+			CenterSelected();
+			return true;
+		}
+		else if (k == SDLK_PAGEDOWN)
+		{
+			DownPage();
+			CenterSelected();
+			return true;
+		}
+		else if (k == SDLK_BACKSPACE)
+		{
+			query = query.substr(0, query.length() - 1);
+			return Filter(true);
+		}
+		else if (k == SDLK_RETURN)
+		{
+			FinishSelection();
+			return true;
+		}
+		else if ((k & ~0xFF) != 0)
+		{
+			// This prevents isalnum from asserting on msvc debug crt
+			// We don't actually need to process the key tho;)
+		}
+		else if (isalnum(k))
+		{
+			query += tolower(k);
+			return Filter(false);
+		}
+		return false;
+	}
+
+	bool List::Filter(bool reset)
+	{
+		std::string current = GetCurrentItem();
+		std::vector<std::string> *destination = filteredItems == &temp1 ? &temp2 : &temp1;
+		destination->clear();
+
+		if (reset)
+			filteredItems = &items; // reset filter
+
+		for (std::vector<std::string>::const_iterator it = filteredItems->begin(); it != filteredItems->end(); ++it)
+		{
+			std::string lcitem(*it, 0, query.length());
+			StringToLowerInPlace(lcitem);
+
+			if (lcitem == query)
+			{
+				if (*it == current)
+					place = destination->size();
+
+				destination->push_back(*it);
+			}
+		}
+
+		if (destination->empty())
+		{
+			query = query.substr(0, query.length() - 1);
+			return false;
+		}
+		else
+		{
+			filteredItems = destination;
+			place = std::max(0, std::min(place, int(filteredItems->size()) - 1));
+			topIndex = 0;
+			return true;
+		}
+	}
+
+}
+
+```
+
+### File: rts/aGui/Button.h
+```cpp
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#ifndef BUTTON_H
+#define BUTTON_H
+
+#include <string>
+
+#include "GuiElement.h"
+
+namespace agui
+{
+
+class Button : public GuiElement
+{
+public:
+	Button(const std::string& label = "", GuiElement* parent = NULL);
+
+	void Label(const std::string& label);
+
+	OnClickVoidType Clicked;
+
+private:
+	virtual void DrawSelf();
+	virtual bool HandleEventSelf(const SDL_Event& ev);
+
+	bool hovered;
+	bool clicked;
+
+	std::string label;
+};
+
+}
+
+#endif
+
+```
+
+### File: rts/aGui/GuiElement.h
+```cpp
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#ifndef GUIELEMENT_H
+#define GUIELEMENT_H
+
+#include <vector>
+#include <string>
+#include <functional>
+#include <SDL_events.h>
+
+#include "System/Color.h"
+
+namespace agui
+{
+
+	class GuiElement
+	{
+	public:
+		using OnClickVoidType = std::function<void(void)>;
+		using OnClickStringType = std::function<void(std::string)>;
+
+	public:
+		GuiElement(GuiElement *parent = nullptr);
+		virtual ~GuiElement();
+
+		void Draw();
+		bool HandleEvent(const SDL_Event &ev);
+		bool MouseOver(int x, int y) const;
+		bool MouseOver(float x, float y) const;
+
+		static void UpdateDisplayGeo(int x, int y, int offsetX, int offsetY);
+		static float PixelToGlX(int x);
+		static float PixelToGlY(int y);
+		static float GlToPixelX(float x);
+		static float GlToPixelY(float y);
+
+		virtual void AddChild(GuiElement *elem);
+
+		void SetPos(float x, float y);
+		void SetSize(float x, float y, bool fixed = false);
+		bool SizeFixed() const
+		{
+			return fixedSize;
+		};
+		float *GetSize()
+		{
+			return size;
+		};
+		float *GetPos()
+		{
+			return pos;
+		};
+		void SetWeight(unsigned newWeight)
+		{
+			weight = newWeight;
+		};
+		unsigned Weight() const
+		{
+			return weight;
+		};
+
+		void GeometryChange();
+
+		float GetMidY() const
+		{
+			return pos[1] + (size[1] / 2.0f);
+		};
+
+		float DefaultOpacity() const;
+		virtual float Opacity() const
+		{
+			if (parent)
+				return parent->Opacity();
+			else
+				return DefaultOpacity();
+		};
+
+		void Move(float x, float y);
+		GuiElement *GetRoot()
+		{
+			if (parent)
+				return parent->GetRoot();
+			else
+				return this;
+		};
+
+		void DrawBox(int primType, const SColor &color);
+
+	protected:
+		GuiElement *parent;
+
+		using ChildList = std::vector<GuiElement *>;
+		ChildList children;
+
+		virtual void DrawSelf() {};
+		virtual bool HandleEventSelf(const SDL_Event &ev)
+		{
+			return false;
+		};
+		virtual void GeometryChangeSelf() {};
+
+		static int screensize[2];
+		static int screenoffset[2];
+
+		bool fixedSize;
+		float pos[2];
+		float size[2];
+		unsigned weight;
+	};
+
+}
+
+#endif
+
+```
+
+### File: rts/aGui/LineEdit.h
+```cpp
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#ifndef LINE_EDIT_H
+#define LINE_EDIT_H
+
+#include <string>
+
+#include "GuiElement.h"
+
+namespace agui
+{
+
+class LineEdit : public GuiElement
+{
+public:
+	LineEdit(GuiElement* parent = NULL);
+
+	std::string GetContent() const
+	{
+		return content;
+	};
+	void SetContent(const std::string& line, bool moveCursor = true);
+
+	void SetFocus(bool focus);
+	void SetCrypt(bool focus);
+
+	OnClickVoidType DefaultAction;
+
+private:
+	virtual void DrawSelf();
+	virtual bool HandleEventSelf(const SDL_Event& ev);
+
+	bool hasFocus;
+	bool crypt;
+	std::string content;
+	unsigned cursorPos;
+};
+
+}
+#endif
+
+```
+
+### File: rts/aGui/GuiElement.cpp
+```cpp
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#include "GuiElement.h"
+#include "System/SafeUtil.h"
+
+#include "Rendering/GlobalRendering.h"
+#include "Rendering/Gfx/IGraphicsBackend.h"
+#include "Rendering/Gfx/ITexture.h"
+#include "Rendering/Gfx/IVertexBuffer.h"
+#ifdef ENABLE_VULKAN
+#include "Rendering/Gfx/Vulkan/VulkanGraphicsBackend.h"
+#endif
+#include "Rendering/GL/myGL.h"
+#include "Rendering/GL/RenderBuffers.h"
+#include "Rendering/Shaders/Shader.h"
+#include "System/Log/ILog.h"
+
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <span>
+#include <vector>
+
+namespace agui
+{
+
+	namespace
+	{
+		bool HasOpenGLBackend()
+		{
+			return ((globalRendering != nullptr) &&
+					(globalRendering->graphicsBackend != nullptr) &&
+					(globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL));
+		}
+
+		gfx::IGraphicsBackend *GetGraphicsBackend()
+		{
+			if ((globalRendering == nullptr) || (globalRendering->graphicsBackend == nullptr))
+				return nullptr;
+
+			return globalRendering->graphicsBackend.get();
+		}
+
+		void ResolveUiViewportSize(float &width, float &height)
+		{
+			width = 1.0f;
+			height = 1.0f;
+
+			if (globalRendering == nullptr)
+				return;
+
+			int sx = globalRendering->viewSizeX;
+			int sy = globalRendering->viewSizeY;
+
+			if ((sx <= 16) || (sy <= 16))
+			{
+				sx = globalRendering->winSizeX;
+				sy = globalRendering->winSizeY;
+			}
+
+			if ((sx > 16) && (sy > 16))
+			{
+				width = static_cast<float>(sx);
+				height = static_cast<float>(sy);
+			}
+		}
+
+		struct GuiBatchVertex
+		{
+			float x = 0.0f;
+			float y = 0.0f;
+			float z = 0.0f;
+			float u = 0.0f;
+			float v = 0.0f;
+			std::uint8_t r = 255u;
+			std::uint8_t g = 255u;
+			std::uint8_t b = 255u;
+			std::uint8_t a = 255u;
+		};
+
+		void AppendQuad(
+			std::vector<GuiBatchVertex> &vertices,
+			std::vector<std::uint16_t> &indices,
+			float left,
+			float top,
+			float right,
+			float bottom,
+			const SColor &color)
+		{
+			if (vertices.size() > (static_cast<std::size_t>(std::numeric_limits<std::uint16_t>::max()) - 4u))
+				return;
+
+			const std::uint16_t base = static_cast<std::uint16_t>(vertices.size());
+
+			vertices.push_back({left, top, 0.0f, 0.0f, 1.0f, color.r, color.g, color.b, color.a});
+			vertices.push_back({right, top, 0.0f, 1.0f, 1.0f, color.r, color.g, color.b, color.a});
+			vertices.push_back({right, bottom, 0.0f, 1.0f, 0.0f, color.r, color.g, color.b, color.a});
+			vertices.push_back({left, bottom, 0.0f, 0.0f, 0.0f, color.r, color.g, color.b, color.a});
+
+			indices.push_back(base + 0u);
+			indices.push_back(base + 1u);
+			indices.push_back(base + 2u);
+			indices.push_back(base + 2u);
+			indices.push_back(base + 3u);
+			indices.push_back(base + 0u);
+		}
+
+		bool DrawBackendQuads(
+			gfx::IGraphicsBackend *backend,
+			gfx::ITexture *texture,
+			const std::vector<GuiBatchVertex> &vertices,
+			const std::vector<std::uint16_t> &indices)
+		{
+			if ((backend == nullptr) || vertices.empty() || indices.empty())
+				return false;
+
+			if ((indices.size() % 3u) != 0u)
+				return false;
+
+			for (const std::uint16_t index : indices)
+			{
+				if (index >= vertices.size())
+					return false;
+			}
+
+			gfx::BufferCreateInfo vertexCI;
+			vertexCI.sizeBytes = vertices.size() * sizeof(GuiBatchVertex);
+			vertexCI.usage = gfx::BufferUsage::Dynamic;
+			vertexCI.memoryAccess = gfx::MemoryAccess::CpuToGpu;
+			vertexCI.debugName = "aGuiDrawBoxVB";
+
+			auto vertexBuffer = backend->CreateVertexBuffer(vertexCI);
+			if (vertexBuffer == nullptr)
+				return false;
+
+			gfx::BufferCreateInfo indexCI;
+			indexCI.sizeBytes = indices.size() * sizeof(std::uint16_t);
+			indexCI.usage = gfx::BufferUsage::Dynamic;
+			indexCI.memoryAccess = gfx::MemoryAccess::CpuToGpu;
+			indexCI.debugName = "aGuiDrawBoxIB";
+
+			auto indexBuffer = backend->CreateVertexBuffer(indexCI);
+			if (indexBuffer == nullptr)
+				return false;
+
+			vertexBuffer->Update(std::span<const std::byte>(reinterpret_cast<const std::byte *>(vertices.data()), vertexCI.sizeBytes));
+			indexBuffer->Update(std::span<const std::byte>(reinterpret_cast<const std::byte *>(indices.data()), indexCI.sizeBytes));
+
+			gfx::TexturedVertexLayout layout;
+			layout.strideBytes = sizeof(GuiBatchVertex);
+			layout.positionOffsetBytes = offsetof(GuiBatchVertex, x);
+			layout.texCoordOffsetBytes = offsetof(GuiBatchVertex, u);
+			layout.colorOffsetBytes = offsetof(GuiBatchVertex, r);
+
+			gfx::TexturedIndexedBatchDesc batch;
+			batch.firstIndex = 0u;
+			batch.indexCount = static_cast<std::uint32_t>(indices.size());
+
+			gfx::TexturedBatchState state;
+			state.depthTest = false;
+			state.blend = true;
+			state.premultipliedAlpha = false;
+			state.useDefaultBlendFunc = true;
+
+#ifdef ENABLE_VULKAN
+			if (auto *vulkanBackend = dynamic_cast<gfx::VulkanGraphicsBackend *>(backend); vulkanBackend != nullptr)
+			{
+				vulkanBackend->DrawTexturedIndexedBatches(
+					*vertexBuffer,
+					*indexBuffer,
+					texture,
+					std::span<const gfx::TexturedIndexedBatchDesc>(&batch, 1),
+					layout,
+					gfx::IndexElementType::UInt16,
+					state);
+
+				return true;
+			}
+#endif
+
+			if (texture == nullptr)
+				return false;
+
+			backend->DrawTexturedIndexedBatches(
+				*vertexBuffer,
+				*indexBuffer,
+				*texture,
+				std::span<const gfx::TexturedIndexedBatchDesc>(&batch, 1),
+				layout,
+				gfx::IndexElementType::UInt16,
+				state);
+
+			return true;
+		}
+	}
+
+	int GuiElement::screensize[2];
+	int GuiElement::screenoffset[2];
+
+	GuiElement::GuiElement(GuiElement *_parent) : parent(_parent), fixedSize(false), weight(1)
+	{
+		size[0] = size[1] = 0.0f;
+		pos[0] = pos[1] = 0.0f;
+
+		if (parent)
+			parent->AddChild(this);
+	}
+
+	GuiElement::~GuiElement()
+	{
+		for (auto &ch : children)
+			spring::SafeDelete(ch);
+	}
+
+	void GuiElement::Draw()
+	{
+		DrawSelf();
+		for (auto ch : children)
+		{
+			ch->Draw();
+		}
+	}
+
+	bool GuiElement::HandleEvent(const SDL_Event &ev)
+	{
+		if (HandleEventSelf(ev))
+			return true;
+		for (auto ch : children)
+		{
+			if (ch->HandleEvent(ev))
+				return true;
+		}
+		return false;
+	}
+
+	bool GuiElement::MouseOver(int x, int y) const
+	{
+		float mouse[2] = {PixelToGlX(x), PixelToGlY(y)};
+		return (mouse[0] >= pos[0] && mouse[0] <= pos[0] + size[0]) && (mouse[1] >= pos[1] && mouse[1] <= pos[1] + size[1]);
+	}
+
+	bool GuiElement::MouseOver(float x, float y) const
+	{
+		return (x >= pos[0] && x <= pos[0] + size[0]) && (y >= pos[1] && y <= pos[1] + size[1]);
+	}
+
+	void GuiElement::UpdateDisplayGeo(int x, int y, int xOffset, int yOffset)
+	{
+		screensize[0] = x;
+		screensize[1] = y;
+		screenoffset[0] = xOffset;
+		screenoffset[1] = yOffset;
+	}
+
+	float GuiElement::PixelToGlX(int x)
+	{
+		return float(x - screenoffset[0]) / float(screensize[0]);
+	}
+
+	float GuiElement::PixelToGlY(int y)
+	{
+		return 1.0f - float(y - screenoffset[1]) / float(screensize[1]);
+	}
+
+	float GuiElement::GlToPixelX(float x)
+	{
+		return x * float(screensize[0]) + float(screenoffset[0]);
+	}
+
+	float GuiElement::GlToPixelY(float y)
+	{
+		return y * float(screensize[1]) + float(screenoffset[1]);
+	}
+
+	void GuiElement::AddChild(GuiElement *elem)
+	{
+		children.push_back(elem);
+		elem->SetPos(pos[0], pos[1]);
+		elem->SetSize(size[0], size[1]);
+		GeometryChange();
+	}
+
+	void GuiElement::SetPos(float x, float y)
+	{
+		pos[0] = x;
+		pos[1] = y;
+		GeometryChange();
+	}
+
+	void GuiElement::SetSize(float x, float y, bool fixed)
+	{
+		size[0] = x;
+		size[1] = y;
+		fixedSize = fixed;
+		GeometryChange();
+	}
+
+	void GuiElement::GeometryChange()
+	{
+		GeometryChangeSelf();
+		for (auto ch : children)
+			ch->GeometryChange();
+	}
+
+	float GuiElement::DefaultOpacity() const
+	{
+		return 0.8f;
+	}
+
+	void GuiElement::Move(float x, float y)
+	{
+		pos[0] += x;
+		pos[1] += y;
+		for (auto ch : children)
+			ch->Move(x, y);
+	}
+
+#ifdef HEADLESS
+	void GuiElement::DrawBox(int primType, const SColor &color) {}
+#else
+	void GuiElement::DrawBox(int primType, const SColor &color)
+	{
+		if (!HasOpenGLBackend())
+		{
+			auto *backend = GetGraphicsBackend();
+			if (backend == nullptr)
+				return;
+
+			float viewWidth = 1.0f;
+			float viewHeight = 1.0f;
+			ResolveUiViewportSize(viewWidth, viewHeight);
+
+			const float leftPx = pos[0] * viewWidth;
+			const float rightPx = (pos[0] + size[0]) * viewWidth;
+			const float topPx = viewHeight - ((pos[1] + size[1]) * viewHeight);
+			const float bottomPx = viewHeight - (pos[1] * viewHeight);
+
+			std::vector<GuiBatchVertex> vertices;
+			std::vector<std::uint16_t> indices;
+
+			switch (primType)
+			{
+			case GL_QUADS:
+			{
+				vertices.reserve(4u);
+				indices.reserve(6u);
+				AppendQuad(vertices, indices, leftPx, topPx, rightPx, bottomPx, color);
+			}
+			break;
+
+			case GL_LINE_LOOP:
+			{
+				const float thicknessPx = 1.0f;
+				vertices.reserve(16u);
+				indices.reserve(24u);
+
+				AppendQuad(vertices, indices, leftPx, topPx, rightPx, std::min(topPx + thicknessPx, bottomPx), color);	  // top
+				AppendQuad(vertices, indices, leftPx, std::max(bottomPx - thicknessPx, topPx), rightPx, bottomPx, color); // bottom
+				AppendQuad(vertices, indices, leftPx, topPx, std::min(leftPx + thicknessPx, rightPx), bottomPx, color);	  // left
+				AppendQuad(vertices, indices, std::max(rightPx - thicknessPx, leftPx), topPx, rightPx, bottomPx, color);  // right
+			}
+			break;
+
+			default:
+				return;
+			}
+
+			if ((vertices.size() % 4u) != 0u)
+				return;
+
+			if (indices.size() != ((vertices.size() / 4u) * 6u))
+				return;
+
+			// Solid-color UI boxes are rendered as white-texture quads tinted by vertex color.
+			DrawBackendQuads(backend, nullptr, vertices, indices);
+			return;
+		}
+
+		auto &rb = RenderBuffer::GetTypedRenderBuffer<VA_TYPE_2DC>();
+		auto &sh = rb.GetShader();
+
+		sh.Enable();
+		switch (primType)
+		{
+		case GL_QUADS:
+		{
+			rb.AddQuadTriangles(
+				{pos[0], pos[1], color},
+				{pos[0] + size[0], pos[1], color},
+				{pos[0] + size[0], pos[1] + size[1], color},
+				{pos[0], pos[1] + size[1], color});
+			rb.DrawElements(GL_TRIANGLES);
+		}
+		break;
+		case GL_LINE_LOOP:
+		{
+			rb.AddVertices({{pos[0], pos[1], color},
+							{pos[0] + size[0], pos[1], color},
+							{pos[0] + size[0], pos[1] + size[1], color},
+							{pos[0], pos[1] + size[1], color}});
+			rb.DrawArrays(primType);
+		}
+		break;
+		default:
+			assert(false);
+			break;
+		}
+		sh.Disable();
+	}
+#endif // !HEADLESS
+
+}
+
+```
+
+### File: rts/aGui/HorizontalLayout.cpp
+```cpp
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
+#include <algorithm>
+#include "HorizontalLayout.h"
+
+#include "Rendering/GlobalRendering.h"
+#include "Rendering/GL/myGL.h"
+
+namespace agui
+{
+
+	namespace
+	{
+		bool HasOpenGLBackend()
+		{
+			return ((globalRendering != nullptr) &&
+					(globalRendering->graphicsBackend != nullptr) &&
+					(globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL));
+		}
+	}
+
+	HorizontalLayout::HorizontalLayout(GuiElement *parent) : GuiElement(parent)
+	{
+	}
+
+#ifdef HEADLESS
+	void HorizontalLayout::DrawSelf() {}
+#else
+	void HorizontalLayout::DrawSelf()
+	{
+		if (borderWidth <= 0.0f)
+			return;
+
+		if (HasOpenGLBackend())
+			glLineWidth(borderWidth);
+		DrawBox(GL_LINE_LOOP, {1.0f, 1.0f, 1.0f, Opacity()});
+	}
+#endif
+
+	void HorizontalLayout::GeometryChangeSelf()
+	{
+		if (children.empty())
+			return;
+
+		unsigned numFixedObjs = 0;
+		unsigned sumObjWeight = 0;
+
+		float totalFixedSize = 0.0;
+
+		for (const auto &child : children)
+		{
+			if (!child->SizeFixed())
+				continue;
+
+			numFixedObjs += 1;
+			totalFixedSize += child->GetSize()[0];
+		}
+
+		for (const auto &child : children)
+		{
+			sumObjWeight += child->Weight();
+		}
+
+		const float hspaceBorder = 2.0f * borderSpacing;
+		const float hspaceTotal = std::max(1.0f, float(sumObjWeight - numFixedObjs));
+		const float hspacePerObj = (size[0] - float(sumObjWeight - 1) * itemSpacing - hspaceBorder - totalFixedSize) / hspaceTotal;
+
+		float startX = pos[0] + borderSpacing;
+
+		for (const auto &child : children)
+		{
+			child->SetPos(startX, pos[1] + borderSpacing);
+
+			if (child->SizeFixed())
+			{
+				child->SetSize(child->GetSize()[0], size[1] - hspaceBorder, true);
+				startX += child->GetSize()[0] + itemSpacing;
+			}
+			else
+			{
+				child->SetSize(hspacePerObj * float(child->Weight()), size[1] - hspaceBorder);
+				startX += hspacePerObj * float(child->Weight()) + itemSpacing;
+			}
+		}
+	}
+
+}
+
+```

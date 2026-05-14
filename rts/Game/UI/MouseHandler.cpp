@@ -1089,11 +1089,34 @@ void CMouseHandler::DrawCursor()
 	RECOIL_DETAILED_TRACY_ZONE;
 	assert(activeCursorIdx != -1);
 
+	static bool loggedCursorStateOnce = false;
+	if (!loggedCursorStateOnce)
+	{
+		const bool isVulkan = HasVulkanBackend();
+		LOG_L(
+			L_INFO,
+			"[MouseHandler::DrawCursor] init state: backend=%s locked=%d hideCursor=%d hwCursor=%d hwValid=%d cursorScale=%.3f activeCursor=%d",
+			isVulkan ? "Vulkan" : "OpenGL",
+			locked ? 1 : 0,
+			hideCursor ? 1 : 0,
+			hardwareCursor ? 1 : 0,
+			loadedCursors[activeCursorIdx].IsHWValid() ? 1 : 0,
+			cursorScale,
+			activeCursorIdx);
+		loggedCursorStateOnce = true;
+	}
+
 	if (guihandler != nullptr)
 		guihandler->DrawCentroidCursor();
 
 	if (locked)
 	{
+		static bool loggedLockedOnce = false;
+		if (!loggedLockedOnce)
+		{
+			LOG_L(L_INFO, "[MouseHandler::DrawCursor] locked cursor path active (RenderBuffer GL path)");
+			loggedLockedOnce = true;
+		}
 		// draw procedural cursor if center-locked
 		if (crossSize > 0.0f)
 		{
@@ -1127,10 +1150,24 @@ void CMouseHandler::DrawCursor()
 	}
 
 	if (hideCursor)
+	{
+		static bool loggedHiddenOnce = false;
+		if (!loggedHiddenOnce)
+		{
+			LOG_L(L_INFO, "[MouseHandler::DrawCursor] hideCursor is true; cursor draw suppressed");
+			loggedHiddenOnce = true;
+		}
 		return;
+	}
 
 	if (hardwareCursor && loadedCursors[activeCursorIdx].IsHWValid())
 	{
+		static bool loggedHardwareOnce = false;
+		if (!loggedHardwareOnce)
+		{
+			LOG_L(L_INFO, "[MouseHandler::DrawCursor] hardware cursor active; skipping software draw");
+			loggedHardwareOnce = true;
+		}
 		loadedCursors[activeCursorIdx].UpdateHwCursor();
 		return;
 	}
@@ -1138,6 +1175,12 @@ void CMouseHandler::DrawCursor()
 	// draw the 'software' cursor
 	if (cursorScale >= 0.0f)
 	{
+		static bool loggedSoftwareOnce = false;
+		if (!loggedSoftwareOnce)
+		{
+			LOG_L(L_INFO, "[MouseHandler::DrawCursor] software cursor draw active (scale=%.3f)", cursorScale);
+			loggedSoftwareOnce = true;
+		}
 		loadedCursors[activeCursorIdx].Draw(lastx, lasty, cursorScale);
 		return;
 	}
