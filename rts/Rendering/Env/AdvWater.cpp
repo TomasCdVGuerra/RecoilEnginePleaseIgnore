@@ -1,6 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-
 #include "AdvWater.h"
 #include "ISky.h"
 #include "WaterRendering.h"
@@ -11,9 +10,20 @@
 #include "Map/ReadMap.h"
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/GL/VertexArray.h"
+#include "Rendering/Gfx/GfxTypes.h"
 #include "System/Exceptions.h"
 
 #include "System/Misc/TracyDefs.h"
+
+namespace
+{
+	bool HasVulkanBackend()
+	{
+		return ((globalRendering != nullptr) &&
+				(globalRendering->graphicsBackend != nullptr) &&
+				(globalRendering->graphicsBackend->Type() == gfx::BackendType::Vulkan));
+	}
+}
 
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
@@ -22,6 +32,17 @@
 void CAdvWater::InitResources(bool loadShader)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+	{
+		reflectTexture = 0;
+		bumpTexture = 0;
+		for (auto &rbt : rawBumpTexture)
+			rbt = 0;
+		waterFP = 0;
+		waterSurfaceColor = waterRendering->surfaceColor;
+		return;
+	}
+
 	if (!FBO::IsSupported())
 		throw content_error("Water Error: missing FBO support");
 
@@ -31,8 +52,8 @@ void CAdvWater::InitResources(bool loadShader)
 	glBindTexture(GL_TEXTURE_2D, reflectTexture);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 512, 512, 0, GL_RGBA, GL_UNSIGNED_BYTE, &scrap[0]);
 
 	glGenTextures(1, &bumpTexture);
@@ -43,12 +64,14 @@ void CAdvWater::InitResources(bool loadShader)
 
 	glGenTextures(4, rawBumpTexture);
 
-	for (int y = 0; y < 64; ++y) {
-		for (int x = 0; x < 64; ++x) {
-			scrap[(y*64 + x)*4 + 0] = 128;
-			scrap[(y*64 + x)*4 + 1] = (unsigned char)(fastmath::sin(y * math::TWOPI / 64.0f) * 128 + 128);
-			scrap[(y*64 + x)*4 + 2] = 0;
-			scrap[(y*64 + x)*4 + 3] = 255;
+	for (int y = 0; y < 64; ++y)
+	{
+		for (int x = 0; x < 64; ++x)
+		{
+			scrap[(y * 64 + x) * 4 + 0] = 128;
+			scrap[(y * 64 + x) * 4 + 1] = (unsigned char)(fastmath::sin(y * math::TWOPI / 64.0f) * 128 + 128);
+			scrap[(y * 64 + x) * 4 + 2] = 0;
+			scrap[(y * 64 + x) * 4 + 3] = 255;
 		}
 	}
 	glBindTexture(GL_TEXTURE_2D, rawBumpTexture[0]);
@@ -56,13 +79,15 @@ void CAdvWater::InitResources(bool loadShader)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 64, 64, 0, GL_RGBA, GL_UNSIGNED_BYTE, &scrap[0]);
 
-	for (int y = 0; y < 64; ++y) {
-		for (int x = 0; x < 64; ++x) {
-			const float ang = 26.5f*math::DEG_TO_RAD;
-			const float pos = y*2+x;
+	for (int y = 0; y < 64; ++y)
+	{
+		for (int x = 0; x < 64; ++x)
+		{
+			const float ang = 26.5f * math::DEG_TO_RAD;
+			const float pos = y * 2 + x;
 
-			scrap[(y*64 + x)*4 + 0] = (unsigned char)((fastmath::sin(pos*math::TWOPI / 64.0f)) * 128 * fastmath::sin(ang)) + 128;
-			scrap[(y*64 + x)*4 + 1] = (unsigned char)((fastmath::sin(pos*math::TWOPI / 64.0f)) * 128 * fastmath::cos(ang)) + 128;
+			scrap[(y * 64 + x) * 4 + 0] = (unsigned char)((fastmath::sin(pos * math::TWOPI / 64.0f)) * 128 * fastmath::sin(ang)) + 128;
+			scrap[(y * 64 + x) * 4 + 1] = (unsigned char)((fastmath::sin(pos * math::TWOPI / 64.0f)) * 128 * fastmath::cos(ang)) + 128;
 		}
 	}
 
@@ -71,13 +96,15 @@ void CAdvWater::InitResources(bool loadShader)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 64, 64, 0, GL_RGBA, GL_UNSIGNED_BYTE, &scrap[0]);
 
-	for (int y = 0; y < 64; ++y) {
-		for (int x = 0; x < 64; ++x) {
+	for (int y = 0; y < 64; ++y)
+	{
+		for (int x = 0; x < 64; ++x)
+		{
 			const float ang = -19.0f * math::DEG_TO_RAD;
 			const float pos = 3.0f * y - x;
 
-			scrap[(y*64 + x)*4 + 0] = (unsigned char)((fastmath::sin(pos*math::TWOPI / 64.0f)) * 128 * fastmath::sin(ang)) + 128;
-			scrap[(y*64 + x)*4 + 1] = (unsigned char)((fastmath::sin(pos*math::TWOPI / 64.0f)) * 128 * fastmath::cos(ang)) + 128;
+			scrap[(y * 64 + x) * 4 + 0] = (unsigned char)((fastmath::sin(pos * math::TWOPI / 64.0f)) * 128 * fastmath::sin(ang)) + 128;
+			scrap[(y * 64 + x) * 4 + 1] = (unsigned char)((fastmath::sin(pos * math::TWOPI / 64.0f)) * 128 * fastmath::cos(ang)) + 128;
 		}
 	}
 
@@ -86,7 +113,8 @@ void CAdvWater::InitResources(bool loadShader)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 64, 64, 0, GL_RGBA, GL_UNSIGNED_BYTE, &scrap[0]);
 
-	if (loadShader) {
+	if (loadShader)
+	{
 		// NOTE: needs a VP with OPTION ARB_position_invariant for clipping if !haveGLSL
 		waterFP = LoadFragmentProgram("ARB/water.fp");
 	}
@@ -101,7 +129,8 @@ void CAdvWater::InitResources(bool loadShader)
 	bumpFBO.AttachTexture(bumpTexture, GL_TEXTURE_2D, GL_COLOR_ATTACHMENT0_EXT);
 	FBO::Unbind();
 
-	if (!bumpFBO.IsValid()) {
+	if (!bumpFBO.IsValid())
+	{
 		throw content_error("Water Error: Invalid FBO");
 	}
 }
@@ -109,10 +138,20 @@ void CAdvWater::InitResources(bool loadShader)
 void CAdvWater::FreeResources()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	const auto DeleteTexture = [](GLuint& texID) { if (texID > 0) { glDeleteTextures(1, &texID); texID = 0; } };
+	if (HasVulkanBackend())
+	{
+		reflectTexture = 0;
+		bumpTexture = 0;
+		for (auto &rbt : rawBumpTexture)
+			rbt = 0;
+		waterFP = 0;
+		return;
+	}
+	const auto DeleteTexture = [](GLuint &texID)
+	{ if (texID > 0) { glDeleteTextures(1, &texID); texID = 0; } };
 	DeleteTexture(reflectTexture);
 	DeleteTexture(bumpTexture);
-	for (auto& rbt : rawBumpTexture)
+	for (auto &rbt : rawBumpTexture)
 		DeleteTexture(rbt);
 
 	glSafeDeleteProgram(waterFP);
@@ -122,18 +161,22 @@ void CAdvWater::FreeResources()
 void CAdvWater::Draw()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	Draw(true);
 }
 
 void CAdvWater::Draw(bool useBlending)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	if (!waterRendering->forceRendering && !readMap->HasVisibleWater())
 		return;
 
 	float3 base = camera->CalcPixelDir(globalRendering->viewPosX, globalRendering->viewSizeY);
-	float3 dv   = camera->CalcPixelDir(globalRendering->viewPosX, 0) - camera->CalcPixelDir(globalRendering->viewPosX, globalRendering->viewSizeY);
-	float3 dh   = camera->CalcPixelDir(globalRendering->viewPosX + globalRendering->viewSizeX, 0) - camera->CalcPixelDir(globalRendering->viewPosX, 0);
+	float3 dv = camera->CalcPixelDir(globalRendering->viewPosX, 0) - camera->CalcPixelDir(globalRendering->viewPosX, globalRendering->viewSizeY);
+	float3 dh = camera->CalcPixelDir(globalRendering->viewPosX + globalRendering->viewSizeX, 0) - camera->CalcPixelDir(globalRendering->viewPosX, 0);
 
 	float3 xbase;
 	float3 forward = camera->GetDir();
@@ -153,23 +196,26 @@ void CAdvWater::Draw(bool useBlending)
 	col[2] = (unsigned char)(waterSurfaceColor.z * 255);
 
 	glDisable(GL_ALPHA_TEST);
-	if (useBlending) {
+	if (useBlending)
+	{
 		glEnable(GL_BLEND);
-	} else {
+	}
+	else
+	{
 		glDisable(GL_BLEND);
 	}
 	glDepthMask(0);
 	glActiveTextureARB(GL_TEXTURE1_ARB);
-		glBindTexture(GL_TEXTURE_2D, bumpTexture);
-		GLfloat plan[] = {0.02f, 0, 0, 0};
-		glTexGeni(GL_S, GL_TEXTURE_GEN_MODE, GL_EYE_LINEAR);
-		glTexGenfv(GL_S, GL_EYE_PLANE, plan);
-		glEnable(GL_TEXTURE_GEN_S);
+	glBindTexture(GL_TEXTURE_2D, bumpTexture);
+	GLfloat plan[] = {0.02f, 0, 0, 0};
+	glTexGeni(GL_S, GL_TEXTURE_GEN_MODE, GL_EYE_LINEAR);
+	glTexGenfv(GL_S, GL_EYE_PLANE, plan);
+	glEnable(GL_TEXTURE_GEN_S);
 
-		GLfloat plan2[] = {0, 0, 0.02f, 0};
-		glTexGeni(GL_T, GL_TEXTURE_GEN_MODE, GL_EYE_LINEAR);
-		glTexGenfv(GL_T, GL_EYE_PLANE, plan2);
-		glEnable(GL_TEXTURE_GEN_T);
+	GLfloat plan2[] = {0, 0, 0.02f, 0};
+	glTexGeni(GL_T, GL_TEXTURE_GEN_MODE, GL_EYE_LINEAR);
+	glTexGenfv(GL_T, GL_EYE_PLANE, plan2);
+	glEnable(GL_TEXTURE_GEN_T);
 	glActiveTextureARB(GL_TEXTURE0_ARB);
 	glBindTexture(GL_TEXTURE_2D, reflectTexture);
 
@@ -179,28 +225,32 @@ void CAdvWater::Draw(bool useBlending)
 
 	forward.ANormalize2D();
 
-	glProgramEnvParameter4fARB(GL_FRAGMENT_PROGRAM_ARB, 0,  forward.z, forward.x, 0.0f, 0.0f);
+	glProgramEnvParameter4fARB(GL_FRAGMENT_PROGRAM_ARB, 0, forward.z, forward.x, 0.0f, 0.0f);
 	glProgramEnvParameter4fARB(GL_FRAGMENT_PROGRAM_ARB, 1, -forward.x, forward.z, 0.0f, 0.0f);
 
-	CVertexArray* va = GetVertexArray();
+	CVertexArray *va = GetVertexArray();
 	va->Initialize();
 	va->EnlargeArrays(5 * numDivs * (numDivs + 1) * 2, 5 * numDivs, VA_SIZE_TC); //! alloc room for all vertices and strips
 
-	for (int a = 0; a < 5; ++a) { //! CAUTION: loop count must match EnlargeArrays above
+	for (int a = 0; a < 5; ++a)
+	{ //! CAUTION: loop count must match EnlargeArrays above
 		bool maxReached = false;
 
-		for (int y = 0; y < numDivs; ++y) {
+		for (int y = 0; y < numDivs; ++y)
+		{
 			dir = base;
 			dir.ANormalize();
 
-			if (dir.y >= maxY) {
+			if (dir.y >= maxY)
+			{
 				maxReached = true;
 				break;
 			}
 
 			xbase = base;
 
-			for (int x = 0; x < numDivs + 1; ++x) { //! CAUTION: loop count must match EnlargeArrays above
+			for (int x = 0; x < numDivs + 1; ++x)
+			{ //! CAUTION: loop count must match EnlargeArrays above
 				dir = xbase + dv;
 				dir.ANormalize();
 
@@ -229,7 +279,7 @@ void CAdvWater::Draw(bool useBlending)
 		if (!maxReached)
 			break;
 
-		dv   *= 0.5f;
+		dv *= 0.5f;
 		maxY *= 0.5f;
 		yInc *= 0.5f;
 	}
@@ -240,8 +290,8 @@ void CAdvWater::Draw(bool useBlending)
 	glDisable(GL_FRAGMENT_PROGRAM_ARB);
 
 	glActiveTextureARB(GL_TEXTURE1_ARB);
-		glDisable(GL_TEXTURE_GEN_S);
-		glDisable(GL_TEXTURE_GEN_T);
+	glDisable(GL_TEXTURE_GEN_S);
+	glDisable(GL_TEXTURE_GEN_T);
 	glActiveTextureARB(GL_TEXTURE0_ARB);
 
 	// for translucent stuff like water, the default mode is blending and alpha testing enabled
@@ -249,9 +299,11 @@ void CAdvWater::Draw(bool useBlending)
 		glEnable(GL_BLEND);
 }
 
-void CAdvWater::UpdateWater(const CGame* game)
+void CAdvWater::UpdateWater(const CGame *game)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	if (!waterRendering->forceRendering && !readMap->HasVisibleWater())
 		return;
 
@@ -275,26 +327,26 @@ void CAdvWater::UpdateWater(const CGame* game)
 
 		glColor3f(0.2f, 0.2f, 0.2f);
 
-		CVertexArray* va = GetVertexArray();
+		CVertexArray *va = GetVertexArray();
 		va->Initialize();
 		va->EnlargeArrays(12, 0, VA_SIZE_T);
 
 		glBindTexture(GL_TEXTURE_2D, rawBumpTexture[0]);
 
-		va->AddVertexQT(ZeroVector, 0, 0 + gs->frameNum*0.0046f);
-		va->AddVertexQT(  UpVector, 0, 2 + gs->frameNum*0.0046f);
-		va->AddVertexQT(  XYVector, 2, 2 + gs->frameNum*0.0046f);
-		va->AddVertexQT( RgtVector, 2, 0 + gs->frameNum*0.0046f);
+		va->AddVertexQT(ZeroVector, 0, 0 + gs->frameNum * 0.0046f);
+		va->AddVertexQT(UpVector, 0, 2 + gs->frameNum * 0.0046f);
+		va->AddVertexQT(XYVector, 2, 2 + gs->frameNum * 0.0046f);
+		va->AddVertexQT(RgtVector, 2, 0 + gs->frameNum * 0.0046f);
 
-		va->AddVertexQT(ZeroVector, 0, 0 + gs->frameNum*0.0026f);
-		va->AddVertexQT(  UpVector, 0, 4 + gs->frameNum*0.0026f);
-		va->AddVertexQT(  XYVector, 2, 4 + gs->frameNum*0.0026f);
-		va->AddVertexQT( RgtVector, 2, 0 + gs->frameNum*0.0026f);
+		va->AddVertexQT(ZeroVector, 0, 0 + gs->frameNum * 0.0026f);
+		va->AddVertexQT(UpVector, 0, 4 + gs->frameNum * 0.0026f);
+		va->AddVertexQT(XYVector, 2, 4 + gs->frameNum * 0.0026f);
+		va->AddVertexQT(RgtVector, 2, 0 + gs->frameNum * 0.0026f);
 
-		va->AddVertexQT(ZeroVector, 0, 0 + gs->frameNum*0.0012f);
-		va->AddVertexQT(  UpVector, 0, 8 + gs->frameNum*0.0012f);
-		va->AddVertexQT(  XYVector, 2, 8 + gs->frameNum*0.0012f);
-		va->AddVertexQT( RgtVector, 2, 0 + gs->frameNum*0.0012f);
+		va->AddVertexQT(ZeroVector, 0, 0 + gs->frameNum * 0.0012f);
+		va->AddVertexQT(UpVector, 0, 8 + gs->frameNum * 0.0012f);
+		va->AddVertexQT(XYVector, 2, 8 + gs->frameNum * 0.0012f);
+		va->AddVertexQT(RgtVector, 2, 0 + gs->frameNum * 0.0012f);
 
 		va->DrawArrayT(GL_QUADS);
 
@@ -302,10 +354,10 @@ void CAdvWater::UpdateWater(const CGame* game)
 		va->Initialize();
 		glBindTexture(GL_TEXTURE_2D, rawBumpTexture[1]);
 
-		va->AddVertexQT(ZeroVector, 0, 0 + gs->frameNum*0.0036f);
-		va->AddVertexQT(  UpVector, 0, 1 + gs->frameNum*0.0036f);
-		va->AddVertexQT(  XYVector, 1, 1 + gs->frameNum*0.0036f);
-		va->AddVertexQT( RgtVector, 1, 0 + gs->frameNum*0.0036f);
+		va->AddVertexQT(ZeroVector, 0, 0 + gs->frameNum * 0.0036f);
+		va->AddVertexQT(UpVector, 0, 1 + gs->frameNum * 0.0036f);
+		va->AddVertexQT(XYVector, 1, 1 + gs->frameNum * 0.0036f);
+		va->AddVertexQT(RgtVector, 1, 0 + gs->frameNum * 0.0036f);
 
 		va->DrawArrayT(GL_QUADS);
 
@@ -313,10 +365,10 @@ void CAdvWater::UpdateWater(const CGame* game)
 		va->Initialize();
 		glBindTexture(GL_TEXTURE_2D, rawBumpTexture[2]);
 
-		va->AddVertexQT(ZeroVector, 0, 0 + gs->frameNum*0.0082f);
-		va->AddVertexQT(  UpVector, 0, 1 + gs->frameNum*0.0082f);
-		va->AddVertexQT(  XYVector, 1, 1 + gs->frameNum*0.0082f);
-		va->AddVertexQT( RgtVector, 1, 0 + gs->frameNum*0.0082f);
+		va->AddVertexQT(ZeroVector, 0, 0 + gs->frameNum * 0.0082f);
+		va->AddVertexQT(UpVector, 0, 1 + gs->frameNum * 0.0082f);
+		va->AddVertexQT(XYVector, 1, 1 + gs->frameNum * 0.0082f);
+		va->AddVertexQT(RgtVector, 1, 0 + gs->frameNum * 0.0082f);
 
 		va->DrawArrayT(GL_QUADS);
 
@@ -325,19 +377,24 @@ void CAdvWater::UpdateWater(const CGame* game)
 		glColor3f(1.0f, 1.0f, 1.0f);
 	}
 
-
 	reflectFBO.Bind();
-	const auto& sky = ISky::GetSky();
+	const auto &sky = ISky::GetSky();
 	glClearColor(sky->fogColor.x, sky->fogColor.y, sky->fogColor.z, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	const double clipPlaneEqs[2 * 4] = {
-		0.0, 1.0, 0.0, 0.0,
-		0.0, 1.0, 0.0, 0.0,
+		0.0,
+		1.0,
+		0.0,
+		0.0,
+		0.0,
+		1.0,
+		0.0,
+		0.0,
 	};
 
-	CCamera* prvCam = CCameraHandler::GetSetActiveCamera(CCamera::CAMTYPE_UWREFL);
-	CCamera* curCam = CCameraHandler::GetActiveCamera();
+	CCamera *prvCam = CCameraHandler::GetSetActiveCamera(CCamera::CAMTYPE_UWREFL);
+	CCamera *curCam = CCameraHandler::GetActiveCamera();
 
 	{
 		curCam->CopyStateReflect(prvCam);

@@ -43,22 +43,31 @@
 
 #include "System/Misc/TracyDefs.h"
 
+namespace
+{
+	bool HasVulkanBackend()
+	{
+		return ((globalRendering != nullptr) &&
+				(globalRendering->graphicsBackend != nullptr) &&
+				(globalRendering->graphicsBackend->Type() == gfx::BackendType::Vulkan));
+	}
+}
+
 CONFIG(int, LoadingMT)
 	.description("Experimental option to load the game in separate thread. Expect visual glitches, crashes and deadlocks")
 	.defaultValue(0)
 	.safemodeValue(0);
 
+CLoadScreen *CLoadScreen::singleton = nullptr;
 
-CLoadScreen* CLoadScreen::singleton = nullptr;
-
-CLoadScreen::CLoadScreen(std::string&& _mapFileName, std::string&& _modFileName, ILoadSaveHandler* _saveFile)
+CLoadScreen::CLoadScreen(std::string &&_mapFileName, std::string &&_modFileName, ILoadSaveHandler *_saveFile)
 	: saveFile(_saveFile)
 
-	, mapFileName(std::move(_mapFileName))
-	, modFileName(std::move(_modFileName))
+	  ,
+	  mapFileName(std::move(_mapFileName)), modFileName(std::move(_modFileName))
 
-	, mtLoading(true)
-	, lastDrawTime(0)
+	  ,
+	  mtLoading(true), lastDrawTime(0)
 {
 }
 
@@ -74,7 +83,8 @@ CLoadScreen::~CLoadScreen()
 	if (netHeartbeatThread.joinable())
 		netHeartbeatThread.join();
 
-	if (!gu->globalQuit) {
+	if (!gu->globalQuit)
+	{
 		activeController = game;
 
 		if (luaMenu != nullptr)
@@ -85,7 +95,6 @@ CLoadScreen::~CLoadScreen()
 		activeController = nullptr;
 }
 
-
 bool CLoadScreen::Init()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
@@ -95,7 +104,6 @@ bool CLoadScreen::Init()
 	// and gu->myPlayerNum has to be set.
 	skirmishAIHandler.LoadPreGame();
 
-
 #ifdef HEADLESS
 	mtLoading = false;
 #else
@@ -104,6 +112,8 @@ bool CLoadScreen::Init()
 	mtLoading = (mtCfg > 0);
 #endif
 
+	if (HasVulkanBackend())
+		mtLoading = false;
 
 	// Create a thread during the loading that pings the host/server, so it knows that this client is still alive/loading
 	clientNet->KeepUpdating(true);
@@ -113,13 +123,18 @@ bool CLoadScreen::Init()
 
 	CglFont::sync.SetThreadSafety(mtLoading);
 	CLoadLock::SetThreadSafety(mtLoading);
-	if (mtLoading) {
-		try {
+	if (mtLoading)
+	{
+		try
+		{
 			// create the game-loading thread; rebinds primary context to hidden window
 			gameLoadThread = CGameLoadThread(std::bind(&CGame::Load, game, mapFileName));
 
-			while (!Watchdog::HasThread(WDT_LOAD));
-		} catch (const opengl_error& gle) {
+			while (!Watchdog::HasThread(WDT_LOAD))
+				;
+		}
+		catch (const opengl_error &gle)
+		{
 			LOG_L(L_WARNING, "[LoadScreen::%s] offscreen GL context creation failed (error: \"%s\")", __func__, gle.what());
 
 			mtLoading = false;
@@ -134,6 +149,7 @@ bool CLoadScreen::Init()
 	// note that it has access to gl.LoadFont (which creates a user
 	// data wrapping a local font) but also to gl.*Text (which uses
 	// the global font), the latter will cause problems in GL4
+	if (!HasVulkanBackend())
 	{
 		auto lock = CLoadLock::GetUniqueLock();
 		CLuaIntro::LoadFreeHandler();
@@ -169,7 +185,6 @@ void CLoadScreen::Kill()
 	globalRendering->ToggleMultisampling();
 }
 
-
 /******************************************************************************/
 
 static void FinishedLoading()
@@ -179,22 +194,21 @@ static void FinishedLoading()
 		return;
 
 	// send our playername to the server to indicate we finished loading
-	const CPlayer* p = playerHandler.Player(gu->myPlayerNum);
+	const CPlayer *p = playerHandler.Player(gu->myPlayerNum);
 
 	clientNet->Send(CBaseNetProtocol::Get().SendPlayerName(gu->myPlayerNum, p->name));
-	#ifdef SYNCCHECK
+#ifdef SYNCCHECK
 	clientNet->Send(CBaseNetProtocol::Get().SendPathCheckSum(gu->myPlayerNum, pathManager->GetPathCheckSum()));
-	#endif
+#endif
 	mouse->ShowMouse();
 
-	#if !defined(HEADLESS) && !defined(NO_SOUND)
+#if !defined(HEADLESS) && !defined(NO_SOUND)
 	// NB: sound is initialized at this point, but EFX support is *not* guaranteed
 	efx.CommitEffects(mapInfo->efxprops);
-	#endif
+#endif
 }
 
-
-void CLoadScreen::CreateDeleteInstance(std::string&& mapFileName, std::string&& modFileName, ILoadSaveHandler* saveFile)
+void CLoadScreen::CreateDeleteInstance(std::string &&mapFileName, std::string &&modFileName, ILoadSaveHandler *saveFile)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	if (CreateInstance(std::move(mapFileName), std::move(modFileName), saveFile))
@@ -205,7 +219,7 @@ void CLoadScreen::CreateDeleteInstance(std::string&& mapFileName, std::string&& 
 	FinishedLoading();
 }
 
-bool CLoadScreen::CreateInstance(std::string&& mapFileName, std::string&& modFileName, ILoadSaveHandler* saveFile)
+bool CLoadScreen::CreateInstance(std::string &&mapFileName, std::string &&modFileName, ILoadSaveHandler *saveFile)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	assert(singleton == nullptr);
@@ -225,7 +239,6 @@ void CLoadScreen::DeleteInstance()
 	spring::SafeDelete(singleton);
 }
 
-
 /******************************************************************************/
 
 void CLoadScreen::ResizeEvent()
@@ -235,11 +248,10 @@ void CLoadScreen::ResizeEvent()
 		luaIntro->ViewResize();
 }
 
-
 int CLoadScreen::KeyPressed(int keyCode, int scanCode, bool isRepeat)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	//FIXME add mouse events
+	// FIXME add mouse events
 	if (luaIntro != nullptr)
 		luaIntro->KeyPress(keyCode, scanCode, isRepeat);
 
@@ -255,16 +267,34 @@ int CLoadScreen::KeyReleased(int keyCode, int scanCode)
 	return 0;
 }
 
-
 bool CLoadScreen::Update()
 {
 	ZoneScoped;
 
-	if (luaIntro != nullptr) {
+	// Skip Lua/OpenGL related progress drawing when running Vulkan backend.
+	// Still keep the loading-complete check and UnfreezeSpring so loading proceeds.
+	if (HasVulkanBackend())
+	{
+		if (game->IsDoneLoading())
+		{
+			CLoadScreen::DeleteInstance();
+			FinishedLoading();
+			return true;
+		}
+
+		if (!mtLoading)
+			spring::UnfreezeSpring(WDT_LOAD);
+
+		return true;
+	}
+
+	if (luaIntro != nullptr)
+	{
 		// keep checking this while we are the active controller
 		std::lock_guard<spring::recursive_mutex> lck(mutex);
 
-		for (const auto& pair: loadMessages) {
+		for (const auto &pair : loadMessages)
+		{
 			good_fpu_control_registers(pair.first.c_str());
 			luaIntro->LoadProgress(pair.first, pair.second);
 		}
@@ -272,7 +302,8 @@ bool CLoadScreen::Update()
 		loadMessages.clear();
 	}
 
-	if (game->IsDoneLoading()) {
+	if (game->IsDoneLoading())
+	{
 		CLoadScreen::DeleteInstance();
 		FinishedLoading();
 		return true;
@@ -285,12 +316,14 @@ bool CLoadScreen::Update()
 	return true;
 }
 
-
 bool CLoadScreen::Draw()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return true;
 	// limit FPS via sleep to not lock a singlethreaded CPU from loading the game
-	if (mtLoading) {
+	if (mtLoading)
+	{
 		const spring_time now = spring_gettime();
 		const unsigned diffTime = spring_tomsecs(now - lastDrawTime);
 
@@ -308,7 +341,8 @@ bool CLoadScreen::Draw()
 	if (luaMenu != nullptr)
 		luaMenu->Update();
 
-	if (luaIntro != nullptr) {
+	if (luaIntro != nullptr)
+	{
 		luaIntro->Update();
 		luaIntro->DrawGenesis();
 		ClearScreen();
@@ -321,11 +355,10 @@ bool CLoadScreen::Draw()
 	return true;
 }
 
-
 /******************************************************************************/
 /******************************************************************************/
 
-void CLoadScreen::SetLoadMessage(const std::string& text, bool replaceLast)
+void CLoadScreen::SetLoadMessage(const std::string &text, bool replaceLast)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	spring::UnfreezeSpring(WDT_LOAD);
@@ -342,10 +375,12 @@ void CLoadScreen::SetLoadMessage(const std::string& text, bool replaceLast)
 	// in ::Update)
 	good_fpu_control_registers(text.c_str());
 
+	if (HasVulkanBackend())
+		return;
+
 	if (mtLoading)
 		return;
 
 	Update();
 	Draw();
 }
-

@@ -35,11 +35,27 @@ LOG_REGISTER_SECTION_GLOBAL(LOG_SECTION_SKY_BOX)
 #endif
 #define LOG_SECTION_CURRENT LOG_SECTION_SKY_BOX
 
+namespace
+{
+	bool HasVulkanBackend()
+	{
+		return ((globalRendering != nullptr) &&
+				(globalRendering->graphicsBackend != nullptr) &&
+				(globalRendering->graphicsBackend->Type() == gfx::BackendType::Vulkan));
+	}
+}
+
 void CSkyBox::Init(uint32_t textureID, uint32_t xsize, uint32_t ysize, bool convertToCM)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	shader = nullptr;
 #ifndef HEADLESS
+	if (HasVulkanBackend())
+	{
+		valid = false;
+		return;
+	}
+
 	if (textureID == 0)
 		return;
 
@@ -208,6 +224,12 @@ void CSkyBox::Init(uint32_t textureID, uint32_t xsize, uint32_t ysize, bool conv
 
 CSkyBox::CSkyBox(const std::string &texture)
 {
+	if (HasVulkanBackend())
+	{
+		valid = false;
+		return;
+	}
+
 	CBitmap btex;
 #ifndef HEADLESS
 	if (!btex.Load(texture) || !(btex.textype == GL_TEXTURE_CUBE_MAP || btex.textype == GL_TEXTURE_2D))
@@ -234,6 +256,9 @@ void CSkyBox::Draw()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 #ifndef HEADLESS
+	if (HasVulkanBackend())
+		return;
+
 	if (!globalRendering->drawSky)
 		return;
 

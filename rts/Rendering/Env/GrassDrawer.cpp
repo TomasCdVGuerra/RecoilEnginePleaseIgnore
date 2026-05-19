@@ -19,6 +19,7 @@
 #include "Rendering/Shaders/ShaderHandler.h"
 #include "Rendering/Shaders/Shader.h"
 #include "Rendering/Textures/Bitmap.h"
+#include "Rendering/Gfx/GfxTypes.h"
 #include "Sim/Misc/Wind.h"
 #include "System/EventHandler.h"
 #include "System/GlobalRNG.h"
@@ -33,6 +34,16 @@
 #include "System/FileSystem/FileHandler.h"
 
 #include "System/Misc/TracyDefs.h"
+
+namespace
+{
+	bool HasVulkanBackend()
+	{
+		return ((globalRendering != nullptr) &&
+				(globalRendering->graphicsBackend != nullptr) &&
+				(globalRendering->graphicsBackend->Type() == gfx::BackendType::Vulkan));
+	}
+}
 
 CONFIG(int, GrassDetail).defaultValue(7).headlessValue(0).minimumValue(0).description("Sets how detailed the engine rendered grass will be on any given map.");
 
@@ -225,6 +236,15 @@ CGrassDrawer::CGrassDrawer()
 		}
 	}
 
+	if (HasVulkanBackend())
+	{
+		grassOff = true;
+		grassDL = 0;
+		grassBladeTex = 0;
+		farTex = 0;
+		return;
+	}
+
 	// create/load blade texture
 	{
 		CBitmap grassBladeTexBM;
@@ -263,6 +283,15 @@ CGrassDrawer::~CGrassDrawer()
 {
 	eventHandler.RemoveClient(this);
 	configHandler->RemoveObserver(this);
+	if (HasVulkanBackend())
+	{
+		grassDL = 0;
+		grassBladeTex = 0;
+		farTex = 0;
+		grassShaders.clear();
+		grassShader = nullptr;
+		return;
+	}
 
 	glDeleteLists(grassDL, 1);
 	glDeleteTextures(1, &grassBladeTex);
@@ -559,6 +588,8 @@ void CGrassDrawer::Update()
 void CGrassDrawer::Draw()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	if (grassOff || !readMap->GetGrassShadingTexture())
 		return;
 
@@ -589,6 +620,8 @@ void CGrassDrawer::Draw()
 void CGrassDrawer::DrawShadow()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	// Grass self-shadowing doesn't look that good atm
 	/*	if (grassOff || !readMap->GetGrassShadingTexture())
 			return;

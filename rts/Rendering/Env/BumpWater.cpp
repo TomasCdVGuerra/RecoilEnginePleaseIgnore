@@ -22,6 +22,7 @@
 #include "Rendering/Shaders/Shader.h"
 #include "Rendering/Textures/Bitmap.h"
 #include "Rendering/Textures/TextureAtlas.h"
+#include "Rendering/Gfx/GfxTypes.h"
 #include "System/FileSystem/FileHandler.h"
 #include "System/FastMath.h"
 #include "System/SpringMath.h"
@@ -36,10 +37,20 @@
 #include "System/Misc/TracyDefs.h"
 #include <bit>
 
+namespace
+{
+	bool HasVulkanBackend()
+	{
+		return ((globalRendering != nullptr) &&
+				(globalRendering->graphicsBackend != nullptr) &&
+				(globalRendering->graphicsBackend->Type() == gfx::BackendType::Vulkan));
+	}
+}
+
+using std::max;
+using std::min;
 using std::string;
 using std::vector;
-using std::min;
-using std::max;
 
 CONFIG(int, BumpWaterTexSizeReflection).defaultValue(512).headlessValue(32).minimumValue(32).description("Sets the size of the framebuffer texture used to store the reflection in Bumpmapped water.");
 CONFIG(int, BumpWaterReflection).defaultValue(1).headlessValue(0).minimumValue(0).maximumValue(2).description("Determines the amount of objects reflected in Bumpmapped water.\n0:=off, 1:=fast (skip terrain), 2:=full");
@@ -59,7 +70,7 @@ LOG_REGISTER_SECTION_GLOBAL(LOG_SECTION_BUMP_WATER)
 
 // use the specific section for all LOG*() calls in this source file
 #ifdef LOG_SECTION_CURRENT
-	#undef LOG_SECTION_CURRENT
+#undef LOG_SECTION_CURRENT
 #endif
 #define LOG_SECTION_CURRENT LOG_SECTION_BUMP_WATER
 
@@ -67,33 +78,32 @@ LOG_REGISTER_SECTION_GLOBAL(LOG_SECTION_BUMP_WATER)
 /// HELPER FUNCTIONS
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static void GLSLDefineConst4f(string& str, const string& name, const float x, const float y, const float z, const float w)
+static void GLSLDefineConst4f(string &str, const string &name, const float x, const float y, const float z, const float w)
 {
 	str += spring::format(string("#define ") + name + " vec4(%.12f,%.12f,%.12f,%.12f)\n", x, y, z, w);
 }
 
-static void GLSLDefineConstf4(string& str, const string& name, const float3& v, float alpha)
+static void GLSLDefineConstf4(string &str, const string &name, const float3 &v, float alpha)
 {
 	str += spring::format(string("#define ") + name + " vec4(%.12f,%.12f,%.12f,%.12f)\n", v.x, v.y, v.z, alpha);
 }
 
-static void GLSLDefineConstf3(string& str, const string& name, const float3& v)
+static void GLSLDefineConstf3(string &str, const string &name, const float3 &v)
 {
 	str += spring::format(string("#define ") + name + " vec3(%.12f,%.12f,%.12f)\n", v.x, v.y, v.z);
 }
 
-static void GLSLDefineConstf2(string& str, const string& name, float x, float y)
+static void GLSLDefineConstf2(string &str, const string &name, float x, float y)
 {
 	str += spring::format(string("#define ") + name + " vec2(%.12f,%.12f)\n", x, y);
 }
 
-static void GLSLDefineConstf1(string& str, const string& name, float x)
+static void GLSLDefineConstf1(string &str, const string &name, float x)
 {
 	str += spring::format(string("#define ") + name + " %.12f\n", x);
 }
 
-
-static GLuint LoadTexture(const string& filename, const float anisotropy = 0.0f, int* sizeX = nullptr, int* sizeY = nullptr)
+static GLuint LoadTexture(const string &filename, const float anisotropy = 0.0f, int *sizeX = nullptr, int *sizeY = nullptr)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	CBitmap bm;
@@ -103,7 +113,8 @@ static GLuint LoadTexture(const string& filename, const float anisotropy = 0.0f,
 
 	const unsigned int texID = bm.CreateMipMapTexture(anisotropy);
 
-	if (sizeY != nullptr) {
+	if (sizeY != nullptr)
+	{
 		*sizeX = bm.xsize;
 		*sizeY = bm.ysize;
 	}
@@ -111,13 +122,13 @@ static GLuint LoadTexture(const string& filename, const float anisotropy = 0.0f,
 	return texID;
 }
 
-
 static TypedRenderBuffer<VA_TYPE_0> GenWaterPlaneBuffer(bool radial)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	auto rb = TypedRenderBuffer<VA_TYPE_0>(9 * 9 * 6, 0, IStreamBufferConcept::Types::SB_BUFFERDATA);
 
-	if (radial) {
+	if (radial)
+	{
 		// FIXME: more or less copied from SMFGroundDrawer
 		const float xsize = static_cast<float>((mapDims.mapx * SQUARE_SIZE) >> 2);
 		const float ysize = static_cast<float>((mapDims.mapy * SQUARE_SIZE) >> 2);
@@ -125,43 +136,49 @@ static TypedRenderBuffer<VA_TYPE_0> GenWaterPlaneBuffer(bool radial)
 		const float alphainc = math::TWOPI / 32.0f;
 		const float size = std::min(xsize, ysize);
 
-		float3 p; p.y = 0.0f;
+		float3 p;
+		p.y = 0.0f;
 
-		for (int n = 0; n < 4; ++n) {
+		for (int n = 0; n < 4; ++n)
+		{
 			const float k = (n == 3) ? 0.5f : 1.0f;
 
 			const float r1 = (n + 0) * (n + 0) * size;
 			const float r2 = (n + k) * (n + k) * size;
 
-			for (float alpha = 0.0f; (alpha - math::TWOPI) < alphainc; alpha += alphainc) {
+			for (float alpha = 0.0f; (alpha - math::TWOPI) < alphainc; alpha += alphainc)
+			{
 				p.x = r1 * fastmath::sin(alpha) + 2 * xsize;
 				p.z = r1 * fastmath::cos(alpha) + 2 * ysize;
-				rb.AddVertex({ p });
+				rb.AddVertex({p});
 
 				p.x = r2 * fastmath::sin(alpha) + 2 * xsize;
 				p.z = r2 * fastmath::cos(alpha) + 2 * ysize;
-				rb.AddVertex({ p });
+				rb.AddVertex({p});
 			}
 		}
 	}
-	else {
+	else
+	{
 		const int mapX = mapDims.mapx * SQUARE_SIZE;
 		const int mapZ = mapDims.mapy * SQUARE_SIZE;
 
-		for (int z = 0; z < 9; z++) {
-			for (int x = 0; x < 9; x++) {
-				const float3 v0{ (x + 0) * (mapX / 9.0f), 0.0f, (z + 0) * (mapZ / 9.0f) };
-				const float3 v1{ (x + 0) * (mapX / 9.0f), 0.0f, (z + 1) * (mapZ / 9.0f) };
-				const float3 v2{ (x + 1) * (mapX / 9.0f), 0.0f, (z + 0) * (mapZ / 9.0f) };
-				const float3 v3{ (x + 1) * (mapX / 9.0f), 0.0f, (z + 1) * (mapZ / 9.0f) };
+		for (int z = 0; z < 9; z++)
+		{
+			for (int x = 0; x < 9; x++)
+			{
+				const float3 v0{(x + 0) * (mapX / 9.0f), 0.0f, (z + 0) * (mapZ / 9.0f)};
+				const float3 v1{(x + 0) * (mapX / 9.0f), 0.0f, (z + 1) * (mapZ / 9.0f)};
+				const float3 v2{(x + 1) * (mapX / 9.0f), 0.0f, (z + 0) * (mapZ / 9.0f)};
+				const float3 v3{(x + 1) * (mapX / 9.0f), 0.0f, (z + 1) * (mapZ / 9.0f)};
 
-				rb.AddVertex({ v0 });
-				rb.AddVertex({ v1 });
-				rb.AddVertex({ v2 });
+				rb.AddVertex({v0});
+				rb.AddVertex({v1});
+				rb.AddVertex({v2});
 
-				rb.AddVertex({ v1 });
-				rb.AddVertex({ v3 });
-				rb.AddVertex({ v2 });
+				rb.AddVertex({v1});
+				rb.AddVertex({v3});
+				rb.AddVertex({v2});
 			}
 		}
 	}
@@ -170,25 +187,12 @@ static TypedRenderBuffer<VA_TYPE_0> GenWaterPlaneBuffer(bool radial)
 	return rb;
 }
 
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// (DE-)CONSTRUCTOR
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 CBumpWater::CBumpWater()
 
-	: CEventClient("[CBumpWater]", 271923, false)
-	, target(GL_TEXTURE_2D)
-	, screenTextureX(globalRendering->viewSizeX)
-	, screenTextureY(globalRendering->viewSizeY)
-	, refractTexture(0)
-	, reflectTexture(0)
-	, depthTexture(0)
-	, waveRandTexture(0)
-	, foamTexture(0)
-	, normalTexture(0)
-	, normalTexture2(0)
-	, coastTexture(0)
-	, coastUpdateTexture(0)
+	: CEventClient("[CBumpWater]", 271923, false), target(GL_TEXTURE_2D), screenTextureX(globalRendering->viewSizeX), screenTextureY(globalRendering->viewSizeY), refractTexture(0), reflectTexture(0), depthTexture(0), waveRandTexture(0), foamTexture(0), normalTexture(0), normalTexture2(0), coastTexture(0), coastUpdateTexture(0)
 {
 	eventHandler.AddClient(this);
 }
@@ -204,51 +208,72 @@ void CBumpWater::InitResources(bool loadShader)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	// LOAD USER CONFIGS
-	reflTexSize  = std::bit_ceil <uint32_t> (configHandler->GetInt("BumpWaterTexSizeReflection"));
-	reflection   = configHandler->GetInt("BumpWaterReflection");
-	refraction   = configHandler->GetInt("BumpWaterRefraction");
-	anisotropy   = configHandler->GetFloat("BumpWaterAnisotropy");
-	depthCopy    = configHandler->GetBool("BumpWaterUseDepthTexture");
-	depthBits    = configHandler->GetInt("BumpWaterDepthBits");
-	depthBits    = std::min(depthBits, static_cast<char>(globalRendering->supportDepthBufferBitDepth));
-	blurRefl     = configHandler->GetBool("BumpWaterBlurReflection");
-	shoreWaves   = (configHandler->GetBool("BumpWaterShoreWaves")) && waterRendering->shoreWaves;
-	endlessOcean = (configHandler->GetBool("BumpWaterEndlessOcean")) && waterRendering->hasWaterPlane
-	               && ((readMap->HasVisibleWater()) || (waterRendering->forceRendering));
-	dynWaves     = (configHandler->GetBool("BumpWaterDynamicWaves")) && (waterRendering->numTiles > 1);
+	reflTexSize = std::bit_ceil<uint32_t>(configHandler->GetInt("BumpWaterTexSizeReflection"));
+	reflection = configHandler->GetInt("BumpWaterReflection");
+	refraction = configHandler->GetInt("BumpWaterRefraction");
+	anisotropy = configHandler->GetFloat("BumpWaterAnisotropy");
+	depthCopy = configHandler->GetBool("BumpWaterUseDepthTexture");
+	depthBits = configHandler->GetInt("BumpWaterDepthBits");
+	depthBits = std::min(depthBits, static_cast<char>(globalRendering->supportDepthBufferBitDepth));
+	blurRefl = configHandler->GetBool("BumpWaterBlurReflection");
+	shoreWaves = (configHandler->GetBool("BumpWaterShoreWaves")) && waterRendering->shoreWaves;
+	endlessOcean = (configHandler->GetBool("BumpWaterEndlessOcean")) && waterRendering->hasWaterPlane && ((readMap->HasVisibleWater()) || (waterRendering->forceRendering));
+	dynWaves = (configHandler->GetBool("BumpWaterDynamicWaves")) && (waterRendering->numTiles > 1);
+
+	if (HasVulkanBackend())
+	{
+		refractTexture = 0;
+		reflectTexture = 0;
+		depthTexture = 0;
+		waveRandTexture = 0;
+		foamTexture = 0;
+		normalTexture = 0;
+		normalTexture2 = 0;
+		coastTexture = 0;
+		coastUpdateTexture = 0;
+		caustTextures.clear();
+		tileOffsets.clear();
+		waterShader = nullptr;
+		blurShader = nullptr;
+		return;
+	}
 
 	shoreWaves = shoreWaves && (FBO::IsSupported());
-	dynWaves   = dynWaves && (FBO::IsSupported() && GLAD_GL_ARB_imaging);
+	dynWaves = dynWaves && (FBO::IsSupported() && GLAD_GL_ARB_imaging);
 
 	// LOAD TEXTURES
-	foamTexture   = LoadTexture(waterRendering->foamTexture);
+	foamTexture = LoadTexture(waterRendering->foamTexture);
 	normalTexture = LoadTexture(waterRendering->normalTexture, anisotropy, &normalTextureX, &normalTextureY);
 
 	// caustic textures
-	const vector<string>& causticNames = waterRendering->causticTextures;
-	if (causticNames.empty()) {
+	const vector<string> &causticNames = waterRendering->causticTextures;
+	if (causticNames.empty())
+	{
 		throw content_error("[" LOG_SECTION_BUMP_WATER "] no caustic textures");
 	}
-	for (int i = 0; i < (int)causticNames.size(); ++i) {
+	for (int i = 0; i < (int)causticNames.size(); ++i)
+	{
 		caustTextures.push_back(LoadTexture(causticNames[i]));
 	}
 
 	// CHECK SHOREWAVES TEXTURE SIZE
-	if (shoreWaves) {
+	if (shoreWaves)
+	{
 		GLint maxw, maxh;
 		glTexImage2D(GL_PROXY_TEXTURE_2D, 0, GL_RGBA16F_ARB, 4096, 4096, 0, GL_RGBA, GL_FLOAT, NULL);
 		glGetTexLevelParameteriv(GL_PROXY_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &maxw);
 		glGetTexLevelParameteriv(GL_PROXY_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &maxh);
-		if (mapDims.mapx>maxw || mapDims.mapy>maxh) {
+		if (mapDims.mapx > maxw || mapDims.mapy > maxh)
+		{
 			shoreWaves = false;
 			LOG_L(L_WARNING, "Can not display shorewaves (map too large)!");
 		}
 	}
 
-
 	// SHOREWAVES
-	if (shoreWaves) {
-		waveRandTexture = LoadTexture( "bitmaps/shorewaverand.png" );
+	if (shoreWaves)
+	{
+		waveRandTexture = LoadTexture("bitmaps/shorewaverand.png");
 
 		glGenTextures(1, &coastTexture);
 		glBindTexture(GL_TEXTURE_2D, coastTexture);
@@ -256,12 +281,11 @@ void CBumpWater::InitResources(bool loadShader)
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-		//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F_ARB, mapDims.mapx, mapDims.mapy, 0, GL_RGBA, GL_FLOAT, NULL);
+		// glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		// glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+		// glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F_ARB, mapDims.mapx, mapDims.mapy, 0, GL_RGBA, GL_FLOAT, NULL);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB5, mapDims.mapx, mapDims.mapy, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
-		//glGenerateMipmapEXT(GL_TEXTURE_2D);
-
+		// glGenerateMipmapEXT(GL_TEXTURE_2D);
 
 		{
 			blurShader = shaderHandler->CreateProgramObject("[BumpWater]", "CoastBlurShader");
@@ -270,9 +294,10 @@ void CBumpWater::InitResources(bool loadShader)
 			blurShader->BindAttribLocations<VA_TYPE_T4>();
 			blurShader->Link();
 
-			if (!blurShader->IsValid()) {
-				const char* fmt = "shorewaves-shader compilation error: %s";
-				const char* log = (blurShader->GetLog()).c_str();
+			if (!blurShader->IsValid())
+			{
+				const char *fmt = "shorewaves-shader compilation error: %s";
+				const char *log = (blurShader->GetLog()).c_str();
 
 				LOG_L(L_ERROR, fmt, log);
 
@@ -287,21 +312,22 @@ void CBumpWater::InitResources(bool loadShader)
 			blurShader->Disable();
 			blurShader->Validate();
 
-			if (!blurShader->IsValid()) {
-				const char* fmt = "shorewaves-shader validation error: %s";
-				const char* log = (blurShader->GetLog()).c_str();
+			if (!blurShader->IsValid())
+			{
+				const char *fmt = "shorewaves-shader validation error: %s";
+				const char *log = (blurShader->GetLog()).c_str();
 
 				LOG_L(L_ERROR, fmt, log);
 				throw content_error(string("[" LOG_SECTION_BUMP_WATER "] shorewaves-shader validation error!"));
 			}
 		}
 
-
 		coastFBO.reloadOnAltTab = true;
 		coastFBO.Bind();
 		coastFBO.AttachTexture(coastTexture, GL_TEXTURE_2D, GL_COLOR_ATTACHMENT0_EXT);
 
-		if ((shoreWaves = coastFBO.CheckStatus("BUMPWATER(Coastmap)"))) {
+		if ((shoreWaves = coastFBO.CheckStatus("BUMPWATER(Coastmap)")))
+		{
 			// initialize texture
 			glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 			glClear(GL_COLOR_BUFFER_BIT);
@@ -314,12 +340,12 @@ void CBumpWater::InitResources(bool loadShader)
 			eventHandler.InsertEvent(this, "UnsyncedHeightMapUpdate");
 		}
 
-		//coastFBO.Unbind(); // gets done below
+		// coastFBO.Unbind(); // gets done below
 	}
 
-
 	// CREATE TEXTURES
-	if (refraction > 0) {
+	if (refraction > 0)
+	{
 		// CREATE REFRACTION TEXTURE
 		glGenTextures(1, &refractTexture);
 		glBindTexture(target, refractTexture);
@@ -332,7 +358,8 @@ void CBumpWater::InitResources(bool loadShader)
 		glTexImage2D(target, 0, GL_RGBA8, screenTextureX, screenTextureY, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 	}
 
-	if (reflection > 0) {
+	if (reflection > 0)
+	{
 		// CREATE REFLECTION TEXTURE
 		glGenTextures(1, &reflectTexture);
 		glBindTexture(GL_TEXTURE_2D, reflectTexture);
@@ -343,7 +370,8 @@ void CBumpWater::InitResources(bool loadShader)
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, reflTexSize, reflTexSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 	}
 
-	if (depthCopy) {
+	if (depthCopy)
+	{
 		// CREATE DEPTH TEXTURE
 		glGenTextures(1, &depthTexture);
 		glBindTexture(target, depthTexture);
@@ -353,7 +381,8 @@ void CBumpWater::InitResources(bool loadShader)
 		glTexImage2D(target, 0, depthFormat, screenTextureX, screenTextureY, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
 	}
 
-	if (dynWaves) {
+	if (dynWaves)
+	{
 		// SETUP DYNAMIC WAVES
 		tileOffsets.resize(waterRendering->numTiles * waterRendering->numTiles);
 
@@ -366,7 +395,8 @@ void CBumpWater::InitResources(bool loadShader)
 		glBindTexture(GL_TEXTURE_2D, normalTexture);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-		if (anisotropy > 0.0f) {
+		if (anisotropy > 0.0f)
+		{
 			glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, anisotropy);
 		}
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, normalTextureX, normalTextureY, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
@@ -374,32 +404,39 @@ void CBumpWater::InitResources(bool loadShader)
 	}
 
 	// CREATE FBOs
-	if (FBO::IsSupported()) {
+	if (FBO::IsSupported())
+	{
 		GLuint depthRBOFormat = static_cast<GLuint>(CGlobalRendering::DepthBitsToFormat(depthBits));
 
-		if (reflection>0) {
+		if (reflection > 0)
+		{
 			reflectFBO.Bind();
 			reflectFBO.CreateRenderBuffer(GL_DEPTH_ATTACHMENT_EXT, depthRBOFormat, reflTexSize, reflTexSize);
 			reflectFBO.AttachTexture(reflectTexture);
-			if (!reflectFBO.CheckStatus("BUMPWATER(reflection)")) {
+			if (!reflectFBO.CheckStatus("BUMPWATER(reflection)"))
+			{
 				reflection = 0;
 			}
 		}
 
-		if (refraction > 0) {
+		if (refraction > 0)
+		{
 			refractFBO.Bind();
 			refractFBO.CreateRenderBuffer(GL_DEPTH_ATTACHMENT_EXT, depthRBOFormat, screenTextureX, screenTextureY);
-			refractFBO.AttachTexture(refractTexture,target);
-			if (!refractFBO.CheckStatus("BUMPWATER(refraction)")) {
+			refractFBO.AttachTexture(refractTexture, target);
+			if (!refractFBO.CheckStatus("BUMPWATER(refraction)"))
+			{
 				refraction = 0;
 			}
 		}
 
-		if (dynWaves) {
+		if (dynWaves)
+		{
 			dynWavesFBO.reloadOnAltTab = true;
 			dynWavesFBO.Bind();
 			dynWavesFBO.AttachTexture(normalTexture);
-			if (dynWavesFBO.CheckStatus("BUMPWATER(DynWaves)")) {
+			if (dynWavesFBO.CheckStatus("BUMPWATER(DynWaves)"))
+			{
 				UpdateDynWaves(true); // initialize
 			}
 		}
@@ -407,61 +444,66 @@ void CBumpWater::InitResources(bool loadShader)
 		FBO::Unbind();
 	}
 
-
 	/*
 	 * DEFINE SOME SHADER RUNTIME CONSTANTS
 	 * (I do not use Uniforms for that, because the GLSL compiler can not
 	 * optimize those!)
 	 */
 	string definitions;
-	if (reflection>0) definitions += "#define opt_reflection\n";
-	if (refraction>0) definitions += "#define opt_refraction\n";
-	if (shoreWaves)   definitions += "#define opt_shorewaves\n";
-	if (depthCopy)    definitions += "#define opt_depth\n";
-	if (blurRefl)     definitions += "#define opt_blurreflection\n";
-	if (endlessOcean) definitions += "#define opt_endlessocean\n";
+	if (reflection > 0)
+		definitions += "#define opt_reflection\n";
+	if (refraction > 0)
+		definitions += "#define opt_refraction\n";
+	if (shoreWaves)
+		definitions += "#define opt_shorewaves\n";
+	if (depthCopy)
+		definitions += "#define opt_depth\n";
+	if (blurRefl)
+		definitions += "#define opt_blurreflection\n";
+	if (endlessOcean)
+		definitions += "#define opt_endlessocean\n";
 
-	GLSLDefineConstf3(definitions, "MapMid",                    float3(mapDims.mapx * SQUARE_SIZE * 0.5f, 0.0f, mapDims.mapy * SQUARE_SIZE * 0.5f));
-	GLSLDefineConstf2(definitions, "ScreenInverse",             1.0f / globalRendering->viewSizeX, 1.0f / globalRendering->viewSizeY);
-	GLSLDefineConstf2(definitions, "ScreenTextureSizeInverse",  1.0f / screenTextureX, 1.0f / screenTextureY);
-	GLSLDefineConstf2(definitions, "ViewPos",                   globalRendering->viewPosX, globalRendering->viewPosY);
+	GLSLDefineConstf3(definitions, "MapMid", float3(mapDims.mapx * SQUARE_SIZE * 0.5f, 0.0f, mapDims.mapy * SQUARE_SIZE * 0.5f));
+	GLSLDefineConstf2(definitions, "ScreenInverse", 1.0f / globalRendering->viewSizeX, 1.0f / globalRendering->viewSizeY);
+	GLSLDefineConstf2(definitions, "ScreenTextureSizeInverse", 1.0f / screenTextureX, 1.0f / screenTextureY);
+	GLSLDefineConstf2(definitions, "ViewPos", globalRendering->viewPosX, globalRendering->viewPosY);
 
-	GLSLDefineConstf4(definitions, "SurfaceColor",   waterRendering->surfaceColor*0.4, waterRendering->surfaceAlpha );
-	GLSLDefineConstf4(definitions, "PlaneColor",     waterRendering->planeColor*0.4, waterRendering->surfaceAlpha );
-	GLSLDefineConstf3(definitions, "DiffuseColor",   waterRendering->diffuseColor);
-	GLSLDefineConstf3(definitions, "SpecularColor",  waterRendering->specularColor);
-	GLSLDefineConstf1(definitions, "SpecularPower",  waterRendering->specularPower);
+	GLSLDefineConstf4(definitions, "SurfaceColor", waterRendering->surfaceColor * 0.4, waterRendering->surfaceAlpha);
+	GLSLDefineConstf4(definitions, "PlaneColor", waterRendering->planeColor * 0.4, waterRendering->surfaceAlpha);
+	GLSLDefineConstf3(definitions, "DiffuseColor", waterRendering->diffuseColor);
+	GLSLDefineConstf3(definitions, "SpecularColor", waterRendering->specularColor);
+	GLSLDefineConstf1(definitions, "SpecularPower", waterRendering->specularPower);
 	GLSLDefineConstf1(definitions, "SpecularFactor", waterRendering->specularFactor);
-	GLSLDefineConstf1(definitions, "AmbientFactor",  waterRendering->ambientFactor);
-	GLSLDefineConstf1(definitions, "DiffuseFactor",  waterRendering->diffuseFactor * 15.0f);
-	GLSLDefineConstf3(definitions, "SunDir"       ,  ISky::GetSky()->GetLight()->GetLightDir()); // FIXME: not a constant
-	GLSLDefineConstf1(definitions, "FresnelMin",     waterRendering->fresnelMin);
-	GLSLDefineConstf1(definitions, "FresnelMax",     waterRendering->fresnelMax);
-	GLSLDefineConstf1(definitions, "FresnelPower",   waterRendering->fresnelPower);
+	GLSLDefineConstf1(definitions, "AmbientFactor", waterRendering->ambientFactor);
+	GLSLDefineConstf1(definitions, "DiffuseFactor", waterRendering->diffuseFactor * 15.0f);
+	GLSLDefineConstf3(definitions, "SunDir", ISky::GetSky()->GetLight()->GetLightDir()); // FIXME: not a constant
+	GLSLDefineConstf1(definitions, "FresnelMin", waterRendering->fresnelMin);
+	GLSLDefineConstf1(definitions, "FresnelMax", waterRendering->fresnelMax);
+	GLSLDefineConstf1(definitions, "FresnelPower", waterRendering->fresnelPower);
 	GLSLDefineConstf1(definitions, "ReflDistortion", waterRendering->reflDistortion);
-	GLSLDefineConstf2(definitions, "BlurBase",       0.0f, waterRendering->blurBase / globalRendering->viewSizeY);
-	GLSLDefineConstf1(definitions, "BlurExponent",   waterRendering->blurExponent);
-	GLSLDefineConstf1(definitions, "PerlinStartFreq",  waterRendering->perlinStartFreq);
+	GLSLDefineConstf2(definitions, "BlurBase", 0.0f, waterRendering->blurBase / globalRendering->viewSizeY);
+	GLSLDefineConstf1(definitions, "BlurExponent", waterRendering->blurExponent);
+	GLSLDefineConstf1(definitions, "PerlinStartFreq", waterRendering->perlinStartFreq);
 	GLSLDefineConstf1(definitions, "PerlinLacunarity", waterRendering->perlinLacunarity);
-	GLSLDefineConstf1(definitions, "PerlinAmp",        waterRendering->perlinAmplitude);
-	GLSLDefineConstf1(definitions, "WaveOffsetFactor",   waterRendering->waveOffsetFactor);
-	GLSLDefineConstf1(definitions, "WaveLength",         waterRendering->waveLength);
+	GLSLDefineConstf1(definitions, "PerlinAmp", waterRendering->perlinAmplitude);
+	GLSLDefineConstf1(definitions, "WaveOffsetFactor", waterRendering->waveOffsetFactor);
+	GLSLDefineConstf1(definitions, "WaveLength", waterRendering->waveLength);
 	GLSLDefineConstf1(definitions, "WaveFoamDistortion", waterRendering->waveFoamDistortion);
-	GLSLDefineConstf1(definitions, "WaveFoamIntensity",  waterRendering->waveFoamIntensity);
+	GLSLDefineConstf1(definitions, "WaveFoamIntensity", waterRendering->waveFoamIntensity);
 	GLSLDefineConstf1(definitions, "CausticsResolution", waterRendering->causticsResolution);
-	GLSLDefineConstf1(definitions, "CausticsStrength",   waterRendering->causticsStrength);
-	GLSLDefineConstf1(definitions, "shadowDensity",  sunLighting->groundShadowDensity);
+	GLSLDefineConstf1(definitions, "CausticsStrength", waterRendering->causticsStrength);
+	GLSLDefineConstf1(definitions, "shadowDensity", sunLighting->groundShadowDensity);
 
 	{
-		const int mapX = mapDims.mapx  * SQUARE_SIZE;
+		const int mapX = mapDims.mapx * SQUARE_SIZE;
 		const int mapZ = mapDims.mapy * SQUARE_SIZE;
 		const float shadingX = (float)mapDims.mapx / mapDims.pwr2mapx;
 		const float shadingZ = (float)mapDims.mapy / mapDims.pwr2mapy;
 
 		const float scaleX = (mapX > mapZ) ? (mapDims.mapy >> 6) / 16.0f * (float)mapX / mapZ : (mapDims.mapx >> 6) / 16.0f;
 		const float scaleZ = (mapX > mapZ) ? (mapDims.mapy >> 6) / 16.0f : (mapDims.mapx >> 6) / 16.0f * (float)mapZ / mapX;
-		GLSLDefineConst4f(definitions, "TexGenPlane", 1.0f/mapX, 1.0f/mapZ, scaleX/mapX, scaleZ/mapZ);
-		GLSLDefineConst4f(definitions, "ShadingPlane", shadingX/mapX, shadingZ/mapZ, shadingX, shadingZ);
+		GLSLDefineConst4f(definitions, "TexGenPlane", 1.0f / mapX, 1.0f / mapZ, scaleX / mapX, scaleZ / mapZ);
+		GLSLDefineConst4f(definitions, "ShadingPlane", shadingX / mapX, shadingZ / mapZ, shadingX, shadingZ);
 	}
 
 	// LOAD SHADERS
@@ -473,9 +515,10 @@ void CBumpWater::InitResources(bool loadShader)
 		waterShader->BindAttribLocations<VAT>();
 		waterShader->Link();
 
-		if (!waterShader->IsValid()) {
-			const char* fmt = "water-shader compilation error: %s";
-			const char* log = (waterShader->GetLog()).c_str();
+		if (!waterShader->IsValid())
+		{
+			const char *fmt = "water-shader compilation error: %s";
+			const char *log = (waterShader->GetLog()).c_str();
 			LOG_L(L_ERROR, fmt, log);
 			throw content_error(string("[" LOG_SECTION_BUMP_WATER "] water-shader compilation error!"));
 		}
@@ -485,26 +528,27 @@ void CBumpWater::InitResources(bool loadShader)
 		// so postpone the call until all texture uniforms are set
 		waterShader->Enable();
 
-		waterShader->SetUniform("normalmap"     , 0 );
-		waterShader->SetUniform("heightmap"     , 1 );
-		waterShader->SetUniform("caustic"       , 2 );
-		waterShader->SetUniform("foam"          , 3 );
-		waterShader->SetUniform("reflection"    , 4 );
-		waterShader->SetUniform("refraction"    , 5 );
-		waterShader->SetUniform("coastmap"      , 6 );
-		waterShader->SetUniform("depthmap"      , 7 );
-		waterShader->SetUniform("waverand"      , 8 );
-		waterShader->SetUniform("shadowmap"     , 9 );
-		waterShader->SetUniform("infotex"       , 10);
+		waterShader->SetUniform("normalmap", 0);
+		waterShader->SetUniform("heightmap", 1);
+		waterShader->SetUniform("caustic", 2);
+		waterShader->SetUniform("foam", 3);
+		waterShader->SetUniform("reflection", 4);
+		waterShader->SetUniform("refraction", 5);
+		waterShader->SetUniform("coastmap", 6);
+		waterShader->SetUniform("depthmap", 7);
+		waterShader->SetUniform("waverand", 8);
+		waterShader->SetUniform("shadowmap", 9);
+		waterShader->SetUniform("infotex", 10);
 		waterShader->SetUniform("shadowColorTex", 11);
-		waterShader->SetUniform("windVector"    , 15.0f, 15.0f);
+		waterShader->SetUniform("windVector", 15.0f, 15.0f);
 
 		waterShader->Disable();
 		waterShader->Validate();
 
-		if (!waterShader->IsValid()) {
-			const char* fmt = "water-shader validation error: %s";
-			const char* log = (waterShader->GetLog()).c_str();
+		if (!waterShader->IsValid())
+		{
+			const char *fmt = "water-shader validation error: %s";
+			const char *log = (waterShader->GetLog()).c_str();
 
 			LOG_L(L_ERROR, fmt, log);
 			throw content_error(string("[" LOG_SECTION_BUMP_WATER "] water-shader validation error!"));
@@ -517,7 +561,25 @@ void CBumpWater::InitResources(bool loadShader)
 void CBumpWater::FreeResources()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	const auto DeleteTexture = [](GLuint& texID) { if (texID > 0) { glDeleteTextures(1, &texID); texID = 0; } };
+	if (HasVulkanBackend())
+	{
+		refractTexture = 0;
+		reflectTexture = 0;
+		depthTexture = 0;
+		waveRandTexture = 0;
+		foamTexture = 0;
+		normalTexture = 0;
+		normalTexture2 = 0;
+		coastTexture = 0;
+		coastUpdateTexture = 0;
+		caustTextures.clear();
+		tileOffsets.clear();
+		waterShader = nullptr;
+		blurShader = nullptr;
+		return;
+	}
+	const auto DeleteTexture = [](GLuint &texID)
+	{ if (texID > 0) { glDeleteTextures(1, &texID); texID = 0; } };
 
 	DeleteTexture(reflectTexture);
 	DeleteTexture(refractTexture);
@@ -527,7 +589,8 @@ void CBumpWater::FreeResources()
 	DeleteTexture(normalTexture2);
 	DeleteTexture(coastTexture);
 	DeleteTexture(waveRandTexture);
-	for (auto& caustTexture : caustTextures) {
+	for (auto &caustTexture : caustTextures)
+	{
 		DeleteTexture(caustTexture);
 	}
 
@@ -542,13 +605,16 @@ void CBumpWater::FreeResources()
 void CBumpWater::Update()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	if (!waterRendering->forceRendering && !readMap->HasVisibleWater())
 		return;
 
 	if (dynWaves)
 		UpdateDynWaves();
 
-	if (shoreWaves) {
+	if (shoreWaves)
+	{
 		if ((gs->frameNum % 10) == 0 && !heightmapUpdates.empty())
 			UploadCoastline();
 
@@ -557,33 +623,36 @@ void CBumpWater::Update()
 	}
 }
 
-
-void CBumpWater::UpdateWater(const CGame* game)
+void CBumpWater::UpdateWater(const CGame *game)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	if (!waterRendering->forceRendering && !readMap->HasVisibleWater())
 		return;
 
 	glPushAttrib(GL_FOG_BIT);
-	if (refraction > 1) DrawRefraction(game);
-	if (reflection > 0) DrawReflection(game);
-	if (reflection || refraction) {
+	if (refraction > 1)
+		DrawRefraction(game);
+	if (reflection > 0)
+		DrawReflection(game);
+	if (reflection || refraction)
+	{
 		FBO::Unbind();
 		globalRendering->LoadViewport();
 	}
 	glPopAttrib();
 }
 
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///  SHOREWAVES/COASTMAP
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-CBumpWater::CoastAtlasRect::CoastAtlasRect(const SRectangle& rect)
+CBumpWater::CoastAtlasRect::CoastAtlasRect(const SRectangle &rect)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	ix1 = std::max(rect.x1 - 15,            0);
-	iy1 = std::max(rect.y1 - 15,            0);
+	ix1 = std::max(rect.x1 - 15, 0);
+	iy1 = std::max(rect.y1 - 15, 0);
 	ix2 = std::min(rect.x2 + 15, mapDims.mapx);
 	iy2 = std::min(rect.y2 + 15, mapDims.mapy);
 
@@ -598,7 +667,7 @@ CBumpWater::CoastAtlasRect::CoastAtlasRect(const SRectangle& rect)
 	isCoastline = true;
 }
 
-void CBumpWater::UnsyncedHeightMapUpdate(const SRectangle& rect)
+void CBumpWater::UnsyncedHeightMapUpdate(const SRectangle &rect)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	if (!shoreWaves || !readMap->HasVisibleWater())
@@ -606,7 +675,6 @@ void CBumpWater::UnsyncedHeightMapUpdate(const SRectangle& rect)
 
 	heightmapUpdates.push_back(rect);
 }
-
 
 void CBumpWater::UploadCoastline(const bool forceFull)
 {
@@ -619,10 +687,12 @@ void CBumpWater::UploadCoastline(const bool forceFull)
 	unsigned int numCoastRects = 0;
 
 	// select the to be updated areas
-	while (!heightmapUpdates.empty()) {
-		const SRectangle& cuRect1 = heightmapUpdates.front();
+	while (!heightmapUpdates.empty())
+	{
+		const SRectangle &cuRect1 = heightmapUpdates.front();
 
-		if ((currentPixels + cuRect1.GetArea() <= 512 * 512) || forceFull) {
+		if ((currentPixels + cuRect1.GetArea() <= 512 * 512) || forceFull)
+		{
 			currentPixels += cuRect1.GetArea();
 			coastmapAtlasRects.emplace_back(cuRect1);
 			heightmapUpdates.pop_front();
@@ -632,30 +702,32 @@ void CBumpWater::UploadCoastline(const bool forceFull)
 		break;
 	}
 
-
 	// create a texture atlas for the to-be-updated areas
 	CTextureAtlas atlas;
 
-	const float* heightMap = (!gs->PreSimFrame()) ? readMap->GetCornerHeightMapUnsynced() : readMap->GetCornerHeightMapSynced();
+	const float *heightMap = (!gs->PreSimFrame()) ? readMap->GetCornerHeightMapUnsynced() : readMap->GetCornerHeightMapSynced();
 
-	for (size_t i = 0; i < coastmapAtlasRects.size(); i++) {
-		CoastAtlasRect& caRect = coastmapAtlasRects[i];
+	for (size_t i = 0; i < coastmapAtlasRects.size(); i++)
+	{
+		CoastAtlasRect &caRect = coastmapAtlasRects[i];
 
 		unsigned int a = 0;
-		unsigned char* texpixels = (unsigned char*) atlas.AddGetTex(IntToString(i), caRect.xsize, caRect.ysize);
+		unsigned char *texpixels = (unsigned char *)atlas.AddGetTex(IntToString(i), caRect.xsize, caRect.ysize);
 
-		for (int y = 0; y < caRect.ysize; ++y) {
-			const int yindex  = (y + caRect.iy1) * mapDims.mapxp1 + caRect.ix1;
+		for (int y = 0; y < caRect.ysize; ++y)
+		{
+			const int yindex = (y + caRect.iy1) * mapDims.mapxp1 + caRect.ix1;
 			const int yindex2 = y * caRect.xsize;
 
-			for (int x = 0; x < caRect.xsize; ++x) {
-				const int index  = yindex + x;
+			for (int x = 0; x < caRect.xsize; ++x)
+			{
+				const int index = yindex + x;
 				const int index2 = (yindex2 + x) << 2;
-				const float& height = heightMap[index];
+				const float &height = heightMap[index];
 
-				texpixels[index2    ] = (height > 10.0f)? 255 : 0; // isground
-				texpixels[index2 + 1] = (height >  0.0f)? 255 : 0; // coastdist
-				texpixels[index2 + 2] = (height <  0.0f)? CReadMap::EncodeHeight(height) : 255; // waterdepth
+				texpixels[index2] = (height > 10.0f) ? 255 : 0;									// isground
+				texpixels[index2 + 1] = (height > 0.0f) ? 255 : 0;								// coastdist
+				texpixels[index2 + 2] = (height < 0.0f) ? CReadMap::EncodeHeight(height) : 255; // waterdepth
 				texpixels[index2 + 3] = 0;
 				a += (height > 0.0f);
 			}
@@ -665,7 +737,8 @@ void CBumpWater::UploadCoastline(const bool forceFull)
 	}
 
 	// create the texture atlas only if any coastal regions exist
-	if (numCoastRects == 0 || !atlas.Finalize()) {
+	if (numCoastRects == 0 || !atlas.Finalize())
+	{
 		coastmapAtlasRects.clear();
 		return;
 	}
@@ -678,16 +751,16 @@ void CBumpWater::UploadCoastline(const bool forceFull)
 	atlasY = (atlas.GetSize()).y;
 
 	// save the area positions in the texture atlas
-	for (size_t i = 0; i < coastmapAtlasRects.size(); i++) {
-		CoastAtlasRect& r = coastmapAtlasRects[i];
-		const auto& tex = atlas.GetTexture(IntToString(i));
+	for (size_t i = 0; i < coastmapAtlasRects.size(); i++)
+	{
+		CoastAtlasRect &r = coastmapAtlasRects[i];
+		const auto &tex = atlas.GetTexture(IntToString(i));
 		r.tx1 = tex.xstart;
 		r.tx2 = tex.xend;
 		r.ty1 = tex.ystart;
 		r.ty2 = tex.yend;
 	}
 }
-
 
 void CBumpWater::UpdateCoastmap(const bool initialize)
 {
@@ -725,35 +798,37 @@ void CBumpWater::UpdateCoastmap(const bool initialize)
 
 	uint32_t numCoastRects = 0;
 
-	auto& rbt4 = RenderBuffer::GetTypedRenderBuffer<VA_TYPE_T4>();
+	auto &rbt4 = RenderBuffer::GetTypedRenderBuffer<VA_TYPE_T4>();
 
-	for (const CoastAtlasRect& r : coastmapAtlasRects) {
+	for (const CoastAtlasRect &r : coastmapAtlasRects)
+	{
 		rbt4.AddQuadTriangles(
-			{ {r.x1, r.y1, 0.0f}, { r.tx1, r.ty1, 0.0f, 0.0f } },
-			{ {r.x1, r.y2, 0.0f}, { r.tx1, r.ty2, 0.0f, 1.0f } },
-			{ {r.x2, r.y2, 0.0f}, { r.tx2, r.ty2, 1.0f, 1.0f } },
-			{ {r.x2, r.y1, 0.0f}, { r.tx2, r.ty1, 1.0f, 0.0f } }
-		);
+			{{r.x1, r.y1, 0.0f}, {r.tx1, r.ty1, 0.0f, 0.0f}},
+			{{r.x1, r.y2, 0.0f}, {r.tx1, r.ty2, 0.0f, 1.0f}},
+			{{r.x2, r.y2, 0.0f}, {r.tx2, r.ty2, 1.0f, 1.0f}},
+			{{r.x2, r.y1, 0.0f}, {r.tx2, r.ty1, 1.0f, 0.0f}});
 		numCoastRects += r.isCoastline;
 	}
 	rbt4.DrawElements(GL_TRIANGLES);
 
-	if (numCoastRects > 0 && atlasX > 0 && atlasY > 0) {
-		for (int i = 0; i < 5; ++i) {
+	if (numCoastRects > 0 && atlasX > 0 && atlasY > 0)
+	{
+		for (int i = 0; i < 5; ++i)
+		{
 			coastFBO.AttachTexture(coastUpdateTexture, GL_TEXTURE_2D, GL_COLOR_ATTACHMENT0_EXT);
 			glViewport(0, 0, atlasX, atlasY);
 			blurShader->SetUniform("args", 1, i * 2 + 1);
 
-			for (const CoastAtlasRect& r : coastmapAtlasRects) {
+			for (const CoastAtlasRect &r : coastmapAtlasRects)
+			{
 				if (!r.isCoastline)
 					continue;
 
 				rbt4.AddQuadTriangles(
-					{ { r.tx1, r.ty1, 0.0f }, { r.x1, r.y1, 0.0f, 0.0f } },
-					{ { r.tx1, r.ty2, 0.0f }, { r.x1, r.y2, 0.0f, 1.0f } },
-					{ { r.tx2, r.ty2, 0.0f }, { r.x2, r.y2, 1.0f, 1.0f } },
-					{ { r.tx2, r.ty1, 0.0f }, { r.x2, r.y1, 1.0f, 0.0f } }
-				);
+					{{r.tx1, r.ty1, 0.0f}, {r.x1, r.y1, 0.0f, 0.0f}},
+					{{r.tx1, r.ty2, 0.0f}, {r.x1, r.y2, 0.0f, 1.0f}},
+					{{r.tx2, r.ty2, 0.0f}, {r.x2, r.y2, 1.0f, 1.0f}},
+					{{r.tx2, r.ty1, 0.0f}, {r.x2, r.y1, 1.0f, 0.0f}});
 			}
 			rbt4.DrawElements(GL_TRIANGLES);
 
@@ -761,22 +836,22 @@ void CBumpWater::UpdateCoastmap(const bool initialize)
 			glViewport(0, 0, mapDims.mapx, mapDims.mapy);
 			blurShader->SetUniform("args", 0, i * 2 + 2);
 
-			for (const CoastAtlasRect& r : coastmapAtlasRects) {
+			for (const CoastAtlasRect &r : coastmapAtlasRects)
+			{
 				if (!r.isCoastline)
 					continue;
 
 				rbt4.AddQuadTriangles(
-					{ { r.x1, r.y1, 0.0f }, { r.tx1, r.ty1, 0.0f, 0.0f } },
-					{ { r.x1, r.y2, 0.0f }, { r.tx1, r.ty2, 0.0f, 1.0f } },
-					{ { r.x2, r.y2, 0.0f }, { r.tx2, r.ty2, 1.0f, 1.0f } },
-					{ { r.x2, r.y1, 0.0f }, { r.tx2, r.ty1, 1.0f, 0.0f } }
-				);
+					{{r.x1, r.y1, 0.0f}, {r.tx1, r.ty1, 0.0f, 0.0f}},
+					{{r.x1, r.y2, 0.0f}, {r.tx1, r.ty2, 0.0f, 1.0f}},
+					{{r.x2, r.y2, 0.0f}, {r.tx2, r.ty2, 1.0f, 1.0f}},
+					{{r.x2, r.y1, 0.0f}, {r.tx2, r.ty1, 1.0f, 0.0f}});
 			}
 			rbt4.DrawElements(GL_TRIANGLES);
 		}
 	}
 
-	//glMatrixMode(GL_PROJECTION);
+	// glMatrixMode(GL_PROJECTION);
 	glPopMatrix();
 	glMatrixMode(GL_MODELVIEW);
 	glPopMatrix();
@@ -789,8 +864,8 @@ void CBumpWater::UpdateCoastmap(const bool initialize)
 	coastFBO.Unbind();
 
 	// generate mipmaps
-	//glActiveTexture(GL_TEXTURE0);
-	//glBindTexture(GL_TEXTURE_2D, coastTexture);
+	// glActiveTexture(GL_TEXTURE0);
+	// glBindTexture(GL_TEXTURE_2D, coastTexture);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
 	glGenerateMipmapEXT(GL_TEXTURE_2D);
@@ -805,7 +880,6 @@ void CBumpWater::UpdateCoastmap(const bool initialize)
 	glActiveTexture(GL_TEXTURE0);
 }
 
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///  DYNAMIC WAVES
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -816,16 +890,19 @@ void CBumpWater::UpdateDynWaves(const bool initialize)
 	if (!dynWaves || !dynWavesFBO.IsValid())
 		return;
 
-	const unsigned char tiles  = waterRendering->numTiles; // (numTiles <= 16)
+	const unsigned char tiles = waterRendering->numTiles; // (numTiles <= 16)
 	const unsigned char ntiles = tiles * tiles;
 
 	const float tilesize = 1.0f / tiles;
 	const int modFrameNum = (gs->frameNum + 1) % 60;
 
-	if (modFrameNum == 0) {
-		for (unsigned char i = 0; i < ntiles; ++i) {
-			do {
-				tileOffsets[i] = (unsigned char)(guRNG.NextFloat()*ntiles);
+	if (modFrameNum == 0)
+	{
+		for (unsigned char i = 0; i < ntiles; ++i)
+		{
+			do
+			{
+				tileOffsets[i] = (unsigned char)(guRNG.NextFloat() * ntiles);
 			} while (tileOffsets[i] == i);
 		}
 	}
@@ -835,7 +912,7 @@ void CBumpWater::UpdateDynWaves(const bool initialize)
 	glEnable(GL_TEXTURE_2D);
 	glBindTexture(GL_TEXTURE_2D, normalTexture2);
 	glBlendFunc(GL_CONSTANT_ALPHA, GL_ONE_MINUS_CONSTANT_ALPHA);
-	glBlendColor(1.0f, 1.0f, 1.0f, (initialize) ? 1.0f : (modFrameNum + 1)/600.0f );
+	glBlendColor(1.0f, 1.0f, 1.0f, (initialize) ? 1.0f : (modFrameNum + 1) / 600.0f);
 
 	glEnable(GL_BLEND);
 	glDepthMask(GL_FALSE);
@@ -843,43 +920,44 @@ void CBumpWater::UpdateDynWaves(const bool initialize)
 
 	glViewport(0, 0, normalTextureX, normalTextureY);
 	glMatrixMode(GL_MODELVIEW);
-		glPushMatrix();
-		glLoadIdentity();
+	glPushMatrix();
+	glLoadIdentity();
 	glMatrixMode(GL_PROJECTION);
-		glPushMatrix();
-		glLoadIdentity();
-		glOrtho(0, 1, 0, 1, -1, 1);
+	glPushMatrix();
+	glLoadIdentity();
+	glOrtho(0, 1, 0, 1, -1, 1);
 	glMatrixMode(GL_TEXTURE);
-		glPushMatrix();
-		glLoadIdentity();
+	glPushMatrix();
+	glLoadIdentity();
 
-	auto& rb2tc = RenderBuffer::GetTypedRenderBuffer<VA_TYPE_2DTC>();
+	auto &rb2tc = RenderBuffer::GetTypedRenderBuffer<VA_TYPE_2DTC>();
 
-	for (unsigned char y = 0; y < tiles; ++y) {
-		for (unsigned char x = 0; x < tiles; ++x) {
+	for (unsigned char y = 0; y < tiles; ++y)
+	{
+		for (unsigned char x = 0; x < tiles; ++x)
+		{
 			uint8_t offset = tileOffsets[y * tiles + x];
 			uint8_t tx = offset % tiles;
-			uint8_t ty = (offset - tx)/tiles;
+			uint8_t ty = (offset - tx) / tiles;
 			rb2tc.AddQuadTriangles(
-				{ (x + 0) * tilesize, (y + 0) * tilesize, (tx + 0) * tilesize, (ty + 0) * tilesize },
-				{ (x + 0) * tilesize, (y + 1) * tilesize, (tx + 0) * tilesize, (ty + 1) * tilesize },
-				{ (x + 1) * tilesize, (y + 1) * tilesize, (tx + 1) * tilesize, (ty + 1) * tilesize },
-				{ (x + 1) * tilesize, (y + 0) * tilesize, (tx + 1) * tilesize, (ty + 0) * tilesize }
-			);
+				{(x + 0) * tilesize, (y + 0) * tilesize, (tx + 0) * tilesize, (ty + 0) * tilesize},
+				{(x + 0) * tilesize, (y + 1) * tilesize, (tx + 0) * tilesize, (ty + 1) * tilesize},
+				{(x + 1) * tilesize, (y + 1) * tilesize, (tx + 1) * tilesize, (ty + 1) * tilesize},
+				{(x + 1) * tilesize, (y + 0) * tilesize, (tx + 1) * tilesize, (ty + 0) * tilesize});
 		}
 	}
-	auto& rbSh = rb2tc.GetShader();
+	auto &rbSh = rb2tc.GetShader();
 	rbSh.Enable();
 	rb2tc.DrawElements(GL_TRIANGLES);
 	rbSh.Disable();
 
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-		glPopMatrix();
+	glPopMatrix();
 	glMatrixMode(GL_PROJECTION);
-		glPopMatrix();
+	glPopMatrix();
 	glMatrixMode(GL_MODELVIEW);
-		glPopMatrix();
+	glPopMatrix();
 	globalRendering->LoadViewport();
 
 	glPopAttrib();
@@ -889,7 +967,6 @@ void CBumpWater::UpdateDynWaves(const bool initialize)
 	glGenerateMipmapEXT(GL_TEXTURE_2D);
 }
 
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///  DRAW FUNCTIONS
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -897,16 +974,20 @@ void CBumpWater::UpdateDynWaves(const bool initialize)
 void CBumpWater::Draw()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	if (!waterRendering->forceRendering && !readMap->HasVisibleWater())
 		return;
 
-	if (refraction == 1) {
+	if (refraction == 1)
+	{
 		// _SCREENCOPY_ REFRACT TEXTURE
 		glBindTexture(target, refractTexture);
 		glCopyTexSubImage2D(target, 0, 0, 0, globalRendering->viewPosX, globalRendering->viewPosY, globalRendering->viewSizeX, globalRendering->viewSizeY);
 	}
 
-	if (depthCopy) {
+	if (depthCopy)
+	{
 		// _SCREENCOPY_ DEPTH TEXTURE
 		glBindTexture(target, depthTexture);
 		glCopyTexSubImage2D(target, 0, 0, 0, globalRendering->viewPosX, globalRendering->viewPosY, globalRendering->viewSizeX, globalRendering->viewSizeY);
@@ -932,26 +1013,38 @@ void CBumpWater::Draw()
 	waterShader->SetUniform("eyePos", camera->GetPos().x, camera->GetPos().y, camera->GetPos().z);
 	waterShader->SetUniform("frame", (gs->frameNum + globalRendering->timeOffset) / 15000.0f);
 
-	if (shadowHandler.ShadowsLoaded()) {
+	if (shadowHandler.ShadowsLoaded())
+	{
 		waterShader->SetUniformMatrix4x4("shadowMatrix", false, shadowHandler.GetShadowMatrixRaw());
 
 		shadowHandler.SetupShadowTexSampler(GL_TEXTURE9);
-		glActiveTexture(GL_TEXTURE11); glBindTexture(GL_TEXTURE_2D, shadowHandler.GetColorTextureID());
+		glActiveTexture(GL_TEXTURE11);
+		glBindTexture(GL_TEXTURE_2D, shadowHandler.GetColorTextureID());
 	}
 
 	const int causticTexNum = (gs->frameNum % caustTextures.size());
-	glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, readMap->GetShadingTexture());
-	glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, caustTextures[causticTexNum]);
-	glActiveTexture(GL_TEXTURE3); glBindTexture(GL_TEXTURE_2D, foamTexture);
-	glActiveTexture(GL_TEXTURE4); glBindTexture(GL_TEXTURE_2D, reflectTexture);
-	glActiveTexture(GL_TEXTURE5); glBindTexture(target,        refractTexture);
-	glActiveTexture(GL_TEXTURE6); glBindTexture(GL_TEXTURE_2D, coastTexture);
-	glActiveTexture(GL_TEXTURE7); glBindTexture(target,        depthTexture);
-	glActiveTexture(GL_TEXTURE8); glBindTexture(GL_TEXTURE_2D, waveRandTexture);
-	//glActiveTexture(GL_TEXTURE9); see above
-	glActiveTexture(GL_TEXTURE10); glBindTexture(GL_TEXTURE_2D, infoTextureHandler->GetCurrentInfoTexture());
-	//glActiveTexture(GL_TEXTURE11); see above
-	glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, normalTexture);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, readMap->GetShadingTexture());
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_2D, caustTextures[causticTexNum]);
+	glActiveTexture(GL_TEXTURE3);
+	glBindTexture(GL_TEXTURE_2D, foamTexture);
+	glActiveTexture(GL_TEXTURE4);
+	glBindTexture(GL_TEXTURE_2D, reflectTexture);
+	glActiveTexture(GL_TEXTURE5);
+	glBindTexture(target, refractTexture);
+	glActiveTexture(GL_TEXTURE6);
+	glBindTexture(GL_TEXTURE_2D, coastTexture);
+	glActiveTexture(GL_TEXTURE7);
+	glBindTexture(target, depthTexture);
+	glActiveTexture(GL_TEXTURE8);
+	glBindTexture(GL_TEXTURE_2D, waveRandTexture);
+	// glActiveTexture(GL_TEXTURE9); see above
+	glActiveTexture(GL_TEXTURE10);
+	glBindTexture(GL_TEXTURE_2D, infoTextureHandler->GetCurrentInfoTexture());
+	// glActiveTexture(GL_TEXTURE11); see above
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, normalTexture);
 
 	glPolygonMode(GL_FRONT_AND_BACK, wireFrameMode ? GL_LINE : GL_FILL);
 	rb.DrawArrays(endlessOcean ? GL_TRIANGLE_STRIP : GL_TRIANGLES);
@@ -963,8 +1056,10 @@ void CBumpWater::Draw()
 	glDisable(GL_POLYGON_OFFSET_FILL);
 #endif
 
-	if (shadowHandler.ShadowsLoaded()) {
-		glActiveTexture(GL_TEXTURE9); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE_ARB, GL_NONE);
+	if (shadowHandler.ShadowsLoaded())
+	{
+		glActiveTexture(GL_TEXTURE9);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE_ARB, GL_NONE);
 		glActiveTexture(GL_TEXTURE0);
 	}
 
@@ -975,23 +1070,31 @@ void CBumpWater::Draw()
 		glEnable(GL_BLEND);
 }
 
-void CBumpWater::DrawRefraction(const CGame* game)
-{	
+void CBumpWater::DrawRefraction(const CGame *game)
+{
 	ZoneScopedN("BumpWater::DrawRefraction");
+	if (HasVulkanBackend())
+		return;
 	// _RENDER_ REFRACTION TEXTURE
 	refractFBO.Bind();
 
 	camera->Update();
 
 	globalRendering->LoadViewport();
-	const auto& sky = ISky::GetSky();
+	const auto &sky = ISky::GetSky();
 	glClearColor(sky->fogColor.x, sky->fogColor.y, sky->fogColor.z, 0);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glDisable(GL_FOG); // fog has overground settings, if at all we should add special underwater settings
 
 	const double clipPlaneEqs[2 * 4] = {
-		0.0, -1.0, 0.0, 5.0, // ground
-		0.0, -1.0, 0.0, 0.0, // models
+		0.0,
+		-1.0,
+		0.0,
+		5.0, // ground
+		0.0,
+		-1.0,
+		0.0,
+		0.0, // models
 	};
 
 	const float3 oldsun = sunLighting->modelDiffuseColor;
@@ -1008,23 +1111,30 @@ void CBumpWater::DrawRefraction(const CGame* game)
 	sunLighting->modelAmbientColor = oldambient;
 }
 
-
-void CBumpWater::DrawReflection(const CGame* game)
+void CBumpWater::DrawReflection(const CGame *game)
 {
 	ZoneScopedN("BumpWater::DrawReflection");
+	if (HasVulkanBackend())
+		return;
 	reflectFBO.Bind();
 
-	const auto& sky = ISky::GetSky();
+	const auto &sky = ISky::GetSky();
 	glClearColor(sky->fogColor.x, sky->fogColor.y, sky->fogColor.z, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	const double clipPlaneEqs[2 * 4] = {
-		0.0, 1.0, 0.0, 5.0, // ground; use d>0 to hide shoreline cracks
-		0.0, 1.0, 0.0, 0.0, // models
+		0.0,
+		1.0,
+		0.0,
+		5.0, // ground; use d>0 to hide shoreline cracks
+		0.0,
+		1.0,
+		0.0,
+		0.0, // models
 	};
 
-	CCamera* prvCam = CCameraHandler::GetSetActiveCamera(CCamera::CAMTYPE_UWREFL);
-	CCamera* curCam = CCameraHandler::GetActiveCamera();
+	CCamera *prvCam = CCameraHandler::GetSetActiveCamera(CCamera::CAMTYPE_UWREFL);
+	CCamera *curCam = CCameraHandler::GetActiveCamera();
 
 	{
 		curCam->CopyStateReflect(prvCam);

@@ -2,6 +2,8 @@
 
 #include "IGroundDecalDrawer.h"
 #include "Rendering/Env/Decals/GroundDecalHandler.h"
+#include "Rendering/GlobalRendering.h"
+#include "Rendering/Gfx/GfxTypes.h"
 #include "System/Config/ConfigHandler.h"
 #include "System/Exceptions.h"
 #include "System/SafeUtil.h"
@@ -10,24 +12,38 @@
 
 #include "System/Misc/TracyDefs.h"
 
-IGroundDecalDrawer* groundDecals = nullptr;
+namespace
+{
+	bool HasVulkanBackend()
+	{
+		return ((globalRendering != nullptr) &&
+				(globalRendering->graphicsBackend != nullptr) &&
+				(globalRendering->graphicsBackend->Type() == gfx::BackendType::Vulkan));
+	}
+}
+
+IGroundDecalDrawer *groundDecals = nullptr;
 
 CONFIG(bool, GroundDecals).defaultValue(true).headlessValue(false).description("Controls whether ground decals underneath buildings, unit tracks & footprints as well as ground scars from explosions will be rendered.");
 
 CR_BIND_INTERFACE(IGroundDecalDrawer)
 CR_REG_METADATA(IGroundDecalDrawer, (
-	CR_MEMBER(decals)
-))
+										CR_MEMBER(decals)))
 
 CR_BIND_DERIVED(NullGroundDecalDrawer, IGroundDecalDrawer, )
-CR_REG_METADATA(NullGroundDecalDrawer,  )
+CR_REG_METADATA(NullGroundDecalDrawer, )
 
 void IGroundDecalDrawer::Init()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+	{
+		SetDrawDecals(false);
+		return;
+	}
+
 	SetDrawDecals(configHandler->GetBool("GroundDecals"));
 }
-
 
 void IGroundDecalDrawer::FreeInstance()
 {
@@ -39,6 +55,8 @@ void IGroundDecalDrawer::FreeInstance()
 void IGroundDecalDrawer::SetDrawDecals(bool v)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		v = false;
 
 	if (groundDecals && v == GetDrawDecals())
 		return;
@@ -47,11 +65,13 @@ void IGroundDecalDrawer::SetDrawDecals(bool v)
 
 	hasDecals = v;
 	assert(!groundDecals);
-	if (IGroundDecalDrawer::GetDrawDecals()) {
+	if (IGroundDecalDrawer::GetDrawDecals())
+	{
 		groundDecals = new CGroundDecalHandler();
 		LOG_L(L_INFO, "Loaded DecalsDrawer: %s", "standard");
 	}
-	else {
+	else
+	{
 		groundDecals = new NullGroundDecalDrawer();
 		LOG_L(L_INFO, "Loaded DecalsDrawer: %s", "null");
 	}
@@ -59,7 +79,7 @@ void IGroundDecalDrawer::SetDrawDecals(bool v)
 	configHandler->Set("GroundDecals", hasDecals);
 }
 
-void NullGroundDecalDrawer::SetUnitLeaveTracks(CUnit* unit, bool leaveTracks)
+void NullGroundDecalDrawer::SetUnitLeaveTracks(CUnit *unit, bool leaveTracks)
 {
 	unit->leaveTracks = leaveTracks;
 }
