@@ -196,8 +196,14 @@ void C3DOTextureHandler::Init()
 void C3DOTextureHandler::Kill()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	glDeleteTextures(1, &atlas3do1);
-	glDeleteTextures(1, &atlas3do2);
+	const bool hasBackend = (globalRendering != nullptr) && (globalRendering->graphicsBackend != nullptr);
+	const bool useVulkan = hasBackend && (globalRendering->graphicsBackend->Type() == gfx::BackendType::Vulkan);
+
+	if (hasBackend && !useVulkan)
+	{
+		glDeleteTextures(1, &atlas3do1);
+		glDeleteTextures(1, &atlas3do2);
+	}
 
 	atlas3do1 = 0;
 	atlas3do2 = 0;
@@ -208,6 +214,11 @@ void C3DOTextureHandler::Kill()
 void C3DOTextureHandler::DumpAtlasTextures(const std::string &fileExt) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if ((globalRendering == nullptr) || (globalRendering->graphicsBackend == nullptr))
+		return;
+	if (globalRendering->graphicsBackend->Type() == gfx::BackendType::Vulkan)
+		return;
+
 	if (atlas3do1)
 	{
 		for (int level = 0; level < numLevels; ++level)

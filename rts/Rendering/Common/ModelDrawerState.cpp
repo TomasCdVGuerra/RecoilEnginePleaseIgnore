@@ -11,6 +11,7 @@
 #include "Rendering/Env/IWater.h"
 #include "Rendering/Env/CubeMapHandler.h"
 #include "Rendering/Env/SkyLight.h"
+#include "Rendering/Gfx/GfxTypes.h"
 #include "Rendering/GL/GeometryBuffer.h"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/Common/ModelDrawerHelpers.h"
@@ -24,7 +25,15 @@
 
 #include "System/Misc/TracyDefs.h"
 
-
+namespace
+{
+	bool HasVulkanBackend()
+	{
+		return globalRendering != nullptr &&
+			   globalRendering->graphicsBackend != nullptr &&
+			   globalRendering->graphicsBackend->Type() == gfx::BackendType::Vulkan;
+	}
+}
 
 bool IModelDrawerState::SetTeamColor(int team, float alpha) const
 {
@@ -49,7 +58,8 @@ void IModelDrawerState::SetupOpaqueDrawing(bool deferredPass) const
 	glCullFace(GL_BACK);
 	glEnable(GL_CULL_FACE);
 
-	if (IsLegacy()) {
+	if (IsLegacy())
+	{
 		glAlphaFunc(GL_GREATER, 0.5f);
 		glEnable(GL_ALPHA_TEST);
 	}
@@ -80,7 +90,8 @@ void IModelDrawerState::SetupAlphaDrawing(bool deferredPass) const
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	if (IsLegacy()) {
+	if (IsLegacy())
+	{
 		glEnable(GL_ALPHA_TEST);
 		glAlphaFunc(GL_GREATER, 0.1f);
 	}
@@ -95,18 +106,19 @@ void IModelDrawerState::ResetAlphaDrawing(bool deferredPass) const
 	glPopAttrib();
 }
 
-
 ////////////// GLSL ////////////////
 
 CModelDrawerStateGLSL::CModelDrawerStateGLSL()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	if (!CanEnable())
 		return;
 
-	auto* sh = shaderHandler;
+	auto *sh = shaderHandler;
 
-	const GL::LightHandler* lightHandler = CModelDrawerConcept::GetLightHandler();
+	const GL::LightHandler *lightHandler = CModelDrawerConcept::GetLightHandler();
 	static const std::string shaderNames[MODEL_SHADER_COUNT] = {
 		"ModelShaderGLSL-NoShadowStandard",
 		"ModelShaderGLSL-ShadowedStandard",
@@ -117,7 +129,8 @@ CModelDrawerStateGLSL::CModelDrawerStateGLSL()
 		("#define BASE_DYNAMIC_MODEL_LIGHT " + IntToString(lightHandler->GetBaseLight()) + "\n") +
 		("#define MAX_DYNAMIC_MODEL_LIGHTS " + IntToString(lightHandler->GetMaxLights()) + "\n");
 
-	for (uint32_t n = MODEL_SHADER_NOSHADOW_STANDARD; n <= MODEL_SHADER_SHADOWED_DEFERRED; n++) {
+	for (uint32_t n = MODEL_SHADER_NOSHADOW_STANDARD; n <= MODEL_SHADER_SHADOWED_DEFERRED; n++)
+	{
 		modelShaders[n] = sh->CreateProgramObject(PO_CLASS, shaderNames[n]);
 		modelShaders[n]->AttachShaderObject(sh->CreateShaderObject("GLSL/ModelVertProg.glsl", extraDefs, GL_VERTEX_SHADER));
 		modelShaders[n]->AttachShaderObject(sh->CreateShaderObject("GLSL/ModelFragProg.glsl", extraDefs, GL_FRAGMENT_SHADER));
@@ -135,12 +148,12 @@ CModelDrawerStateGLSL::CModelDrawerStateGLSL()
 
 		modelShaders[n]->Enable();
 
-		modelShaders[n]->SetUniform("diffuseTex"    , 0);
-		modelShaders[n]->SetUniform("shadingTex"    , 1);
-		modelShaders[n]->SetUniform("shadowTex"     , 2);
+		modelShaders[n]->SetUniform("diffuseTex", 0);
+		modelShaders[n]->SetUniform("shadingTex", 1);
+		modelShaders[n]->SetUniform("shadowTex", 2);
 		modelShaders[n]->SetUniform("shadowColorTex", 3);
-		modelShaders[n]->SetUniform("reflectTex"    , 4);
-		modelShaders[n]->SetUniform("specularTex"   , 5);
+		modelShaders[n]->SetUniform("reflectTex", 4);
+		modelShaders[n]->SetUniform("specularTex", 5);
 
 		modelShaders[n]->SetUniform3v("sunDir", &ISky::GetSky()->GetLight()->GetLightDir().x);
 		modelShaders[n]->SetUniform3v("cameraPos", &camera->GetPos()[0]);
@@ -222,7 +235,7 @@ void CModelDrawerStateGLSL::Disable(bool deferredPass) const
 	CModelDrawerHelper::PopTransform();
 }
 
-void CModelDrawerStateGLSL::SetNanoColor(const float4& color) const
+void CModelDrawerStateGLSL::SetNanoColor(const float4 &color) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	assert(modelShader->IsBound());
@@ -240,7 +253,7 @@ CModelDrawerStateGL4::CModelDrawerStateGL4()
 	if (!CanEnable())
 		return;
 
-	auto* sh = shaderHandler;
+	auto *sh = shaderHandler;
 
 	static const std::string shaderNames[MODEL_SHADER_COUNT] = {
 		"ModelShaderGL4-NoShadowStandard",
@@ -249,7 +262,8 @@ CModelDrawerStateGL4::CModelDrawerStateGL4()
 		"ModelShaderGL4-ShadowedDeferred",
 	};
 
-	for (uint32_t n = MODEL_SHADER_NOSHADOW_STANDARD; n <= MODEL_SHADER_SHADOWED_DEFERRED; n++) {
+	for (uint32_t n = MODEL_SHADER_NOSHADOW_STANDARD; n <= MODEL_SHADER_SHADOWED_DEFERRED; n++)
+	{
 		modelShaders[n] = sh->CreateProgramObject(PO_CLASS, shaderNames[n]);
 		modelShaders[n]->AttachShaderObject(sh->CreateShaderObject("GLSL/ModelVertProgGL4.glsl", "", GL_VERTEX_SHADER));
 		modelShaders[n]->AttachShaderObject(sh->CreateShaderObject("GLSL/ModelFragProgGL4.glsl", "", GL_FRAGMENT_SHADER));
@@ -272,7 +286,7 @@ CModelDrawerStateGL4::CModelDrawerStateGL4()
 	// make the active shader non-NULL
 	SetActiveShader(shadowHandler.ShadowsLoaded(), false);
 
-	#undef sh
+#undef sh
 }
 
 CModelDrawerStateGL4::~CModelDrawerStateGL4()
@@ -312,15 +326,21 @@ void CModelDrawerStateGL4::Enable(bool deferredPass, bool alphaPass) const
 
 	switch (game->GetDrawMode())
 	{
-	case CGame::GameDrawMode::gameReflectionDraw: {
+	case CGame::GameDrawMode::gameReflectionDraw:
+	{
 		glEnable(GL_CLIP_DISTANCE2);
 		SetCameraMode(ShaderCameraModes::REFLCT_CAMERA);
-	} break;
-	case CGame::GameDrawMode::gameRefractionDraw: {
+	}
+	break;
+	case CGame::GameDrawMode::gameRefractionDraw:
+	{
 		glEnable(GL_CLIP_DISTANCE2);
 		SetCameraMode(ShaderCameraModes::REFRAC_CAMERA);
-	} break;
-	default: SetCameraMode(ShaderCameraModes::NORMAL_CAMERA); break;
+	}
+	break;
+	default:
+		SetCameraMode(ShaderCameraModes::NORMAL_CAMERA);
+		break;
 	}
 
 	float gtThreshold = mix(0.5, 0.1, static_cast<float>(alphaPass));
@@ -340,19 +360,26 @@ void CModelDrawerStateGL4::Disable(bool deferredPass) const
 
 	switch (game->GetDrawMode())
 	{
-	case CGame::GameDrawMode::gameReflectionDraw: {
+	case CGame::GameDrawMode::gameReflectionDraw:
+	{
 		glDisable(GL_CLIP_DISTANCE2);
-	} break;
-	case CGame::GameDrawMode::gameRefractionDraw: {
+	}
+	break;
+	case CGame::GameDrawMode::gameRefractionDraw:
+	{
 		glDisable(GL_CLIP_DISTANCE2);
-	} break;
-	default: {} break;
+	}
+	break;
+	default:
+	{
+	}
+	break;
 	}
 
 	CModelDrawerHelper::DisableTexturesCommon();
 }
 
-void CModelDrawerStateGL4::SetNanoColor(const float4& color) const
+void CModelDrawerStateGL4::SetNanoColor(const float4 &color) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	assert(modelShader != nullptr);
@@ -384,17 +411,17 @@ ShaderCameraModes CModelDrawerStateGL4::SetCameraMode(ShaderCameraModes scm_) co
 	switch (scm)
 	{
 	case ShaderCameraModes::REFLCT_CAMERA:
-		SetClipPlane(2, { 0.0f,  1.0f, 0.0f, 0.0f });
+		SetClipPlane(2, {0.0f, 1.0f, 0.0f, 0.0f});
 		break;
 	case ShaderCameraModes::REFRAC_CAMERA:
-		SetClipPlane(2, { 0.0f, -1.0f, 0.0f, 0.0f });
+		SetClipPlane(2, {0.0f, -1.0f, 0.0f, 0.0f});
 		break;
 	default:
-		SetClipPlane(2  /* default, no clipping  */);
+		SetClipPlane(2 /* default, no clipping  */);
 		break;
 	}
 
-	return scm_; //old state
+	return scm_; // old state
 }
 
 ShaderMatrixModes CModelDrawerStateGL4::SetMatrixMode(ShaderMatrixModes smm_) const
@@ -406,7 +433,7 @@ ShaderMatrixModes CModelDrawerStateGL4::SetMatrixMode(ShaderMatrixModes smm_) co
 	std::swap(smm, smm_);
 	modelShader->SetUniform("matrixMode", static_cast<int>(smm));
 
-	return smm_; //old state
+	return smm_; // old state
 }
 
 ShaderShadingModes CModelDrawerStateGL4::SetShadingMode(ShaderShadingModes ssm_) const
@@ -418,10 +445,10 @@ ShaderShadingModes CModelDrawerStateGL4::SetShadingMode(ShaderShadingModes ssm_)
 	std::swap(ssm, ssm_);
 	modelShader->SetUniform("shadingMode", static_cast<int>(ssm));
 
-	return ssm_; //old state
+	return ssm_; // old state
 }
 
-void CModelDrawerStateGL4::SetStaticModelMatrix(const CMatrix44f& mat) const
+void CModelDrawerStateGL4::SetStaticModelMatrix(const CMatrix44f &mat) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	assert(modelShader != nullptr);
@@ -430,18 +457,18 @@ void CModelDrawerStateGL4::SetStaticModelMatrix(const CMatrix44f& mat) const
 	modelShader->SetUniformMatrix4x4("staticModelMatrix", false, &mat.m[0]);
 }
 
-void CModelDrawerStateGL4::SetClipPlane(uint8_t idx, const float4& cp) const
+void CModelDrawerStateGL4::SetClipPlane(uint8_t idx, const float4 &cp) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	switch (idx)
 	{
-	case 0: //upper construction clip plane
+	case 0: // upper construction clip plane
 		modelShader->SetUniform("clipPlane0", cp.x, cp.y, cp.z, cp.w);
 		break;
-	case 1: //lower construction clip plane
+	case 1: // lower construction clip plane
 		modelShader->SetUniform("clipPlane1", cp.x, cp.y, cp.z, cp.w);
 		break;
-	case 2: //water clip plane
+	case 2: // water clip plane
 		modelShader->SetUniform("clipPlane2", cp.x, cp.y, cp.z, cp.w);
 		break;
 	default:
@@ -455,7 +482,7 @@ IModelDrawerState::IModelDrawerState()
 	RECOIL_DETAILED_TRACY_ZONE;
 	modelShaders.fill(nullptr);
 
-	//dup with every instance, but ok
+	// dup with every instance, but ok
 	alphaValues.x = std::max(0.11f, std::min(1.0f, 1.0f - configHandler->GetFloat("UnitTransparency")));
 	alphaValues.y = std::min(1.0f, alphaValues.x + 0.1f);
 	alphaValues.z = std::min(1.0f, alphaValues.x + 0.2f);
@@ -466,7 +493,8 @@ bool IModelDrawerState::IsValid() const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	bool valid = true;
-	for (auto ms : modelShaders) {
+	for (auto ms : modelShaders)
+	{
 		if (!ms)
 			continue;
 

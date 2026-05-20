@@ -4,23 +4,36 @@
 #include <iterator>
 
 #include "Rendering/GL/myGL.h"
+#include "Rendering/GlobalRendering.h"
+#include "Rendering/Gfx/GfxTypes.h"
 
 #include "System/Misc/TracyDefs.h"
 
 CTextureCollection::~CTextureCollection()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	glDeleteTextures(textureIDs.size(), textureIDs.data());
+	const bool hasBackend = (globalRendering != nullptr) && (globalRendering->graphicsBackend != nullptr);
+	const bool useVulkan = hasBackend && (globalRendering->graphicsBackend->Type() == gfx::BackendType::Vulkan);
+
+	if (hasBackend && !useVulkan)
+	{
+		glDeleteTextures(textureIDs.size(), textureIDs.data());
+	}
+	else
+	{
+		for (auto &texId : textureIDs)
+			texId = 0;
+	}
 }
 
-bool CTextureCollection::TextureExists(const std::string& name)
+bool CTextureCollection::TextureExists(const std::string &name)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	const auto it = std::ranges::find(textureNames, name);
 	return it != textureNames.end();
 }
 
-bool CTextureCollection::TextureExists(const std::string& name, const std::string& backupName)
+bool CTextureCollection::TextureExists(const std::string &name, const std::string &backupName)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	if (TextureExists(name))
@@ -32,7 +45,7 @@ bool CTextureCollection::TextureExists(const std::string& name, const std::strin
 	return false;
 }
 
-uint32_t CTextureCollection::GetTextureID(const std::string& name)
+uint32_t CTextureCollection::GetTextureID(const std::string &name)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	const auto it = std::ranges::find(textureNames, name);
@@ -42,7 +55,7 @@ uint32_t CTextureCollection::GetTextureID(const std::string& name)
 	return textureIDs[std::distance(textureNames.begin(), it)];
 }
 
-uint32_t CTextureCollection::GetTextureID(const std::string& name, const std::string& backupName)
+uint32_t CTextureCollection::GetTextureID(const std::string &name, const std::string &backupName)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	if (auto texID = GetTextureID(name); texID != 0)
@@ -54,7 +67,7 @@ uint32_t CTextureCollection::GetTextureID(const std::string& name, const std::st
 	return GetTextureID(backupName);
 }
 
-size_t CTextureCollection::GetTexturePos(const std::string& name)
+size_t CTextureCollection::GetTexturePos(const std::string &name)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	const auto it = std::ranges::find(textureNames, name);
@@ -64,7 +77,7 @@ size_t CTextureCollection::GetTexturePos(const std::string& name)
 	return std::distance(textureNames.begin(), it);
 }
 
-size_t CTextureCollection::GetTexturePos(const std::string& name, const std::string& backupName)
+size_t CTextureCollection::GetTexturePos(const std::string &name, const std::string &backupName)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	if (auto pos = GetTexturePos(name); pos != INVALID_TEXTURE_POS)
@@ -76,7 +89,7 @@ size_t CTextureCollection::GetTexturePos(const std::string& name, const std::str
 	return GetTexturePos(backupName);
 }
 
-size_t CTextureCollection::AddTexFromFile(const std::string& name, const std::string& filename)
+size_t CTextureCollection::AddTexFromFile(const std::string &name, const std::string &filename)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	CBitmap bitmap;
@@ -86,7 +99,7 @@ size_t CTextureCollection::AddTexFromFile(const std::string& name, const std::st
 	return AddTexFromBitmap(name, filename, bitmap);
 }
 
-size_t CTextureCollection::AddTexFromBitmap(const std::string& name, const std::string& filename, const CBitmap& bitmap)
+size_t CTextureCollection::AddTexFromBitmap(const std::string &name, const std::string &filename, const CBitmap &bitmap)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	const auto texID = bitmap.CreateMipMapTexture();
@@ -100,7 +113,7 @@ size_t CTextureCollection::AddTexFromBitmap(const std::string& name, const std::
 	return textureIDs.size() - 1;
 }
 
-size_t CTextureCollection::AddTexBlank(std::string name, int xsize, int ysize, const SColor& c)
+size_t CTextureCollection::AddTexBlank(std::string name, int xsize, int ysize, const SColor &c)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	CBitmap bitmap;
@@ -115,45 +128,61 @@ size_t CTextureCollection::AddTexBlank(std::string name, int xsize, int ysize, c
 	return textureIDs.size() - 1;
 }
 
-bool CTextureCollection::DeleteTex(const std::string& name)
+bool CTextureCollection::DeleteTex(const std::string &name)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	const bool hasBackend = (globalRendering != nullptr) && (globalRendering->graphicsBackend != nullptr);
+	const bool useVulkan = hasBackend && (globalRendering->graphicsBackend->Type() == gfx::BackendType::Vulkan);
 	const auto it = std::ranges::find(textureNames, name);
 	if (it == textureNames.end())
 		return false;
 
 	const size_t pos = std::distance(textureNames.begin(), it);
-	if (pos == textureNames.size() - 1) {
+	if (pos == textureNames.size() - 1)
+	{
 		textureNames.pop_back();
 		texturePaths.pop_back();
-		glDeleteTextures(1, &textureIDs.back());
+		if (hasBackend && !useVulkan)
+			glDeleteTextures(1, &textureIDs.back());
 		textureIDs.pop_back();
 		return true;
 	}
 
-	textureNames[pos] = textureNames.back(); textureNames.pop_back();
-	texturePaths[pos] = texturePaths.back(); texturePaths.pop_back();
+	textureNames[pos] = textureNames.back();
+	textureNames.pop_back();
+	texturePaths[pos] = texturePaths.back();
+	texturePaths.pop_back();
 
-	glDeleteTextures(1, &textureIDs[pos]);
-	textureIDs[pos] = textureIDs.back(); textureIDs.pop_back();
+	if (hasBackend && !useVulkan)
+		glDeleteTextures(1, &textureIDs[pos]);
+	else
+		textureIDs[pos] = 0;
+	textureIDs[pos] = textureIDs.back();
+	textureIDs.pop_back();
 	return true;
 }
 
 void CTextureCollection::Reload()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	const bool hasBackend = (globalRendering != nullptr) && (globalRendering->graphicsBackend != nullptr);
+	const bool useVulkan = hasBackend && (globalRendering->graphicsBackend->Type() == gfx::BackendType::Vulkan);
+	if (!hasBackend || useVulkan)
+		return;
 	assert(textureIDs.size() == textureNames.size() && textureNames.size() == texturePaths.size());
-	for (size_t i = 0; i < textureIDs.size(); ++i) {
+	for (size_t i = 0; i < textureIDs.size(); ++i)
+	{
 		if (texturePaths[i].empty())
-			continue; //skip fallback textures
+			continue; // skip fallback textures
 
 		CBitmap bitmap;
 		if (!bitmap.Load(texturePaths[i]))
-			continue; //skip missing texture files
+			continue; // skip missing texture files
 
 		const auto texID = bitmap.CreateMipMapTexture(0.0f, 0.0f, 0, textureIDs[i]);
-		if (texID != textureIDs[i]) {
-			assert(false); //logic error, should never reach that point
+		if (texID != textureIDs[i])
+		{
+			assert(false); // logic error, should never reach that point
 			glDeleteTextures(1, &textureIDs[i]);
 			textureIDs[i] = texID;
 		}

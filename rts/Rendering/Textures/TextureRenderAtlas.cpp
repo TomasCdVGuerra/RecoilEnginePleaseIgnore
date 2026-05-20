@@ -155,14 +155,18 @@ CTextureRenderAtlas::~CTextureRenderAtlas()
 	RECOIL_DETAILED_TRACY_ZONE;
 	shaderRef--;
 
-	if (shaderRef == 0)
+	const bool hasBackend = (globalRendering != nullptr) && (globalRendering->graphicsBackend != nullptr);
+	const bool useVulkan = hasBackend && HasVulkanBackend();
+
+	if (shaderRef == 0 && hasBackend && !useVulkan)
 		shaderHandler->ReleaseProgramObjects("[TextureRenderAtlas]");
 
 	for (auto &[_, entry] : filenameToTexID)
 	{
 		if (entry.texID)
 		{
-			glDeleteTextures(1, &entry.texID);
+			if (hasBackend && !useVulkan)
+				glDeleteTextures(1, &entry.texID);
 			entry.texID = 0;
 		}
 	}

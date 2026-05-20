@@ -47,6 +47,16 @@
 
 #include "System/Misc/TracyDefs.h"
 
+namespace
+{
+	bool HasVulkanBackend(const CGlobalRendering *rendering)
+	{
+		return rendering != nullptr &&
+			   rendering->graphicsBackend != nullptr &&
+			   rendering->graphicsBackend->Type() == gfx::BackendType::Vulkan;
+	}
+}
+
 CONFIG(bool, DebugGL).defaultValue(false).description("Enables GL debug-context and output. (see GL_ARB_debug_output)");
 CONFIG(bool, DebugGLStacktraces).defaultValue(false).description("Create a stacktrace when an OpenGL error occurs");
 CONFIG(bool, DebugGLReportGroups).defaultValue(false).description("Show OpenGL PUSH/POP groups in the GL debug");
@@ -1813,6 +1823,9 @@ void CGlobalRendering::InitGLState()
 
 void CGlobalRendering::ToggleMultisampling() const
 {
+	if (HasVulkanBackend(this))
+		return;
+
 	if (msaaLevel > 0)
 		glEnable(GL_MULTISAMPLE);
 	else

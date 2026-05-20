@@ -141,6 +141,14 @@ void CShadowHandler::Init()
 
 void CShadowHandler::Kill()
 {
+	if (HasVulkanBackend())
+	{
+		shadowDepthTexture = 0;
+		shadowColorTexture = 0;
+		shadowGenProgs.fill(nullptr);
+		return;
+	}
+
 	FreeFBOAndTextures();
 	shaderHandler->ReleaseProgramObjects("[ShadowHandler]");
 	shadowGenProgs.fill(nullptr);

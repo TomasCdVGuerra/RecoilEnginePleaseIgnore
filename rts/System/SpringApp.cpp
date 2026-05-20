@@ -1090,9 +1090,6 @@ void SpringApp::Kill(bool fromRun)
 	if (clientNet != nullptr)
 		clientNet->ResetDemoRecorder();
 
-	// see ::Reload
-	ISound::Shutdown(false);
-
 	spring::SafeDelete(game);
 	spring::SafeDelete(pregame);
 	spring::SafeDelete(luaMenuController);
@@ -1109,6 +1106,9 @@ void SpringApp::Kill(bool fromRun)
 #endif
 
 	CleanFonts();
+
+	// see ::Reload
+	ISound::Shutdown(false);
 
 	LOG("[SpringApp::%s][5]", __func__);
 	CNamedTextures::Kill(true);

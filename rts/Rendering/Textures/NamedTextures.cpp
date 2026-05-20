@@ -33,6 +33,13 @@ namespace CNamedTextures
 				(globalRendering->graphicsBackend->Type() == gfx::BackendType::OpenGL));
 	}
 
+	static bool HasVulkanBackend()
+	{
+		return ((globalRendering != nullptr) &&
+				(globalRendering->graphicsBackend != nullptr) &&
+				(globalRendering->graphicsBackend->Type() == gfx::BackendType::Vulkan));
+	}
+
 	static void ResetTextureState()
 	{
 		texInfoMap.clear();
@@ -67,6 +74,15 @@ namespace CNamedTextures
 		decltype(texInfoMap) tempMap;
 
 		const std::lock_guard<spring::recursive_mutex> lck(mutex);
+
+		if (HasVulkanBackend())
+		{
+			for (const auto &[texName, texIdx] : texInfoMap)
+				texInfoVec[texIdx].id = 0;
+
+			ResetTextureState();
+			return;
+		}
 
 		for (const auto &[texName, texIdx] : texInfoMap)
 		{
@@ -169,7 +185,10 @@ namespace CNamedTextures
 			const size_t texIdx = it->second;
 			const GLuint texID = texInfoVec[texIdx].id;
 
-			glDeleteTextures(1, &texID);
+			if (HasOpenGLBackend())
+				glDeleteTextures(1, &texID);
+			else
+				texInfoVec[texIdx].id = 0;
 
 			freeIndices.push_back(texIdx);
 			texInfoMap.erase(it);

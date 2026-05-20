@@ -2,6 +2,7 @@
 
 #include "GeometryBuffer.h"
 #include "Rendering/GlobalRendering.h"
+#include "Rendering/Gfx/GfxTypes.h"
 #include "System/Config/ConfigHandler.h"
 
 #include <algorithm>
@@ -9,7 +10,8 @@
 
 #include "System/Misc/TracyDefs.h"
 
-void GL::GeometryBuffer::Init(bool ctor) {
+void GL::GeometryBuffer::Init(bool ctor)
+{
 	RECOIL_DETAILED_TRACY_ZONE;
 	// if dead, this must be a non-ctor reload
 	assert(!dead || !ctor);
@@ -30,9 +32,11 @@ void GL::GeometryBuffer::Init(bool ctor) {
 	msaa &= globalRendering->supportMSAAFrameBuffer;
 }
 
-void GL::GeometryBuffer::Kill(bool dtor) {
+void GL::GeometryBuffer::Kill(bool dtor)
+{
 	RECOIL_DETAILED_TRACY_ZONE;
-	if (dead) {
+	if (dead)
+	{
 		// if already dead, this must be final cleanup
 		assert(dtor);
 		return;
@@ -44,38 +48,46 @@ void GL::GeometryBuffer::Kill(bool dtor) {
 	dead = true;
 }
 
-void GL::GeometryBuffer::Clear() const {
+void GL::GeometryBuffer::Clear() const
+{
 	RECOIL_DETAILED_TRACY_ZONE;
 	assert(bound);
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
-void GL::GeometryBuffer::SetDepthRange(float nearDepth, float farDepth) const {
+void GL::GeometryBuffer::SetDepthRange(float nearDepth, float farDepth) const
+{
 	RECOIL_DETAILED_TRACY_ZONE;
-	#if 0
+#if 0
 	if (globalRendering->supportClipSpaceControl) {
 		// TODO: need to inform shaders about this, modify PM instead
 		glDepthRangef(nearDepth, farDepth);
 		glClearDepth(farDepth);
 		glDepthFunc((nearDepth <= farDepth)? GL_LEQUAL: GL_GREATER);
 	}
-	#else
+#else
 	glClearDepth(std::max(nearDepth, farDepth));
 	glDepthFunc(GL_LEQUAL);
-	#endif
+#endif
 }
 
-void GL::GeometryBuffer::DetachTextures(const bool init) {
+void GL::GeometryBuffer::DetachTextures(const bool init)
+{
 	RECOIL_DETAILED_TRACY_ZONE;
 	// nothing to detach yet during init
 	if (init)
+		return;
+	if ((globalRendering == nullptr) || (globalRendering->graphicsBackend == nullptr))
+		return;
+	if (globalRendering->graphicsBackend->Type() == gfx::BackendType::Vulkan)
 		return;
 
 	buffer.Bind();
 
 	// detach only actually attached textures, ATI drivers might crash
-	for (unsigned int i = 0; i < (ATTACHMENT_COUNT - 1); ++i) {
+	for (unsigned int i = 0; i < (ATTACHMENT_COUNT - 1); ++i)
+	{
 		buffer.Detach(GL_COLOR_ATTACHMENT0_EXT + i);
 	}
 
@@ -89,7 +101,8 @@ void GL::GeometryBuffer::DetachTextures(const bool init) {
 	memset(&bufferAttachments[0], 0, sizeof(bufferAttachments));
 }
 
-void GL::GeometryBuffer::DrawDebug(const unsigned int texID, const float2 texMins, const float2 texMaxs) const {
+void GL::GeometryBuffer::DrawDebug(const unsigned int texID, const float2 texMins, const float2 texMaxs) const
+{
 	RECOIL_DETAILED_TRACY_ZONE;
 	glPushMatrix();
 	glLoadIdentity();
@@ -101,10 +114,18 @@ void GL::GeometryBuffer::DrawDebug(const unsigned int texID, const float2 texMin
 	glEnable(GetTextureTarget());
 	glBindTexture(GetTextureTarget(), texID);
 	glBegin(GL_QUADS);
-	glTexCoord2f(texMins.x, texMins.y); glNormal3fv(&UpVector.x); glVertex2f(texMins.x, texMins.y);
-	glTexCoord2f(texMaxs.x, texMins.y); glNormal3fv(&UpVector.x); glVertex2f(texMaxs.x, texMins.y);
-	glTexCoord2f(texMaxs.x, texMaxs.y); glNormal3fv(&UpVector.x); glVertex2f(texMaxs.x, texMaxs.y);
-	glTexCoord2f(texMins.x, texMaxs.y); glNormal3fv(&UpVector.x); glVertex2f(texMins.x, texMaxs.y);
+	glTexCoord2f(texMins.x, texMins.y);
+	glNormal3fv(&UpVector.x);
+	glVertex2f(texMins.x, texMins.y);
+	glTexCoord2f(texMaxs.x, texMins.y);
+	glNormal3fv(&UpVector.x);
+	glVertex2f(texMaxs.x, texMins.y);
+	glTexCoord2f(texMaxs.x, texMaxs.y);
+	glNormal3fv(&UpVector.x);
+	glVertex2f(texMaxs.x, texMaxs.y);
+	glTexCoord2f(texMins.x, texMaxs.y);
+	glNormal3fv(&UpVector.x);
+	glVertex2f(texMins.x, texMaxs.y);
 	glEnd();
 	glBindTexture(GetTextureTarget(), 0);
 	glDisable(GetTextureTarget());
@@ -114,11 +135,13 @@ void GL::GeometryBuffer::DrawDebug(const unsigned int texID, const float2 texMin
 	glPopMatrix();
 }
 
-bool GL::GeometryBuffer::Create(const int2 size) {
+bool GL::GeometryBuffer::Create(const int2 size)
+{
 	RECOIL_DETAILED_TRACY_ZONE;
 	const unsigned int texTarget = GetTextureTarget();
 
-	for (unsigned int n = 0; n < ATTACHMENT_COUNT; n++) {
+	for (unsigned int n = 0; n < ATTACHMENT_COUNT; n++)
+	{
 		glGenTextures(1, &bufferTextureIDs[n]);
 		glBindTexture(texTarget, bufferTextureIDs[n]);
 
@@ -127,7 +150,8 @@ bool GL::GeometryBuffer::Create(const int2 size) {
 		glTexParameteri(texTarget, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(texTarget, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-		if (n == ATTACHMENT_ZVALTEX) {
+		if (n == ATTACHMENT_ZVALTEX)
+		{
 			glTexParameteri(texTarget, GL_DEPTH_TEXTURE_MODE, GL_LUMINANCE);
 
 			if (texTarget == GL_TEXTURE_2D)
@@ -136,7 +160,9 @@ bool GL::GeometryBuffer::Create(const int2 size) {
 				glTexImage2DMultisample(texTarget, globalRendering->msaaLevel, GL_DEPTH_COMPONENT32F, size.x, size.y, GL_TRUE);
 
 			bufferAttachments[n] = GL_DEPTH_ATTACHMENT_EXT;
-		} else {
+		}
+		else
+		{
 			if (texTarget == GL_TEXTURE_2D)
 				glTexImage2D(texTarget, 0, GL_RGBA, size.x, size.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 			else
@@ -167,7 +193,8 @@ bool GL::GeometryBuffer::Create(const int2 size) {
 	return ret;
 }
 
-bool GL::GeometryBuffer::Update(const bool init) {
+bool GL::GeometryBuffer::Update(const bool init)
+{
 	RECOIL_DETAILED_TRACY_ZONE;
 	currBufferSize = GetWantedSize(true);
 
@@ -178,7 +205,8 @@ bool GL::GeometryBuffer::Update(const bool init) {
 	// buffer isn't bound by calling context, can not call
 	// GetStatus to check for GL_FRAMEBUFFER_COMPLETE_EXT
 	//
-	if (HasAttachments()) {
+	if (HasAttachments())
+	{
 		// technically a buffer can not be complete yet during
 		// initialization, however the GL spec says that FBO's
 		// with only empty attachments are complete by default
@@ -196,7 +224,8 @@ bool GL::GeometryBuffer::Update(const bool init) {
 	return (Create(prevBufferSize = currBufferSize));
 }
 
-int2 GL::GeometryBuffer::GetWantedSize(bool allowed) const {
+int2 GL::GeometryBuffer::GetWantedSize(bool allowed) const
+{
 	RECOIL_DETAILED_TRACY_ZONE;
 	return {globalRendering->viewSizeX * allowed, globalRendering->viewSizeY * allowed};
 }

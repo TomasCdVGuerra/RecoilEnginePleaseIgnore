@@ -1,6 +1,8 @@
 #include "DebugCubeMapTexture.h"
 
 #include "Rendering/GL/myGL.h"
+#include "Rendering/GlobalRendering.h"
+#include "Rendering/Gfx/GfxTypes.h"
 #include "Rendering/Textures/Bitmap.h"
 #include "Rendering/Shaders/Shader.h"
 #include "Rendering/Shaders/ShaderHandler.h"
@@ -8,16 +10,16 @@
 #include "Game/Camera.h"
 
 DebugCubeMapTexture::DebugCubeMapTexture()
-	: texId(0)
-	, vao()
+	: texId(0), vao()
 {
 #ifndef HEADLESS
 	glGenTextures(1, &texId);
 
-	static constexpr const char* texture = "bitmaps/testsky.dds";
+	static constexpr const char *texture = "bitmaps/testsky.dds";
 
 	CBitmap btex;
-	if (!btex.Load(texture) || btex.textype != GL_TEXTURE_CUBE_MAP) {
+	if (!btex.Load(texture) || btex.textype != GL_TEXTURE_CUBE_MAP)
+	{
 		LOG_L(L_WARNING, "[DebugCubeMapTexture] could not load debug skybox texture from file %s, using fallback colors", texture);
 
 		// match testsky.dds colors
@@ -34,18 +36,21 @@ DebugCubeMapTexture::DebugCubeMapTexture()
 		std::vector<SColor> debugColorVec;
 		debugColorVec.resize(FALLBACK_DIM * FALLBACK_DIM);
 
-		dims = { FALLBACK_DIM, FALLBACK_DIM };
+		dims = {FALLBACK_DIM, FALLBACK_DIM};
 
 		glEnable(GL_TEXTURE_CUBE_MAP);
 		glBindTexture(GL_TEXTURE_CUBE_MAP, texId);
-		for (GLenum glFace = GL_TEXTURE_CUBE_MAP_POSITIVE_X; glFace <= GL_TEXTURE_CUBE_MAP_NEGATIVE_Z; ++glFace) {
+		for (GLenum glFace = GL_TEXTURE_CUBE_MAP_POSITIVE_X; glFace <= GL_TEXTURE_CUBE_MAP_NEGATIVE_Z; ++glFace)
+		{
 			std::fill(debugColorVec.begin(), debugColorVec.end(), debugFaceColors[glFace - GL_TEXTURE_CUBE_MAP_POSITIVE_X]);
 			glTexImage2D(glFace, 0, GL_RGBA8, FALLBACK_DIM, FALLBACK_DIM, 0, GL_RGBA, GL_UNSIGNED_BYTE, debugColorVec.data());
 		}
 		glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 		glDisable(GL_TEXTURE_CUBE_MAP);
-	} else {
-		dims = { btex.xsize, btex.ysize };
+	}
+	else
+	{
+		dims = {btex.xsize, btex.ysize};
 		texId = btex.CreateTexture();
 	}
 
@@ -73,7 +78,12 @@ DebugCubeMapTexture::DebugCubeMapTexture()
 DebugCubeMapTexture::~DebugCubeMapTexture()
 {
 #ifndef HEADLESS
-	glDeleteTextures(1, &texId);
+	const bool hasBackend = (globalRendering != nullptr) && (globalRendering->graphicsBackend != nullptr);
+	const bool useVulkan = hasBackend && (globalRendering->graphicsBackend->Type() == gfx::BackendType::Vulkan);
+
+	if (hasBackend && !useVulkan)
+		glDeleteTextures(1, &texId);
+	texId = 0;
 	shaderHandler->ReleaseProgramObject("[DebugCubeMap]", "DebugCubeMap");
 #endif
 }
@@ -83,12 +93,13 @@ void DebugCubeMapTexture::Draw(uint32_t face) const
 #ifndef HEADLESS
 	assert(face == 0 || (face >= GL_TEXTURE_CUBE_MAP_POSITIVE_X && face <= GL_TEXTURE_CUBE_MAP_NEGATIVE_Z));
 
-	//all faces (default) are expected
+	// all faces (default) are expected
 	GLint baseVertex = 0;
 	GLsizei vertCount = 36;
 
-	//one face is expected
-	if (face > 0) {
+	// one face is expected
+	if (face > 0)
+	{
 		baseVertex = (face - GL_TEXTURE_CUBE_MAP_POSITIVE_X) * 6;
 		vertCount = 6;
 	}
@@ -129,7 +140,7 @@ void DebugCubeMapTexture::Draw(uint32_t face) const
 #endif
 }
 
-DebugCubeMapTexture& DebugCubeMapTexture::GetInstance()
+DebugCubeMapTexture &DebugCubeMapTexture::GetInstance()
 {
 	static DebugCubeMapTexture instance;
 	return instance;
