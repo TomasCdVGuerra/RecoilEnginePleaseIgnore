@@ -180,3 +180,6 @@ build-*
 # Local install and test folders
 run_game/
 build/
+cont/base/springcontent/.DS_Store
+.DS_Store
+.DS_Store

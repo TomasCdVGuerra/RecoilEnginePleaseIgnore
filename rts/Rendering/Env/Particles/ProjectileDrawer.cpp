@@ -100,6 +100,23 @@ TypedRenderBuffer<VA_TYPE_C> &CProjectileDrawer::GetMiniMapPointsRB() { return p
 void CProjectileDrawer::Init()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+	{
+		for (auto &tex : perlinBlendTex)
+			tex = 0;
+		for (auto &blend : perlinBlend)
+			blend = 0.0f;
+
+		perlinTexObjects = 0;
+		drawPerlinTex = false;
+
+		textureAtlas = nullptr;
+		groundFXAtlas = nullptr;
+		fxShader = nullptr;
+		fxShadowShader = nullptr;
+		sdbc = nullptr;
+		return;
+	}
 	eventHandler.AddClient(this);
 
 	loadscreen->SetLoadMessage("Creating Projectile Textures");
@@ -687,6 +704,8 @@ bool CProjectileDrawer::ShouldDrawProjectile(const CProjectile *p, uint8_t thisP
 void CProjectileDrawer::DrawProjectilesMiniMap()
 {
 	ZoneScopedN("ProjectileDrawer::DrawMiniMap");
+	if (HasVulkanBackend())
+		return;
 
 	// draw opaque first
 	for (CProjectile *p : renderProjectiles)
@@ -770,6 +789,8 @@ void CProjectileDrawer::DrawFlyingPieces(int modelType) const
 void CProjectileDrawer::DrawOpaque(bool drawReflection, bool drawRefraction)
 {
 	ZoneScopedN("ProjectileDrawer::DrawOpaque");
+	if (HasVulkanBackend())
+		return;
 
 	using namespace GL::State;
 	auto state = GL::SubState(
@@ -822,6 +843,8 @@ void CProjectileDrawer::DrawOpaque(bool drawReflection, bool drawRefraction)
 void CProjectileDrawer::DrawAlpha(bool drawAboveWater, bool drawBelowWater, bool drawReflection, bool drawRefraction)
 {
 	ZoneScopedN("ProjectileDrawer::DrawAlpha");
+	if (HasVulkanBackend())
+		return;
 
 	static constexpr std::array<float, 4> clipPlanes[]{
 		{0.0f, 0.0f, 0.0f, 0.0f}, // never used
@@ -933,6 +956,8 @@ void CProjectileDrawer::DrawAlpha(bool drawAboveWater, bool drawBelowWater, bool
 void CProjectileDrawer::DrawShadowOpaque()
 {
 	ZoneScopedN("ProjectileDrawer::DrawShadowOpaque");
+	if (HasVulkanBackend())
+		return;
 	Shader::IProgramObject *po = shadowHandler.GetShadowGenProg(CShadowHandler::SHADOWGEN_PROGRAM_PROJECTILE);
 
 	po->Enable();
@@ -972,6 +997,8 @@ void CProjectileDrawer::DrawShadowOpaque()
 void CProjectileDrawer::DrawShadowTransparent()
 {
 	ZoneScopedN("ProjectileDrawer::DrawShadowTransparent");
+	if (HasVulkanBackend())
+		return;
 	// Method #1 here: https://wickedengine.net/2018/01/18/easy-transparent-shadow-maps/
 
 	// 1) Render opaque objects into depth stencil texture from light's point of view - done elsewhere
@@ -1099,6 +1126,8 @@ void CProjectileDrawer::DrawProjectileModel(const CProjectile *p)
 void CProjectileDrawer::DrawGroundFlashes()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	const GroundFlashContainer &gfc = projectileHandler.groundFlashes;
 
 	if (gfc.empty())
@@ -1213,6 +1242,8 @@ void CProjectileDrawer::UpdateTextures()
 void CProjectileDrawer::UpdatePerlin()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	perlinFB.Bind();
 	glViewport(perlintex->xstart * (textureAtlas->GetSize()).x, perlintex->ystart * (textureAtlas->GetSize()).y, perlinTexSize, perlinTexSize);
 
@@ -1312,6 +1343,8 @@ void CProjectileDrawer::UpdatePerlin()
 void CProjectileDrawer::GenerateNoiseTex(uint32_t tex)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	std::array<unsigned char, 4 * perlinBlendTexSize * perlinBlendTexSize> mem;
 
 	for (int a = 0; a < perlinBlendTexSize * perlinBlendTexSize; ++a)

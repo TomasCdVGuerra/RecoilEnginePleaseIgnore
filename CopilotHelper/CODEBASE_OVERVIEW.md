@@ -36,6 +36,11 @@ Top-level directory responsibilities:
 - `rts/lib/`: Third-party and vendored dependencies used by engine targets.
 - `build/`: Generated build output (not source of truth).
 
+Content/data note (macOS):
+
+- Game archives are not in this repo. They live in Spring data directories (for example ~/.spring/games, ~/.spring/maps, ~/.spring/packages), plus build/base and cont.
+- BAR content can be installed using the repo-local tools/pr-downloader build and rapid tags.
+
 Important build graph anchors:
 
 - Root `CMakeLists.txt` orchestrates the global configuration, dependency discovery, and subdirectory order.

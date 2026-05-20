@@ -10,13 +10,25 @@
 #include "Path.h"
 #include "Radar.h"
 
+#include "Rendering/GlobalRendering.h"
+#include "Rendering/Gfx/GfxTypes.h"
 #include "System/Misc/TracyDefs.h"
 
-
-
+namespace
+{
+	bool HasVulkanBackend()
+	{
+		return ((globalRendering != nullptr) &&
+				(globalRendering->graphicsBackend != nullptr) &&
+				(globalRendering->graphicsBackend->Type() == gfx::BackendType::Vulkan));
+	}
+}
 
 CInfoTextureHandler::CInfoTextureHandler()
 {
+	if (HasVulkanBackend())
+		return;
+
 	AddInfoTexture(infoTex = new CInfoTextureCombiner());
 	AddInfoTexture(new CLosTexture());
 	AddInfoTexture(new CAirLosTexture());
@@ -26,30 +38,28 @@ CInfoTextureHandler::CInfoTextureHandler()
 	AddInfoTexture(new CHeightTexture());
 	AddInfoTexture(new CPathTexture());
 	// TODO?
-	//AddInfoTexture(new CHeatTexture());
-	//AddInfoTexture(new CFlowTexture());
-	//AddInfoTexture(new CPathCostTexture());
+	// AddInfoTexture(new CHeatTexture());
+	// AddInfoTexture(new CFlowTexture());
+	// AddInfoTexture(new CPathCostTexture());
 }
-
 
 CInfoTextureHandler::~CInfoTextureHandler()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	for (auto& pitex: infoTextures) {
+	for (auto &pitex : infoTextures)
+	{
 		delete pitex.second;
 	}
 	infoTextureHandler = nullptr;
 }
 
-
-void CInfoTextureHandler::AddInfoTexture(CModernInfoTexture* itex)
+void CInfoTextureHandler::AddInfoTexture(CModernInfoTexture *itex)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	infoTextures[itex->GetName()] = itex;
 }
 
-
-const CInfoTexture* CInfoTextureHandler::GetInfoTextureConst(const std::string& name) const
+const CInfoTexture *CInfoTextureHandler::GetInfoTextureConst(const std::string &name) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	static const CDummyInfoTexture dummy;
@@ -62,57 +72,66 @@ const CInfoTexture* CInfoTextureHandler::GetInfoTextureConst(const std::string& 
 	return &dummy;
 }
 
-CInfoTexture* CInfoTextureHandler::GetInfoTexture(const std::string& name)
+CInfoTexture *CInfoTextureHandler::GetInfoTexture(const std::string &name)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	return (const_cast<CInfoTexture*>(GetInfoTextureConst(name)));
+	return (const_cast<CInfoTexture *>(GetInfoTextureConst(name)));
 }
-
 
 bool CInfoTextureHandler::IsEnabled() const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (infoTex == nullptr)
+		return false;
 	return (infoTex->IsEnabled());
 }
-
 
 void CInfoTextureHandler::DisableCurrentMode()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	if (returnToLOS && (GetMode() != "los")) {
+	if (returnToLOS && (GetMode() != "los"))
+	{
 		// return to LOS-mode if it was active before
 		SetMode("los");
-	} else {
+	}
+	else
+	{
 		// otherwise disable overlay entirely
 		SetMode("");
 	}
 }
 
-
-void CInfoTextureHandler::SetMode(const std::string& name)
+void CInfoTextureHandler::SetMode(const std::string &name)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	returnToLOS &= (name !=      ""); // NOLINT(readability-container-size-empty)
-	returnToLOS |= (name ==   "los");
-	inMetalMode  = (name == "metal");
+	if (infoTex == nullptr)
+		return;
+	returnToLOS &= (name != ""); // NOLINT(readability-container-size-empty)
+	returnToLOS |= (name == "los");
+	inMetalMode = (name == "metal");
 
 	infoTex->SwitchMode(name);
 }
 
-
-void CInfoTextureHandler::ToggleMode(const std::string& name)
+void CInfoTextureHandler::ToggleMode(const std::string &name)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (infoTex == nullptr)
+		return;
 	if (infoTex->GetMode() == name)
 		return (DisableCurrentMode());
 
 	SetMode(name);
 }
 
-
-const std::string& CInfoTextureHandler::GetMode() const
+const std::string &CInfoTextureHandler::GetMode() const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (infoTex == nullptr)
+	{
+		static const std::string modeMock = "";
+		return modeMock;
+	}
 	return (infoTex->GetMode());
 }
 
@@ -121,39 +140,44 @@ const std::vector<std::string> CInfoTextureHandler::GetModes() const
 	std::vector<string> modes;
 	modes.reserve(infoTextures.size());
 
-	for(const auto& [mode, tex]: infoTextures)
+	for (const auto &[mode, tex] : infoTextures)
 		modes.push_back(mode);
 
 	return modes;
 }
 
-bool CInfoTextureHandler::HasMode(const std::string& name) const
+bool CInfoTextureHandler::HasMode(const std::string &name) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	return infoTextures.contains(name);
 }
 
-
 GLuint CInfoTextureHandler::GetCurrentInfoTexture() const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (infoTex == nullptr)
+		return 0;
 	return (infoTex->GetTexture());
 }
 
 int2 CInfoTextureHandler::GetCurrentInfoTextureSize() const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (infoTex == nullptr)
+		return int2{0, 0};
 	return (infoTex->GetTexSize());
 }
-
 
 void CInfoTextureHandler::Update()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	glActiveTexture(GL_TEXTURE0);
 	glEnable(GL_TEXTURE_2D);
 
-	for (auto& [name, tex] : infoTextures) {
+	for (auto &[name, tex] : infoTextures)
+	{
 		// force first update except for combiner; hides visible uninitialized texmem
 		if ((firstUpdate && tex != infoTex) || tex->IsUpdateNeeded())
 			tex->Update();
@@ -161,4 +185,3 @@ void CInfoTextureHandler::Update()
 
 	firstUpdate = false;
 }
-

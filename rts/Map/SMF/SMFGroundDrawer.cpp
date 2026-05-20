@@ -14,6 +14,7 @@
 #include "Rendering/Env/ISky.h"
 #include "Rendering/Env/WaterRendering.h"
 #include "Rendering/Env/MapRendering.h"
+#include "Rendering/Gfx/GfxTypes.h"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/GL/RenderBuffers.h"
 #include "Rendering/Shaders/Shader.h"
@@ -26,8 +27,8 @@
 
 #include "System/Misc/TracyDefs.h"
 
-//Basic, ROAM
-static constexpr int MIN_GROUND_DETAIL[] = {                               0,   4};
+// Basic, ROAM
+static constexpr int MIN_GROUND_DETAIL[] = {0, 4};
 static constexpr int MAX_GROUND_DETAIL[] = {CBasicMeshDrawer::LOD_LEVELS - 1, 200};
 
 CONFIG(int, GroundDetail)
@@ -38,16 +39,15 @@ CONFIG(int, GroundDetail)
 	.description("Controls how detailed the map geometry will be. On lowered settings, cliffs may appear to be jagged or \"melting\".");
 CONFIG(bool, MapBorder).defaultValue(true).description("Draws a solid border at the edges of the map.");
 
-
 CONFIG(int, MaxDynamicMapLights)
 	.defaultValue(1)
-	.minimumValue(0).description("Maximum number of map-global dynamic lights that will be rendered at once. High numbers of lights cost performance, as they affect every map fragment.");
+	.minimumValue(0)
+	.description("Maximum number of map-global dynamic lights that will be rendered at once. High numbers of lights cost performance, as they affect every map fragment.");
 
 CONFIG(bool, AdvMapShading).defaultValue(true).safemodeValue(false).description("Enable shaders for terrain rendering.");
 CONFIG(bool, AllowDeferredMapRendering).defaultValue(false).safemodeValue(false).description("Enable rendering the map to the map deferred buffers.");
 CONFIG(bool, AllowDrawMapPostDeferredEvents).defaultValue(false).description("Enable DrawGroundPostDeferred Lua callin.");
 CONFIG(bool, AllowDrawMapDeferredEvents).defaultValue(false).description("Enable DrawGroundDeferred Lua callin.");
-
 
 CONFIG(int, ROAM)
 	.defaultValue(1)
@@ -59,26 +59,48 @@ CONFIG(bool, AlwaysSendDrawGroundEvents)
 	.defaultValue(false)
 	.description("Always send DrawGround{Pre,Post}{Forward,Deferred} events");
 
-namespace Shader {
+namespace
+{
+	bool HasVulkanBackend()
+	{
+		return ((globalRendering != nullptr) &&
+				(globalRendering->graphicsBackend != nullptr) &&
+				(globalRendering->graphicsBackend->Type() == gfx::BackendType::Vulkan));
+	}
+}
+
+namespace Shader
+{
 	struct IProgramObject;
 }
 
-CSMFGroundDrawer::CSMFGroundDrawer(CSMFReadMap* rm)
-	: smfMap(rm)
-	, meshDrawer(nullptr)
-	, geomBuffer{"GROUNDDRAWER-GBUFFER"}
+CSMFGroundDrawer::CSMFGroundDrawer(CSMFReadMap *rm)
+	: smfMap(rm), meshDrawer(nullptr), geomBuffer{"GROUNDDRAWER-GBUFFER"}
 {
+	if (HasVulkanBackend())
+	{
+		groundTextures = nullptr;
+		meshDrawer = nullptr;
+		smfRenderStates = {nullptr};
+		drawForward = false;
+		drawDeferred = false;
+		drawMapEdges = false;
+		postDeferredEvents = false;
+		deferredEvents = false;
+		return;
+	}
+
 	alwaysDispatchEvents = configHandler->GetBool("AlwaysSendDrawGroundEvents");
-	drawerMode = (configHandler->GetInt("ROAM") != 0)? SMF_MESHDRAWER_ROAM: SMF_MESHDRAWER_BASIC;
+	drawerMode = (configHandler->GetInt("ROAM") != 0) ? SMF_MESHDRAWER_ROAM : SMF_MESHDRAWER_BASIC;
 	groundDetail = configHandler->GetInt("GroundDetail");
 
 	groundTextures = new CSMFGroundTextures(smfMap);
 	meshDrawer = SwitchMeshDrawer(drawerMode);
 
-	smfRenderStates = { nullptr };
+	smfRenderStates = {nullptr};
 	smfRenderStates[RENDER_STATE_SSP] = ISMFRenderState::GetInstance(false, false);
-	smfRenderStates[RENDER_STATE_LUA] = ISMFRenderState::GetInstance( true, false);
-	smfRenderStates[RENDER_STATE_NOP] = ISMFRenderState::GetInstance(false,  true);
+	smfRenderStates[RENDER_STATE_LUA] = ISMFRenderState::GetInstance(true, false);
+	smfRenderStates[RENDER_STATE_NOP] = ISMFRenderState::GetInstance(false, true);
 
 	borderShader = shaderHandler->CreateProgramObject("[SMFGroundDrawer]", "Border");
 	borderShader->AttachShaderObject(shaderHandler->CreateShaderObject("GLSL/SMFBorderVertProg.glsl", "", GL_VERTEX_SHADER));
@@ -88,13 +110,12 @@ CSMFGroundDrawer::CSMFGroundDrawer(CSMFReadMap* rm)
 	borderShader->Link();
 
 	borderShader->Enable();
-	borderShader->SetUniform("diffuseTex"  , 0);
+	borderShader->SetUniform("diffuseTex", 0);
 	borderShader->SetUniform("heightMapTex", 1);
-	borderShader->SetUniform("detailsTex"  , 2);
+	borderShader->SetUniform("detailsTex", 2);
 	borderShader->SetUniform("mapSize",
-		static_cast<float>(mapDims.mapx * SQUARE_SIZE), static_cast<float>(mapDims.mapy * SQUARE_SIZE),
-				   1.0f / (mapDims.mapx * SQUARE_SIZE),            1.0f / (mapDims.mapy * SQUARE_SIZE)
-	);
+							 static_cast<float>(mapDims.mapx * SQUARE_SIZE), static_cast<float>(mapDims.mapy * SQUARE_SIZE),
+							 1.0f / (mapDims.mapx * SQUARE_SIZE), 1.0f / (mapDims.mapy * SQUARE_SIZE));
 	borderShader->Disable();
 
 	borderShader->Validate();
@@ -104,7 +125,6 @@ CSMFGroundDrawer::CSMFGroundDrawer(CSMFReadMap* rm)
 	drawMapEdges = configHandler->GetBool("MapBorder");
 	postDeferredEvents = configHandler->GetBool("AllowDrawMapPostDeferredEvents");
 	deferredEvents = configHandler->GetBool("AllowDrawMapDeferredEvents");
-
 
 	if (smfRenderStates[RENDER_STATE_SSP]->Init(this))
 		smfRenderStates[RENDER_STATE_SSP]->Update(this, nullptr);
@@ -116,7 +136,8 @@ CSMFGroundDrawer::CSMFGroundDrawer(CSMFReadMap* rm)
 	// Sun*Changed can be called first, e.g. if DynamicSun is enabled
 	smfRenderStates[RENDER_STATE_SEL] = SelectRenderState(DrawPass::Normal);
 
-	if (drawDeferred) {
+	if (drawDeferred)
+	{
 		drawDeferred &= UpdateGeometryBuffer(true);
 	}
 }
@@ -124,14 +145,19 @@ CSMFGroundDrawer::CSMFGroundDrawer(CSMFReadMap* rm)
 CSMFGroundDrawer::~CSMFGroundDrawer()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	// remember which ROAM-mode was enabled (if any)
-	configHandler->Set("ROAM", (dynamic_cast<CRoamMeshDrawer*>(meshDrawer) != nullptr)? 1: 0);
+	configHandler->Set("ROAM", (dynamic_cast<CRoamMeshDrawer *>(meshDrawer) != nullptr) ? 1 : 0);
 
-	smfRenderStates[RENDER_STATE_SSP]->Kill(); ISMFRenderState::FreeInstance(smfRenderStates[RENDER_STATE_SSP]);
-	smfRenderStates[RENDER_STATE_LUA]->Kill(); ISMFRenderState::FreeInstance(smfRenderStates[RENDER_STATE_LUA]);
-	smfRenderStates[RENDER_STATE_NOP]->Kill(); ISMFRenderState::FreeInstance(smfRenderStates[RENDER_STATE_NOP]);
+	smfRenderStates[RENDER_STATE_SSP]->Kill();
+	ISMFRenderState::FreeInstance(smfRenderStates[RENDER_STATE_SSP]);
+	smfRenderStates[RENDER_STATE_LUA]->Kill();
+	ISMFRenderState::FreeInstance(smfRenderStates[RENDER_STATE_LUA]);
+	smfRenderStates[RENDER_STATE_NOP]->Kill();
+	ISMFRenderState::FreeInstance(smfRenderStates[RENDER_STATE_NOP]);
 
-	smfRenderStates = { nullptr };
+	smfRenderStates = {nullptr};
 
 	shaderHandler->ReleaseProgramObject("[SMFGroundDrawer]", "Border");
 
@@ -139,13 +165,12 @@ CSMFGroundDrawer::~CSMFGroundDrawer()
 	spring::SafeDelete(meshDrawer);
 }
 
-
-
-IMeshDrawer* CSMFGroundDrawer::SwitchMeshDrawer(int wantedMode)
+IMeshDrawer *CSMFGroundDrawer::SwitchMeshDrawer(int wantedMode)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	// toggle
-	if (wantedMode <= -1) {
+	if (wantedMode <= -1)
+	{
 		wantedMode = drawerMode + 1;
 		wantedMode %= SMF_MESHDRAWER_LAST;
 	}
@@ -155,32 +180,40 @@ IMeshDrawer* CSMFGroundDrawer::SwitchMeshDrawer(int wantedMode)
 
 	spring::SafeDelete(meshDrawer);
 
-	switch ((drawerMode = wantedMode)) {
-		case SMF_MESHDRAWER_LEGACY: {
-			LOG("Legacy Mesh Renderer is no longer available");
-		} [[fallthrough]];
-		case SMF_MESHDRAWER_BASIC: {
-			LOG("Switching to Basic Mesh Rendering");
-			meshDrawer = new CBasicMeshDrawer(this);
-		} break;
-		default: {
-			LOG("Switching to ROAM Mesh Rendering");
-			meshDrawer = new CRoamMeshDrawer(this);
-		} break;
+	switch ((drawerMode = wantedMode))
+	{
+	case SMF_MESHDRAWER_LEGACY:
+	{
+		LOG("Legacy Mesh Renderer is no longer available");
+	}
+		[[fallthrough]];
+	case SMF_MESHDRAWER_BASIC:
+	{
+		LOG("Switching to Basic Mesh Rendering");
+		meshDrawer = new CBasicMeshDrawer(this);
+	}
+	break;
+	default:
+	{
+		LOG("Switching to ROAM Mesh Rendering");
+		meshDrawer = new CRoamMeshDrawer(this);
+	}
+	break;
 	}
 
 	return meshDrawer;
 }
 
-ISMFRenderState* CSMFGroundDrawer::SelectRenderState(const DrawPass::e& drawPass)
+ISMFRenderState *CSMFGroundDrawer::SelectRenderState(const DrawPass::e &drawPass)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	// [0] := Lua GLSL, must have a valid shader for this pass
 	// [1] := default ARB *or* GLSL, same condition
 	const unsigned int stateEnums[2] = {RENDER_STATE_LUA, RENDER_STATE_SSP};
 
-	for (unsigned int n = 0; n < 2; n++) {
-		ISMFRenderState* state = smfRenderStates[ stateEnums[n] ];
+	for (unsigned int n = 0; n < 2; n++)
+	{
+		ISMFRenderState *state = smfRenderStates[stateEnums[n]];
 
 		if (!state->HasValidShader(drawPass))
 			continue;
@@ -198,11 +231,11 @@ bool CSMFGroundDrawer::HaveLuaRenderState() const
 	return (smfRenderStates[RENDER_STATE_SEL] == smfRenderStates[RENDER_STATE_LUA]);
 }
 
-
-
-void CSMFGroundDrawer::DrawDeferredPass(const DrawPass::e& drawPass, bool alphaTest)
+void CSMFGroundDrawer::DrawDeferredPass(const DrawPass::e &drawPass, bool alphaTest)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	if (!geomBuffer.Valid())
 		return;
 
@@ -218,7 +251,8 @@ void CSMFGroundDrawer::DrawDeferredPass(const DrawPass::e& drawPass, bool alphaT
 
 	// deferred pass must be executed with GLSL shaders
 	// if the FFP or ARB state was selected, bail early
-	if (!SelectRenderState(DrawPass::TerrainDeferred)->CanDrawDeferred(this)) {
+	if (!SelectRenderState(DrawPass::TerrainDeferred)->CanDrawDeferred(this))
+	{
 		geomBuffer.Bind();
 		geomBuffer.SetDepthRange(1.0f, 0.0f);
 		geomBuffer.Clear();
@@ -237,7 +271,8 @@ void CSMFGroundDrawer::DrawDeferredPass(const DrawPass::e& drawPass, bool alphaT
 		smfRenderStates[RENDER_STATE_SEL]->SetCurrentShader(this, DrawPass::TerrainDeferred);
 		smfRenderStates[RENDER_STATE_SEL]->Enable(this, DrawPass::TerrainDeferred);
 
-		if (alphaTest) {
+		if (alphaTest)
+		{
 			glEnable(GL_ALPHA_TEST);
 			glAlphaFunc(GL_GREATER, mapInfo->map.voidAlphaMin);
 		}
@@ -247,7 +282,8 @@ void CSMFGroundDrawer::DrawDeferredPass(const DrawPass::e& drawPass, bool alphaT
 
 		meshDrawer->DrawMesh(drawPass);
 
-		if (alphaTest) {
+		if (alphaTest)
+		{
 			glDisable(GL_ALPHA_TEST);
 		}
 
@@ -263,18 +299,20 @@ void CSMFGroundDrawer::DrawDeferredPass(const DrawPass::e& drawPass, bool alphaT
 
 	globalRendering->LoadViewport();
 
-	#if 0
+#if 0
 	geomBuffer.DrawDebug(geomBuffer.GetBufferTexture(GL::GeometryBuffer::ATTACHMENT_NORMTEX));
-	#endif
+#endif
 
 	// send event if no forward pass will follow; must be done after the unbind
 	if (!drawForward || postDeferredEvents)
 		eventHandler.DrawGroundPostDeferred();
 }
 
-void CSMFGroundDrawer::DrawForwardPass(const DrawPass::e& drawPass, bool alphaTest)
+void CSMFGroundDrawer::DrawForwardPass(const DrawPass::e &drawPass, bool alphaTest)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	if (!SelectRenderState(drawPass)->CanDrawForward(this))
 		return;
 
@@ -286,7 +324,8 @@ void CSMFGroundDrawer::DrawForwardPass(const DrawPass::e& drawPass, bool alphaTe
 	if (wireframe)
 		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
-	if (alphaTest) {
+	if (alphaTest)
+	{
 		glEnable(GL_ALPHA_TEST);
 		glAlphaFunc(GL_GREATER, mapInfo->map.voidAlphaMin);
 	}
@@ -305,9 +344,11 @@ void CSMFGroundDrawer::DrawForwardPass(const DrawPass::e& drawPass, bool alphaTe
 		eventHandler.DrawGroundPostForward();
 }
 
-void CSMFGroundDrawer::Draw(const DrawPass::e& drawPass)
+void CSMFGroundDrawer::Draw(const DrawPass::e &drawPass)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	// must be here because water renderers also call us
 	if (!globalRendering->drawGround)
 		return;
@@ -319,29 +360,33 @@ void CSMFGroundDrawer::Draw(const DrawPass::e& drawPass)
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
 
-	if (drawDeferred) {
+	if (drawDeferred)
+	{
 		// do the deferred pass first, will allow us to re-use
 		// its output at some future point and eventually draw
 		// the entire map deferred
 		DrawDeferredPass(drawPass, mapRendering->voidGround || (mapRendering->voidWater && drawPass != DrawPass::WaterReflection));
 	}
 
-	if (drawForward) {
+	if (drawForward)
+	{
 		DrawForwardPass(drawPass, mapRendering->voidGround || (mapRendering->voidWater && drawPass != DrawPass::WaterReflection));
 	}
 
 	glDisable(GL_CULL_FACE);
 
-	if (drawPass == DrawPass::Normal && drawMapEdges) {
+	if (drawPass == DrawPass::Normal && drawMapEdges)
+	{
 		DrawBorder(drawPass);
 	}
 }
 
-
 void CSMFGroundDrawer::DrawBorder(const DrawPass::e drawPass)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	ISMFRenderState* prvState = smfRenderStates[RENDER_STATE_SEL];
+	if (HasVulkanBackend())
+		return;
+	ISMFRenderState *prvState = smfRenderStates[RENDER_STATE_SEL];
 
 	// no need to enable, does nothing
 	smfRenderStates[RENDER_STATE_SEL] = smfRenderStates[RENDER_STATE_NOP];
@@ -350,14 +395,17 @@ void CSMFGroundDrawer::DrawBorder(const DrawPass::e drawPass)
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
 
-	glActiveTexture(GL_TEXTURE2); glEnable(GL_TEXTURE_2D);
+	glActiveTexture(GL_TEXTURE2);
+	glEnable(GL_TEXTURE_2D);
 	glBindTexture(GL_TEXTURE_2D, smfMap->GetDetailTexture());
 
-	glActiveTexture(GL_TEXTURE1); glEnable(GL_TEXTURE_2D);
+	glActiveTexture(GL_TEXTURE1);
+	glEnable(GL_TEXTURE_2D);
 	glBindTexture(GL_TEXTURE_2D, smfMap->GetHeightMapTexture());
 
-	//for CSMFGroundTextures::BindSquareTexture()
-	glActiveTexture(GL_TEXTURE0); glEnable(GL_TEXTURE_2D);
+	// for CSMFGroundTextures::BindSquareTexture()
+	glActiveTexture(GL_TEXTURE0);
+	glEnable(GL_TEXTURE_2D);
 
 	glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);
 
@@ -387,10 +435,11 @@ void CSMFGroundDrawer::DrawBorder(const DrawPass::e drawPass)
 	smfRenderStates[RENDER_STATE_SEL] = prvState;
 }
 
-
 void CSMFGroundDrawer::DrawShadowPass()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	if (!globalRendering->drawGround)
 		return;
 	if (readMap->HasOnlyVoidWater())
@@ -400,56 +449,63 @@ void CSMFGroundDrawer::DrawShadowPass()
 	assert(shadowShader);
 	glEnable(GL_POLYGON_OFFSET_FILL);
 
-	//#pragma message "REMOVE ME, WHEN NOT NEEDED"
-	//glDisable(GL_CULL_FACE);
+	// #pragma message "REMOVE ME, WHEN NOT NEEDED"
+	// glDisable(GL_CULL_FACE);
 
 	glPolygonOffset(spPolygonOffsetScale, spPolygonOffsetUnits); // dz*s + r*u
 
-	glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, smfMap->GetHeightMapTexture());
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, smfMap->GetHeightMapTexture());
 	shadowShader->Enable();
 	shadowShader->SetUniform("borderMinHeight", std::min(readMap->GetInitMinHeight(), -500.0f));
-		meshDrawer->DrawMesh(DrawPass::Shadow);
-		// also render the border geometry to prevent light-visible backfaces
-		meshDrawer->DrawBorderMesh(DrawPass::Shadow);
+	meshDrawer->DrawMesh(DrawPass::Shadow);
+	// also render the border geometry to prevent light-visible backfaces
+	meshDrawer->DrawBorderMesh(DrawPass::Shadow);
 	shadowShader->Disable();
 	glBindTexture(GL_TEXTURE_2D, 0);
 	glActiveTexture(GL_TEXTURE0);
 
 	glDisable(GL_POLYGON_OFFSET_FILL);
-	//glEnable(GL_CULL_FACE);
+	// glEnable(GL_CULL_FACE);
 }
 
-
-
-void CSMFGroundDrawer::SetLuaShader(const LuaMapShaderData* luaMapShaderData)
+void CSMFGroundDrawer::SetLuaShader(const LuaMapShaderData *luaMapShaderData)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	smfRenderStates[RENDER_STATE_LUA]->Update(this, luaMapShaderData);
 }
 
-void CSMFGroundDrawer::SetupBigSquare(const DrawPass::e& drawPass, const int bigSquareX, const int bigSquareY)
+void CSMFGroundDrawer::SetupBigSquare(const DrawPass::e &drawPass, const int bigSquareX, const int bigSquareY)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	if (drawPass != DrawPass::Shadow) {
+	if (HasVulkanBackend())
+		return;
+	if (drawPass != DrawPass::Shadow)
+	{
 		groundTextures->BindSquareTexture(bigSquareX, bigSquareY);
 		smfRenderStates[RENDER_STATE_SEL]->SetSquareTexGen(bigSquareX, bigSquareY);
 
-		if (borderShader && borderShader->IsBound()) {
+		if (borderShader && borderShader->IsBound())
+		{
 			borderShader->SetUniform("texSquare", bigSquareX, bigSquareY);
 		}
 	}
-	else {
-		if (shadowShader && shadowShader->IsBound()) {
+	else
+	{
+		if (shadowShader && shadowShader->IsBound())
+		{
 			shadowShader->SetUniform("texSquare", bigSquareX, bigSquareY);
 		}
 	}
 }
 
-
-
 void CSMFGroundDrawer::Update()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	if (readMap->HasOnlyVoidWater())
 		return;
 
@@ -457,7 +513,8 @@ void CSMFGroundDrawer::Update()
 	// done by DrawMesh; needs to know the actual draw-pass
 	// meshDrawer->Update();
 
-	if (drawDeferred) {
+	if (drawDeferred)
+	{
 		drawDeferred &= UpdateGeometryBuffer(false);
 	}
 }
@@ -465,11 +522,16 @@ void CSMFGroundDrawer::Update()
 void CSMFGroundDrawer::UpdateRenderState()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	smfRenderStates[RENDER_STATE_SSP]->Update(this, nullptr);
 }
 
-void CSMFGroundDrawer::SunChanged() {
+void CSMFGroundDrawer::SunChanged()
+{
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return;
 	// Lua has gl.GetSun
 	if (HaveLuaRenderState())
 		return;
@@ -477,10 +539,11 @@ void CSMFGroundDrawer::SunChanged() {
 	smfRenderStates[RENDER_STATE_SEL]->UpdateShaderSkyUniforms();
 }
 
-
 bool CSMFGroundDrawer::UpdateGeometryBuffer(bool init)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (HasVulkanBackend())
+		return false;
 	static const bool drawDeferredAllowed = configHandler->GetBool("AllowDeferredMapRendering");
 
 	if (!drawDeferredAllowed)
@@ -489,8 +552,6 @@ bool CSMFGroundDrawer::UpdateGeometryBuffer(bool init)
 	return (geomBuffer.Update(init));
 }
 
-
-
 void CSMFGroundDrawer::SetDetail(int newGroundDetail)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
@@ -498,35 +559,34 @@ void CSMFGroundDrawer::SetDetail(int newGroundDetail)
 	const int maxGroundDetail = MAX_GROUND_DETAIL[drawerMode == SMF_MESHDRAWER_ROAM];
 
 	configHandler->Set("GroundDetail", groundDetail = std::clamp(newGroundDetail, minGroundDetail, maxGroundDetail));
-	LOG("GroundDetail%s set to %i", ((drawerMode != SMF_MESHDRAWER_ROAM)? "[Bias]": ""), groundDetail);
+	LOG("GroundDetail%s set to %i", ((drawerMode != SMF_MESHDRAWER_ROAM) ? "[Bias]" : ""), groundDetail);
 }
 
-
-
-int CSMFGroundDrawer::GetGroundDetail(const DrawPass::e& drawPass) const
+int CSMFGroundDrawer::GetGroundDetail(const DrawPass::e &drawPass) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	int detail = groundDetail;
 
-	switch (drawPass) {
-		case DrawPass::TerrainReflection:
-			detail *= LODScaleTerrainReflection;
-			break;
-		case DrawPass::WaterReflection:
-			detail *= LODScaleReflection;
-			break;
-		case DrawPass::WaterRefraction:
-			detail *= LODScaleRefraction;
-			break;
-		case DrawPass::Shadow:
-			// TODO:
-			//   render a contour mesh for the SP? z-fighting / p-panning occur
-			//   when the regular and shadow-mesh tessellations differ too much,
-			//   more visible on larger or hillier maps
-			//   detail *= LODScaleShadow;
-			break;
-		default:
-			break;
+	switch (drawPass)
+	{
+	case DrawPass::TerrainReflection:
+		detail *= LODScaleTerrainReflection;
+		break;
+	case DrawPass::WaterReflection:
+		detail *= LODScaleReflection;
+		break;
+	case DrawPass::WaterRefraction:
+		detail *= LODScaleRefraction;
+		break;
+	case DrawPass::Shadow:
+		// TODO:
+		//   render a contour mesh for the SP? z-fighting / p-panning occur
+		//   when the regular and shadow-mesh tessellations differ too much,
+		//   more visible on larger or hillier maps
+		//   detail *= LODScaleShadow;
+		break;
+	default:
+		break;
 	}
 
 	return detail;

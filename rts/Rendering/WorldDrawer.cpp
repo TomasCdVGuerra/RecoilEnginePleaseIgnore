@@ -51,8 +51,19 @@
 #include "System/Log/ILog.h"
 #include "System/Config/ConfigHandler.h"
 #include "System/LoadLock.h"
+#include "Rendering/Gfx/GfxTypes.h"
 
 CONFIG(bool, PreloadModels).defaultValue(true).description("The engine will preload all models");
+
+namespace
+{
+	bool HasVulkanBackend()
+	{
+		return ((globalRendering != nullptr) &&
+				(globalRendering->graphicsBackend != nullptr) &&
+				(globalRendering->graphicsBackend->Type() == gfx::BackendType::Vulkan));
+	}
+}
 
 void CWorldDrawer::InitPre() const
 {
@@ -86,16 +97,20 @@ void CWorldDrawer::InitPost() const
 	{
 		loadscreen->SetLoadMessage("Loading Models");
 
-		if (preloadMode) {
-			for (const auto& def : unitDefHandler->GetUnitDefsVec()) {
+		if (preloadMode)
+		{
+			for (const auto &def : unitDefHandler->GetUnitDefsVec())
+			{
 				def.PreloadModel();
 			}
 
-			for (const auto& def : featureDefHandler->GetFeatureDefsVec()) {
+			for (const auto &def : featureDefHandler->GetFeatureDefsVec())
+			{
 				def.PreloadModel();
 			}
 
-			for (const auto& def : weaponDefHandler->GetWeaponDefsVec()) {
+			for (const auto &def : weaponDefHandler->GetWeaponDefsVec())
+			{
 				def.PreloadModel();
 			}
 		}
@@ -110,20 +125,25 @@ void CWorldDrawer::InitPost() const
 		loadscreen->SetLoadMessage("Creating InfoTextureHandler");
 		IInfoTextureHandler::Create();
 	}
-	try {
+	try
+	{
 		loadscreen->SetLoadMessage("Creating GroundDrawer");
 		readMap->InitGroundDrawer();
-	} catch (const content_error& e) {
+	}
+	catch (const content_error &e)
+	{
 		memset(buf, 0, sizeof(buf));
 		snprintf(buf, sizeof(buf), "[WorldDrawer::%s] caught exception \"%s\"", __func__, e.what());
 	}
 
 	{
 		loadscreen->SetLoadMessage("Creating GrassDrawer");
-		grassDrawer = new CGrassDrawer();
+		if (!HasVulkanBackend())
+			grassDrawer = new CGrassDrawer();
 	}
 	{
-		inMapDrawerView = new CInMapDrawView();
+		if (!HasVulkanBackend())
+			inMapDrawerView = new CInMapDrawView();
 		pathDrawer = IPathDrawer::GetInstance();
 	}
 	{
@@ -152,23 +172,23 @@ void CWorldDrawer::InitPost() const
 	{
 		ISky::GetSky()->SetupFog();
 	}
-	lock = {}; //unlock
+	lock = {}; // unlock
 	{
 		loadscreen->SetLoadMessage("Finalizing Models");
 		modelLoader.DrainPreloadFutures(0);
-		auto& mv = S3DModelVAO::GetInstance();
-		if (preloadMode) {
+		auto &mv = S3DModelVAO::GetInstance();
+		if (preloadMode)
+		{
 			{
 				auto lock = CLoadLock::GetUniqueLock();
 				mv.UploadVBOs();
 			}
 			mv.SetSafeToDeleteVectors();
 			modelLoader.LogErrors();
-			CModelsLock::SetThreadSafety(false); //all models are already preloaded
+			CModelsLock::SetThreadSafety(false); // all models are already preloaded
 		}
 	}
 }
-
 
 void CWorldDrawer::Kill()
 {
@@ -200,9 +220,6 @@ void CWorldDrawer::Kill()
 	numUpdates = 0;
 }
 
-
-
-
 void CWorldDrawer::Update(bool newSimFrame)
 {
 	SCOPED_TIMER("Update::WorldDrawer");
@@ -210,7 +227,8 @@ void CWorldDrawer::Update(bool newSimFrame)
 	LuaObjectDrawer::Update(numUpdates == 0);
 	readMap->UpdateDraw(numUpdates == 0);
 
-	if (globalRendering->drawGround) {
+	if (globalRendering->drawGround)
+	{
 		ZoneScopedN("GroundDrawer::Update");
 		(readMap->GetGroundDrawer())->Update();
 	}
@@ -222,7 +240,8 @@ void CWorldDrawer::Update(bool newSimFrame)
 	CFeatureDrawer::UpdateStatic();
 	projectileDrawer->UpdateDrawFlags();
 
-	if (newSimFrame) {
+	if (newSimFrame)
+	{
 		projectileDrawer->UpdateTextures();
 
 		{
@@ -240,12 +259,11 @@ void CWorldDrawer::Update(bool newSimFrame)
 	numUpdates += 1;
 }
 
-
-
 void CWorldDrawer::GenerateIBLTextures() const
 {
 
-	if (shadowHandler.ShadowsLoaded()) {
+	if (shadowHandler.ShadowsLoaded())
+	{
 		SCOPED_TIMER("Draw::World::CreateShadows");
 		SCOPED_GL_DEBUGGROUP("Draw::World::CreateShadows");
 
@@ -266,15 +284,18 @@ void CWorldDrawer::GenerateIBLTextures() const
 	bool skyUpd = ISky::GetSky()->IsUpdated();
 	bool waterUpd = waterRendering->IsUpdated();
 
-	if (sunDirUpd) {
+	if (sunDirUpd)
+	{
 		SCOPED_TIMER("Draw::World::UpdateSpecTex");
 		cubeMapHandler.UpdateSpecularTexture();
 	}
-	if (sunDirUpd || skyUpd) {
+	if (sunDirUpd || skyUpd)
+	{
 		SCOPED_TIMER("Draw::World::UpdateSkyTex");
 		ISky::GetSky()->UpdateSkyTexture();
 	}
-	if (sunDirUpd || sunLightUpd || waterUpd) {
+	if (sunDirUpd || sunLightUpd || waterUpd)
+	{
 		SCOPED_TIMER("Draw::World::UpdateShadingTex");
 		readMap->UpdateShadingTexture();
 	}
@@ -293,14 +314,12 @@ void CWorldDrawer::ResetMVPMatrices() const
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
-
-
 void CWorldDrawer::Draw() const
 {
 	SCOPED_TIMER("Draw::World");
 	SCOPED_GL_DEBUGGROUP("Draw::World");
 
-	const auto& sky = ISky::GetSky();
+	const auto &sky = ISky::GetSky();
 	glClearColor(sky->fogColor.x, sky->fogColor.y, sky->fogColor.z, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
@@ -319,19 +338,18 @@ void CWorldDrawer::Draw() const
 		eventHandler.DrawWorld();
 	}
 
-
 	DrawMiscObjects();
 	DrawBelowWaterOverlay();
 
 	glDisable(GL_FOG);
 }
 
-
 void CWorldDrawer::DrawOpaqueObjects() const
 {
-	CBaseGroundDrawer* gd = readMap->GetGroundDrawer();
+	CBaseGroundDrawer *gd = readMap->GetGroundDrawer();
 
-	if (globalRendering->drawGround) {
+	if (globalRendering->drawGround)
+	{
 		{
 			SCOPED_TIMER("Draw::World::Terrain");
 			SCOPED_GL_DEBUGGROUP("Draw::World::Terrain");
@@ -355,7 +373,7 @@ void CWorldDrawer::DrawOpaqueObjects() const
 
 	// not an opaque rendering, but makes sense to run after the terrain was rendered
 	{
-		const auto& sky = ISky::GetSky();
+		const auto &sky = ISky::GetSky();
 		sky->Draw();
 	}
 
@@ -389,7 +407,7 @@ void CWorldDrawer::DrawAlphaObjects() const
 	glDepthFunc(GL_LEQUAL);
 
 	static const double belowPlaneEq[4] = {0.0f, -1.0f, 0.0f, 0.0f};
-	static const double abovePlaneEq[4] = {0.0f,  1.0f, 0.0f, 0.0f};
+	static const double abovePlaneEq[4] = {0.0f, 1.0f, 0.0f, 0.0f};
 
 	const bool hasWaterRendering = globalRendering->drawWater && readMap->HasVisibleWater();
 
@@ -397,7 +415,8 @@ void CWorldDrawer::DrawAlphaObjects() const
 		SCOPED_TIMER("Draw::World::Models::Alpha");
 		SCOPED_GL_DEBUGGROUP("Draw::World::Models::Alpha");
 		// clip in model-space
-		if (hasWaterRendering) {
+		if (hasWaterRendering)
+		{
 			glPushMatrix();
 			glLoadIdentity();
 			glClipPlane(GL_CLIP_PLANE3, belowPlaneEq);
@@ -426,7 +445,7 @@ void CWorldDrawer::DrawAlphaObjects() const
 		SCOPED_TIMER("Draw::World::Water");
 		SCOPED_GL_DEBUGGROUP("Draw::World::Water");
 
-		const auto& water = IWater::GetWater();
+		const auto &water = IWater::GetWater();
 		{
 			ZoneScopedN("Draw::World::Water::UpdateWater");
 			water->UpdateWater(game);
@@ -464,7 +483,8 @@ void CWorldDrawer::DrawMiscObjects() const
 		// note: duplicated in CMiniMap::DrawWorldStuff()
 		commandDrawer->DrawLuaQueuedUnitSetCommands();
 
-		if (cmdColors.AlwaysDrawQueue() || guihandler->GetQueueKeystate()) {
+		if (cmdColors.AlwaysDrawQueue() || guihandler->GetQueueKeystate())
+		{
 			selectedUnitsHandler.DrawCommands();
 		}
 	}
@@ -481,12 +501,11 @@ void CWorldDrawer::DrawMiscObjects() const
 	mouse->DrawSelectionBox();
 	guihandler->DrawMapStuff(false);
 
-	if (globalRendering->drawMapMarks && !game->hideInterface) {
+	if (globalRendering->drawMapMarks && !game->hideInterface)
+	{
 		inMapDrawerView->Draw();
 	}
 }
-
-
 
 void CWorldDrawer::DrawBelowWaterOverlay() const
 {
@@ -501,7 +520,7 @@ void CWorldDrawer::DrawBelowWaterOverlay() const
 	{
 		glEnableClientState(GL_VERTEX_ARRAY);
 
-		const float3& cpos = camera->GetPos();
+		const float3 &cpos = camera->GetPos();
 		const float vr = camera->GetFarPlaneDist() * 0.5f;
 
 		glDepthMask(GL_FALSE);
@@ -513,8 +532,7 @@ void CWorldDrawer::DrawBelowWaterOverlay() const
 				float3(cpos.x - vr, 0.0f, cpos.z - vr),
 				float3(cpos.x - vr, 0.0f, cpos.z + vr),
 				float3(cpos.x + vr, 0.0f, cpos.z + vr),
-				float3(cpos.x + vr, 0.0f, cpos.z - vr)
-			};
+				float3(cpos.x + vr, 0.0f, cpos.z - vr)};
 
 			glVertexPointer(3, GL_FLOAT, 0, verts);
 			glDrawArrays(GL_QUADS, 0, 4);
@@ -523,15 +541,15 @@ void CWorldDrawer::DrawBelowWaterOverlay() const
 		{
 			const float3 verts[] = {
 				float3(cpos.x - vr, 0.0f, cpos.z - vr),
-				float3(cpos.x - vr,  -vr, cpos.z - vr),
+				float3(cpos.x - vr, -vr, cpos.z - vr),
 				float3(cpos.x - vr, 0.0f, cpos.z + vr),
-				float3(cpos.x - vr,  -vr, cpos.z + vr),
+				float3(cpos.x - vr, -vr, cpos.z + vr),
 				float3(cpos.x + vr, 0.0f, cpos.z + vr),
-				float3(cpos.x + vr,  -vr, cpos.z + vr),
+				float3(cpos.x + vr, -vr, cpos.z + vr),
 				float3(cpos.x + vr, 0.0f, cpos.z - vr),
-				float3(cpos.x + vr,  -vr, cpos.z - vr),
+				float3(cpos.x + vr, -vr, cpos.z - vr),
 				float3(cpos.x - vr, 0.0f, cpos.z - vr),
-				float3(cpos.x - vr,  -vr, cpos.z - vr),
+				float3(cpos.x - vr, -vr, cpos.z - vr),
 			};
 
 			glVertexPointer(3, GL_FLOAT, 0, verts);
