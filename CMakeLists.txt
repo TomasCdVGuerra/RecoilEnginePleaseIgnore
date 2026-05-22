@@ -714,6 +714,20 @@ add_subdirectory(doc)
 add_subdirectory(cont)
 
 # As rts/builds/* depends on most other stuff, we add this one as last
+set(ENGINE_GRAPHICS_LIBS "")
+
+if (APPLE)
+    # Use the MGL target we defined in rts/lib/MGL/CMakeLists.txt
+    set(ENGINE_GRAPHICS_LIBS MGL)
+else()
+    # On other platforms, link system OpenGL
+    find_package(OpenGL REQUIRED)
+    set(ENGINE_GRAPHICS_LIBS ${OPENGL_LIBRARIES})
+endif()
+# Global override to force MGL includes when on APPLE
+if (APPLE)
+    include_directories(BEFORE "${CMAKE_CURRENT_SOURCE_DIR}/rts/lib/MGL/include")
+endif()
 add_subdirectory(rts)
 
 # Unit tests

@@ -30,9 +30,13 @@ find_package(SDL2 MODULE REQUIRED)
 
 set(engineLibraries SDL2::SDL2)
 
-set(OpenGL_GL_PREFERENCE LEGACY)
-find_package_static(OpenGL 3.0 REQUIRED)
-list(APPEND engineLibraries OpenGL::GL)
+if (APPLE)
+	list(APPEND engineLibraries ${ENGINE_GRAPHICS_LIBS})
+else()
+	set(OpenGL_GL_PREFERENCE LEGACY)
+	find_package_static(OpenGL 3.0 REQUIRED)
+	list(APPEND engineLibraries ${ENGINE_GRAPHICS_LIBS})
+endif()
 
 find_fontconfig_hack()
 find_package_static(Fontconfig 2.11 REQUIRED)
