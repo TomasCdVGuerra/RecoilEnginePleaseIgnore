@@ -52,3 +52,6 @@
 [submodule "rts/lib/streflop"]
 	path = rts/lib/streflop
 	url = https://github.com/RecoilEngine/streflop.git
+[submodule "rts/lib/MGL"]
+	path = rts/lib/MGL
+	url = https://github.com/TomasCdVGuerra/MGLPleaseIgnore.git
