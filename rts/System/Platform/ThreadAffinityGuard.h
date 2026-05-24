@@ -1,13 +1,25 @@
 #ifndef THREAD_AFFINITY_GUARD_H__
 #define THREAD_AFFINITY_GUARD_H__
 
+#ifdef __APPLE__
+class ThreadAffinityGuard
+{
+public:
+	ThreadAffinityGuard(int core) {}
+	~ThreadAffinityGuard() {}
+
+	ThreadAffinityGuard(const ThreadAffinityGuard &) = delete;
+	ThreadAffinityGuard &operator=(const ThreadAffinityGuard &) = delete;
+};
+#else
 #ifdef _WIN32
 #include <windows.h>
 #else
 #include <sched.h>
 #endif
 
-class ThreadAffinityGuard {
+class ThreadAffinityGuard
+{
 private:
 #ifdef _WIN32
 	DWORD_PTR savedAffinity;
@@ -26,10 +38,11 @@ public:
 	~ThreadAffinityGuard();
 
 	// Delete copy constructor to prevent copying
-	ThreadAffinityGuard(const ThreadAffinityGuard&) = delete;
+	ThreadAffinityGuard(const ThreadAffinityGuard &) = delete;
 
 	// Delete copy assignment operator to prevent assignment
-	ThreadAffinityGuard& operator=(const ThreadAffinityGuard&) = delete;
+	ThreadAffinityGuard &operator=(const ThreadAffinityGuard &) = delete;
 };
+#endif
 
 #endif

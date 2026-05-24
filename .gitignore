@@ -177,3 +177,6 @@ build-*
 
 /CopilotHelper
 .DS_Store
+mgl_error.txt
+.gitignore
+build_log.txt

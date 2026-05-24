@@ -1,7 +1,17 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
 #include <algorithm>
+#ifdef __APPLE__
+#include <cstdio>
+namespace nowide
+{
+	using ::fopen;
+	using ::remove;
+	using ::rename;
+}
+#else
 #include <nowide/cstdio.hpp>
+#endif
 
 #include "KeyBindings.h"
 #include "KeyCodes.h"
@@ -17,30 +27,27 @@
 
 #include "System/Misc/TracyDefs.h"
 
-
 #define LOG_SECTION_KEY_BINDINGS "KeyBindings"
 LOG_REGISTER_SECTION_GLOBAL(LOG_SECTION_KEY_BINDINGS)
 
 // use the specific section for all LOG*() calls in this source file
 #ifdef LOG_SECTION_CURRENT
-	#undef LOG_SECTION_CURRENT
+#undef LOG_SECTION_CURRENT
 #endif
 #define LOG_SECTION_CURRENT LOG_SECTION_KEY_BINDINGS
 
-
 CONFIG(int, KeyChainTimeout).defaultValue(750).minimumValue(0).description("Timeout in milliseconds waiting for a key chain shortcut.");
-
 
 CKeyBindings keyBindings;
 
-
-struct DefaultBinding {
-	const char* key;
-	const char* action;
+struct DefaultBinding
+{
+	const char *key;
+	const char *action;
 };
 
-
-static const CKeyBindings::ActionComparison compareActionByTriggerOrder = [](const Action& a, const Action& b) {
+static const CKeyBindings::ActionComparison compareActionByTriggerOrder = [](const Action &a, const Action &b)
+{
 	bool selfAnyMod = a.keyChain.back().AnyMod();
 	bool actionAnyMod = b.keyChain.back().AnyMod();
 
@@ -50,212 +57,209 @@ static const CKeyBindings::ActionComparison compareActionByTriggerOrder = [](con
 		return actionAnyMod;
 };
 
-
-static const CKeyBindings::ActionComparison compareActionByBindingOrder = [](const Action& a, const Action& b) {
-  return (a.bindingIndex < b.bindingIndex);
+static const CKeyBindings::ActionComparison compareActionByBindingOrder = [](const Action &a, const Action &b)
+{
+	return (a.bindingIndex < b.bindingIndex);
 };
 
 const std::string CKeyBindings::DEFAULT_FILENAME = "uikeys.txt";
 
 static const DefaultBinding defaultBindings[] = {
-	{            "esc", "quitmessage" },
-	{      "Shift+esc", "quitmenu"    },
-	{ "Ctrl+Shift+esc", "quitforce"   },
-	{  "Alt+Shift+esc", "reloadforce" },
-	{      "Any+pause", "pause"       },
+	{"esc", "quitmessage"},
+	{"Shift+esc", "quitmenu"},
+	{"Ctrl+Shift+esc", "quitforce"},
+	{"Alt+Shift+esc", "reloadforce"},
+	{"Any+pause", "pause"},
 
-	{ "c", "controlunit"      },
-	{ "Any+h", "sharedialog"  },
-	{ "Any+i", "gameinfo"     },
+	{"c", "controlunit"},
+	{"Any+h", "sharedialog"},
+	{"Any+i", "gameinfo"},
 
-	{ "Any+j",         "mouse2" },
-	{ "backspace", "mousestate" },
-	{ "Shift+backspace", "togglecammode" },
-	{  "Ctrl+backspace", "togglecammode" },
-	{         "Any+tab", "toggleoverview" },
+	{"Any+j", "mouse2"},
+	{"backspace", "mousestate"},
+	{"Shift+backspace", "togglecammode"},
+	{"Ctrl+backspace", "togglecammode"},
+	{"Any+tab", "toggleoverview"},
 
-	{               "Any+enter", "chat"           },
+	{"Any+enter", "chat"},
 	// leave this unbound, takes as many keypresses as exiting ally/spec modes
 	// { "Alt+ctrl+z,Alt+ctrl+z", "chatswitchall"  },
-	{ "Alt+ctrl+a,Alt+ctrl+a", "chatswitchally" },
-	{ "Alt+ctrl+s,Alt+ctrl+s", "chatswitchspec" },
+	{"Alt+ctrl+a,Alt+ctrl+a", "chatswitchally"},
+	{"Alt+ctrl+s,Alt+ctrl+s", "chatswitchspec"},
 
-	{       "Any+tab", "edit_complete"  },
-	{ "Any+backspace", "edit_backspace" },
-	{    "Any+delete", "edit_delete"    },
-	{      "Any+home", "edit_home"      },
-	{      "Alt+left", "edit_home"      },
-	{       "Any+end", "edit_end"       },
-	{     "Alt+right", "edit_end"       },
-	{        "Any+up", "edit_prev_line" },
-	{      "Any+down", "edit_next_line" },
-	{      "Any+left", "edit_prev_char" },
-	{     "Any+right", "edit_next_char" },
-	{     "Ctrl+left", "edit_prev_word" },
-	{    "Ctrl+right", "edit_next_word" },
-	{     "Any+enter", "edit_return"    },
-	{    "Any+escape", "edit_escape"    },
+	{"Any+tab", "edit_complete"},
+	{"Any+backspace", "edit_backspace"},
+	{"Any+delete", "edit_delete"},
+	{"Any+home", "edit_home"},
+	{"Alt+left", "edit_home"},
+	{"Any+end", "edit_end"},
+	{"Alt+right", "edit_end"},
+	{"Any+up", "edit_prev_line"},
+	{"Any+down", "edit_next_line"},
+	{"Any+left", "edit_prev_char"},
+	{"Any+right", "edit_next_char"},
+	{"Ctrl+left", "edit_prev_word"},
+	{"Ctrl+right", "edit_next_word"},
+	{"Any+enter", "edit_return"},
+	{"Any+escape", "edit_escape"},
 
-	{ "Ctrl+v", "pastetext" },
+	{"Ctrl+v", "pastetext"},
 
-	{ "Any+home", "increaseViewRadius" },
-	{ "Any+end",  "decreaseViewRadius" },
+	{"Any+home", "increaseViewRadius"},
+	{"Any+end", "decreaseViewRadius"},
 
-	{ "Alt+insert",  "speedup"  },
-	{ "Alt+delete",  "slowdown" },
-	{ "Alt+=",       "speedup"  },
-	{ "Alt++",       "speedup"  },
-	{ "Alt+-",       "slowdown" },
-	{ "Alt+numpad+", "speedup"  },
-	{ "Alt+numpad-", "slowdown" },
+	{"Alt+insert", "speedup"},
+	{"Alt+delete", "slowdown"},
+	{"Alt+=", "speedup"},
+	{"Alt++", "speedup"},
+	{"Alt+-", "slowdown"},
+	{"Alt+numpad+", "speedup"},
+	{"Alt+numpad-", "slowdown"},
 
-	{       ",", "prevmenu" },
-	{       ".", "nextmenu" },
-	{ "Shift+,", "decguiopacity" },
-	{ "Shift+.", "incguiopacity" },
+	{",", "prevmenu"},
+	{".", "nextmenu"},
+	{"Shift+,", "decguiopacity"},
+	{"Shift+.", "incguiopacity"},
 
-	{      "1", "specteam 0"  },
-	{      "2", "specteam 1"  },
-	{      "3", "specteam 2"  },
-	{      "4", "specteam 3"  },
-	{      "5", "specteam 4"  },
-	{      "6", "specteam 5"  },
-	{      "7", "specteam 6"  },
-	{      "8", "specteam 7"  },
-	{      "9", "specteam 8"  },
-	{      "0", "specteam 9"  },
-	{ "Ctrl+1", "specteam 10" },
-	{ "Ctrl+2", "specteam 11" },
-	{ "Ctrl+3", "specteam 12" },
-	{ "Ctrl+4", "specteam 13" },
-	{ "Ctrl+5", "specteam 14" },
-	{ "Ctrl+6", "specteam 15" },
-	{ "Ctrl+7", "specteam 16" },
-	{ "Ctrl+8", "specteam 17" },
-	{ "Ctrl+9", "specteam 18" },
-	{ "Ctrl+0", "specteam 19" },
+	{"1", "specteam 0"},
+	{"2", "specteam 1"},
+	{"3", "specteam 2"},
+	{"4", "specteam 3"},
+	{"5", "specteam 4"},
+	{"6", "specteam 5"},
+	{"7", "specteam 6"},
+	{"8", "specteam 7"},
+	{"9", "specteam 8"},
+	{"0", "specteam 9"},
+	{"Ctrl+1", "specteam 10"},
+	{"Ctrl+2", "specteam 11"},
+	{"Ctrl+3", "specteam 12"},
+	{"Ctrl+4", "specteam 13"},
+	{"Ctrl+5", "specteam 14"},
+	{"Ctrl+6", "specteam 15"},
+	{"Ctrl+7", "specteam 16"},
+	{"Ctrl+8", "specteam 17"},
+	{"Ctrl+9", "specteam 18"},
+	{"Ctrl+0", "specteam 19"},
 
-	{ "Any+0", "group0" },
-	{ "Any+1", "group1" },
-	{ "Any+2", "group2" },
-	{ "Any+3", "group3" },
-	{ "Any+4", "group4" },
-	{ "Any+5", "group5" },
-	{ "Any+6", "group6" },
-	{ "Any+7", "group7" },
-	{ "Any+8", "group8" },
-	{ "Any+9", "group9" },
+	{"Any+0", "group0"},
+	{"Any+1", "group1"},
+	{"Any+2", "group2"},
+	{"Any+3", "group3"},
+	{"Any+4", "group4"},
+	{"Any+5", "group5"},
+	{"Any+6", "group6"},
+	{"Any+7", "group7"},
+	{"Any+8", "group8"},
+	{"Any+9", "group9"},
 
-	{       "[", "buildfacing inc"  },
-	{ "Shift+[", "buildfacing inc"  },
-	{       "]", "buildfacing dec"  },
-	{ "Shift+]", "buildfacing dec"  },
-	{   "Any+z", "buildspacing inc" },
-	{   "Any+x", "buildspacing dec" },
+	{"[", "buildfacing inc"},
+	{"Shift+[", "buildfacing inc"},
+	{"]", "buildfacing dec"},
+	{"Shift+]", "buildfacing dec"},
+	{"Any+z", "buildspacing inc"},
+	{"Any+x", "buildspacing dec"},
 
-	{            "a", "attack"       },
-	{      "Shift+a", "attack"       },
-	{        "Alt+a", "areaattack"   },
-	{  "Alt+Shift+a", "areaattack"   },
-	{        "Alt+b", "debug"        },
-	{        "Alt+v", "debugcolvol"  },
-	{        "Alt+p", "debugpath"    },
-	{            "d", "manualfire"   },
-	{      "Shift+d", "manualfire"   },
-	{       "Ctrl+d", "selfd"        },
-	{ "Ctrl+Shift+d", "selfd queued" },
-	{            "e", "reclaim"      },
-	{      "Shift+e", "reclaim"      },
-	{            "f", "fight"        },
-	{      "Shift+f", "fight"        },
-	{        "Alt+f", "forcestart"   },
-	{            "g", "guard"        },
-	{      "Shift+g", "guard"        },
-	{            "k", "cloak"        },
-	{      "Shift+k", "cloak"        },
-	{            "l", "loadunits"    },
-	{      "Shift+l", "loadunits"    },
-	{            "m", "move"         },
-	{      "Shift+m", "move"         },
-	{        "Alt+o", "singlestep"   },
-	{            "p", "patrol"       },
-	{      "Shift+p", "patrol"       },
-	{            "q", "groupselect"  },
-	{            "q", "groupadd"     },
-	{       "Ctrl+q", "aiselect"     },
-	{      "Shift+q", "groupclear"   },
-	{            "r", "repair"       },
-	{      "Shift+r", "repair"       },
-	{            "s", "stop"         },
-	{      "Shift+s", "stop"         },
-	{            "u", "unloadunits"  },
-	{      "Shift+u", "unloadunits"  },
-	{            "w", "wait"         },
-	{      "Shift+w", "wait queued"  },
-	{            "x", "onoff"        },
-	{      "Shift+x", "onoff"        },
+	{"a", "attack"},
+	{"Shift+a", "attack"},
+	{"Alt+a", "areaattack"},
+	{"Alt+Shift+a", "areaattack"},
+	{"Alt+b", "debug"},
+	{"Alt+v", "debugcolvol"},
+	{"Alt+p", "debugpath"},
+	{"d", "manualfire"},
+	{"Shift+d", "manualfire"},
+	{"Ctrl+d", "selfd"},
+	{"Ctrl+Shift+d", "selfd queued"},
+	{"e", "reclaim"},
+	{"Shift+e", "reclaim"},
+	{"f", "fight"},
+	{"Shift+f", "fight"},
+	{"Alt+f", "forcestart"},
+	{"g", "guard"},
+	{"Shift+g", "guard"},
+	{"k", "cloak"},
+	{"Shift+k", "cloak"},
+	{"l", "loadunits"},
+	{"Shift+l", "loadunits"},
+	{"m", "move"},
+	{"Shift+m", "move"},
+	{"Alt+o", "singlestep"},
+	{"p", "patrol"},
+	{"Shift+p", "patrol"},
+	{"q", "groupselect"},
+	{"q", "groupadd"},
+	{"Ctrl+q", "aiselect"},
+	{"Shift+q", "groupclear"},
+	{"r", "repair"},
+	{"Shift+r", "repair"},
+	{"s", "stop"},
+	{"Shift+s", "stop"},
+	{"u", "unloadunits"},
+	{"Shift+u", "unloadunits"},
+	{"w", "wait"},
+	{"Shift+w", "wait queued"},
+	{"x", "onoff"},
+	{"Shift+x", "onoff"},
 
+	{"Ctrl+t", "trackmode"},
+	{"Any+t", "track"},
 
-	{  "Ctrl+t", "trackmode" },
-	{   "Any+t", "track" },
+	{"Ctrl+f1", "viewfps"},
+	{"Ctrl+f2", "viewta"},
+	{"Ctrl+f3", "viewspring"},
+	{"Ctrl+f4", "viewrot"},
+	{"Ctrl+f5", "viewfree"},
 
-	{ "Ctrl+f1", "viewfps"  },
-	{ "Ctrl+f2", "viewta"   },
-	{ "Ctrl+f3", "viewspring" },
-	{ "Ctrl+f4", "viewrot"  },
-	{ "Ctrl+f5", "viewfree" },
+	{"Any+f1", "ShowElevation"},
+	{"Any+f2", "ShowPathTraversability"},
+	{"Any+f3", "LastMsgPos"},
+	{"Any+f4", "ShowMetalMap"},
+	{"Any+f5", "HideInterface"},
+	{"Any+f6", "MuteSound"},
+	{"Any+l", "togglelos"},
 
-	{ "Any+f1",  "ShowElevation"         },
-	{ "Any+f2",  "ShowPathTraversability"},
-	{ "Any+f3",  "LastMsgPos"            },
-	{ "Any+f4",  "ShowMetalMap"          },
-	{ "Any+f5",  "HideInterface"         },
-	{ "Any+f6",  "MuteSound"             },
-	{ "Any+l",   "togglelos"             },
+	{"Ctrl+Shift+f8", "savegame"},
+	{"Ctrl+Shift+f10", "createvideo"},
+	{"Any+f11", "screenshot"},
+	{"Any+f12", "screenshot"},
+	{"Alt+enter", "fullscreen"},
 
-	{ "Ctrl+Shift+f8",  "savegame" },
-	{ "Ctrl+Shift+f10", "createvideo" },
-	{ "Any+f11", "screenshot"     },
-	{ "Any+f12", "screenshot"     },
-	{ "Alt+enter", "fullscreen"  },
+	{"Any+`,Any+`", "drawlabel"},
+	{"Any+\\,Any+\\", "drawlabel"},
+	{"Any+~,Any+~", "drawlabel"},
+	{"Any+§,Any+§", "drawlabel"},
+	{"Any+^,Any+^", "drawlabel"},
 
-	{ "Any+`,Any+`",    "drawlabel" },
-	{ "Any+\\,Any+\\",  "drawlabel" },
-	{ "Any+~,Any+~",    "drawlabel" },
-	{ "Any+§,Any+§",    "drawlabel" },
-	{ "Any+^,Any+^",    "drawlabel" },
+	{"Any+`", "drawinmap"},
+	{"Any+\\", "drawinmap"},
+	{"Any+~", "drawinmap"},
+	{"Any+§", "drawinmap"},
+	{"Any+^", "drawinmap"},
 
-	{    "Any+`",    "drawinmap"  },
-	{    "Any+\\",   "drawinmap"  },
-	{    "Any+~",    "drawinmap"  },
-	{    "Any+§",    "drawinmap"  },
-	{    "Any+^",    "drawinmap"  },
+	{"Any+up", "moveforward"},
+	{"Any+down", "moveback"},
+	{"Any+right", "moveright"},
+	{"Any+left", "moveleft"},
+	{"Any+pageup", "moveup"},
+	{"Any+pagedown", "movedown"},
 
-	{    "Any+up",       "moveforward"  },
-	{    "Any+down",     "moveback"     },
-	{    "Any+right",    "moveright"    },
-	{    "Any+left",     "moveleft"     },
-	{    "Any+pageup",   "moveup"       },
-	{    "Any+pagedown", "movedown"     },
+	{"Any+ctrl", "moveslow"},  // decreases delta for move/zoom camera transitions
+	{"Any+shift", "movefast"}, // increases delta for move/zoom camera transitions
 
-	{    "Any+ctrl",     "moveslow"     }, // decreases delta for move/zoom camera transitions
-	{    "Any+shift",    "movefast"     }, // increases delta for move/zoom camera transitions
-
-	{    "Any+ctrl",     "movetilt"     }, // rotates the camera over the x axis on mousewheel move
-	{    "Any+alt",      "movereset"    }, // resets camera state to maxzoom/minzoom on mousewheel move, additionally resets tilt on Overhead cam
-	{    "Any+alt",      "moverotate"   }, // rotates the camera in x and y axis on mmb move (Spring cam)
+	{"Any+ctrl", "movetilt"},  // rotates the camera over the x axis on mousewheel move
+	{"Any+alt", "movereset"},  // resets camera state to maxzoom/minzoom on mousewheel move, additionally resets tilt on Overhead cam
+	{"Any+alt", "moverotate"}, // rotates the camera in x and y axis on mmb move (Spring cam)
 
 	// selection keys
-	{ "Ctrl+a",    "select AllMap++_ClearSelection_SelectAll+"                                         },
-	{ "Ctrl+b",    "select AllMap+_Builder_Idle+_ClearSelection_SelectOne+"                            },
-	{ "Ctrl+c",    "select AllMap+_ManualFireUnit+_ClearSelection_SelectOne+"                          },
-	{ "Ctrl+r",    "select AllMap+_Radar+_ClearSelection_SelectAll+"                                   },
-	{ "Ctrl+v",    "select AllMap+_Not_Builder_Not_Commander_InPrevSel_Not_InHotkeyGroup+_SelectAll+"  },
-	{ "Ctrl+w",    "select AllMap+_Not_Aircraft_Weapons+_ClearSelection_SelectAll+"                    },
-	{ "Ctrl+x",    "select AllMap+_InPrevSel_Not_InHotkeyGroup+_SelectAll+"                            },
-	{ "Ctrl+z",    "select AllMap+_InPrevSel+_ClearSelection_SelectAll+"                               }
-};
-
+	{"Ctrl+a", "select AllMap++_ClearSelection_SelectAll+"},
+	{"Ctrl+b", "select AllMap+_Builder_Idle+_ClearSelection_SelectOne+"},
+	{"Ctrl+c", "select AllMap+_ManualFireUnit+_ClearSelection_SelectOne+"},
+	{"Ctrl+r", "select AllMap+_Radar+_ClearSelection_SelectAll+"},
+	{"Ctrl+v", "select AllMap+_Not_Builder_Not_Commander_InPrevSel_Not_InHotkeyGroup+_SelectAll+"},
+	{"Ctrl+w", "select AllMap+_Not_Aircraft_Weapons+_ClearSelection_SelectAll+"},
+	{"Ctrl+x", "select AllMap+_InPrevSel_Not_InHotkeyGroup+_SelectAll+"},
+	{"Ctrl+z", "select AllMap+_InPrevSel+_ClearSelection_SelectAll+"}};
 
 /******************************************************************************/
 //
@@ -319,19 +323,17 @@ void CKeyBindings::Kill()
 	configHandler->RemoveObserver(this);
 }
 
-
 /******************************************************************************/
 
-void FilterByKeychain(const ActionList & in, const CKeyChain & kc, ActionList & out)
+void FilterByKeychain(const ActionList &in, const CKeyChain &kc, ActionList &out)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	for (const Action& action: in)
+	for (const Action &action : in)
 		if (kc.fit(action.keyChain))
 			out.push_back(action);
 }
 
-
-void MergeActionListsByTrigger(const ActionList& actionListA, const ActionList& actionListB, ActionList & out)
+void MergeActionListsByTrigger(const ActionList &actionListA, const ActionList &actionListB, ActionList &out)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	// When we are retrieving actionlists for a given keyboard state we need to
@@ -356,7 +358,8 @@ void MergeActionListsByTrigger(const ActionList& actionListA, const ActionList& 
 	// We assume that the two lists are either both non-Any lists, or both Any lists.
 	//
 	// Their merged result is appended to out.
-	if (actionListA.empty()) {
+	if (actionListA.empty())
+	{
 		out.insert(std::end(out), std::begin(actionListB), std::end(actionListB));
 		return;
 	}
@@ -366,36 +369,43 @@ void MergeActionListsByTrigger(const ActionList& actionListA, const ActionList& 
 	out.insert(std::end(out), std::begin(actionListA), std::end(actionListA));
 	size_t aEndId = out.size();
 
-	if (actionListB.empty()) return;
+	if (actionListB.empty())
+		return;
 
 	// Only add items from list B
 	// - If there are duplicates with >= bindingId, don't add them
 	// - If there are duplicates with < bindingId, remove the A item
-	for (const auto & aB : actionListB) {
+	for (const auto &aB : actionListB)
+	{
 		bool toAdd = true;
-		for (size_t a = aBeginId; a < aEndId; ++a) {
+		for (size_t a = aBeginId; a < aEndId; ++a)
+		{
 			// B is a duplicate...
-			if (aB.line == out[a].line) {
+			if (aB.line == out[a].line)
+			{
 				// ...with a higher id, so do not add it.
-				if (aB.bindingIndex >= out[a].bindingIndex) {
+				if (aB.bindingIndex >= out[a].bindingIndex)
+				{
 					toAdd = false;
-				// ...with a lower id, so remove its A equivalent.
-				} else {
+					// ...with a lower id, so remove its A equivalent.
+				}
+				else
+				{
 					out.erase(std::next(std::begin(out), a));
 					--aEndId;
 				}
 				break;
 			}
 		}
-		if (toAdd) out.push_back(aB);
+		if (toAdd)
+			out.push_back(aB);
 	}
 
 	// Merge the two parts.
 	std::inplace_merge(std::next(std::begin(out), aBeginId), std::next(std::begin(out), aEndId), std::end(out), compareActionByTriggerOrder);
 }
 
-
-const ActionList & CKeyBindings::GetActionList(const CKeySet& ks, bool forceAny) const
+const ActionList &CKeyBindings::GetActionList(const CKeySet &ks, bool forceAny) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	static ActionList empty;
@@ -403,10 +413,11 @@ const ActionList & CKeyBindings::GetActionList(const CKeySet& ks, bool forceAny)
 	if (ks.Key() < 0)
 		return empty;
 
-	const auto & bindings = ks.IsKeyCode() ? codeBindings : scanBindings;
+	const auto &bindings = ks.IsKeyCode() ? codeBindings : scanBindings;
 
 	CKeySet toUse = ks;
-	if (forceAny) toUse.SetAnyBit();
+	if (forceAny)
+		toUse.SetAnyBit();
 
 	const auto it = bindings.find(toUse);
 	if (it != bindings.end())
@@ -415,8 +426,7 @@ const ActionList & CKeyBindings::GetActionList(const CKeySet& ks, bool forceAny)
 	return empty;
 }
 
-
-ActionList CKeyBindings::GetActionList(const CKeyChain& kc) const
+ActionList CKeyBindings::GetActionList(const CKeyChain &kc) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	ActionList out;
@@ -424,19 +434,19 @@ ActionList CKeyBindings::GetActionList(const CKeyChain& kc) const
 	if (kc.empty())
 		return out;
 
-	const auto & al = GetActionList(kc.back(), false);
+	const auto &al = GetActionList(kc.back(), false);
 	FilterByKeychain(al, kc, out);
 
-	if (!kc.back().AnyMod()) {
-		const auto & al = GetActionList(kc.back(), true);
+	if (!kc.back().AnyMod())
+	{
+		const auto &al = GetActionList(kc.back(), true);
 		FilterByKeychain(al, kc, out);
 	}
 
 	return out;
 }
 
-
-ActionList CKeyBindings::GetActionList(const CKeyChain& kc, const CKeyChain& sc) const
+ActionList CKeyBindings::GetActionList(const CKeyChain &kc, const CKeyChain &sc) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	// Recover the actionLists we need to merge.
@@ -444,8 +454,10 @@ ActionList CKeyBindings::GetActionList(const CKeyChain& kc, const CKeyChain& sc)
 
 	// First get non-Any lists.
 	ActionList kList, sList;
-	if (!kc.back().AnyMod()) FilterByKeychain(GetActionList(kc.back(), false), kc, kList);
-	if (!sc.back().AnyMod()) FilterByKeychain(GetActionList(sc.back(), false), sc, sList);
+	if (!kc.back().AnyMod())
+		FilterByKeychain(GetActionList(kc.back(), false), kc, kList);
+	if (!sc.back().AnyMod())
+		FilterByKeychain(GetActionList(sc.back(), false), sc, sList);
 
 	MergeActionListsByTrigger(kList, sList, merged);
 
@@ -457,14 +469,14 @@ ActionList CKeyBindings::GetActionList(const CKeyChain& kc, const CKeyChain& sc)
 
 	MergeActionListsByTrigger(kList, sList, merged);
 
-	if (debugEnabled) {
+	if (debugEnabled)
+	{
 		LOG(
 			"GetActions: codeChain=\"%s\" scanChain=\"%s\" keyCode=\"%s\" scanCode=\"%s\":",
 			kc.GetString().c_str(),
 			sc.GetString().c_str(),
 			kc.back().GetCodeString().c_str(),
-			sc.back().GetCodeString().c_str()
-		);
+			sc.back().GetCodeString().c_str());
 
 		DebugActionList(merged);
 	}
@@ -472,13 +484,11 @@ ActionList CKeyBindings::GetActionList(const CKeyChain& kc, const CKeyChain& sc)
 	return merged;
 }
 
-
 ActionList CKeyBindings::GetActionList(int keyCode, int scanCode) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	return GetActionList(keyCode, scanCode, CKeySet::GetCurrentModifiers());
 }
-
 
 ActionList CKeyBindings::GetActionList(int keyCode, int scanCode, unsigned char modifiers) const
 {
@@ -492,7 +502,6 @@ ActionList CKeyBindings::GetActionList(int keyCode, int scanCode, unsigned char 
 	return GetActionList(codeChain, scanChain);
 }
 
-
 ActionList CKeyBindings::GetActionList() const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
@@ -502,14 +511,16 @@ ActionList CKeyBindings::GetActionList() const
 	if (!hotkeys.empty())
 		merged.reserve(hotkeys.size() + 1);
 
-	for (const auto& p: codeBindings) {
-		const ActionList& al = p.second;
+	for (const auto &p : codeBindings)
+	{
+		const ActionList &al = p.second;
 
 		merged.insert(merged.end(), al.begin(), al.end());
 	}
 
-	for (const auto& p: scanBindings) {
-		const ActionList& al = p.second;
+	for (const auto &p : scanBindings)
+	{
+		const ActionList &al = p.second;
 
 		merged.insert(merged.end(), al.begin(), al.end());
 	}
@@ -519,36 +530,39 @@ ActionList CKeyBindings::GetActionList() const
 	return merged;
 }
 
-
-void CKeyBindings::DebugActionList(const ActionList& actionList) const {
+void CKeyBindings::DebugActionList(const ActionList &actionList) const
+{
 	RECOIL_DETAILED_TRACY_ZONE;
 	LOG("Action List:");
-	if (actionList.empty()) {
+	if (actionList.empty())
+	{
 		LOG("   EMPTY");
-	} else {
+	}
+	else
+	{
 		int i = 1;
-		for (const auto& a: actionList) {
+		for (const auto &a : actionList)
+		{
 			LOG("   %i.  action=\"%s\"  rawline=\"%s\"  shortcut=\"%s\"  index=\"%i\"", i++, a.command.c_str(), a.rawline.c_str(), a.boundWith.c_str(), a.bindingIndex);
 		}
 	}
 };
 
-
-const CKeyBindings::HotkeyList& CKeyBindings::GetHotkeys(const std::string& action) const
+const CKeyBindings::HotkeyList &CKeyBindings::GetHotkeys(const std::string &action) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	const auto it = hotkeys.find(action);
-	if (it == hotkeys.end()) {
+	if (it == hotkeys.end())
+	{
 		static HotkeyList empty;
 		return empty;
 	}
 	return it->second;
 }
 
-
 /******************************************************************************/
 
-static bool ParseSingleChain(const std::string& keystr, CKeyChain* kc)
+static bool ParseSingleChain(const std::string &keystr, CKeyChain *kc)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	kc->clear();
@@ -557,7 +571,8 @@ static bool ParseSingleChain(const std::string& keystr, CKeyChain* kc)
 	// note: this will fail if keystr contains spaces
 	std::stringstream ss(keystr);
 
-	while (ss.good()) {
+	while (ss.good())
+	{
 		char kcstr[256];
 		ss.getline(kcstr, 256, ',');
 		std::string kstr(kcstr);
@@ -571,8 +586,7 @@ static bool ParseSingleChain(const std::string& keystr, CKeyChain* kc)
 	return true;
 }
 
-
-static bool ParseKeyChain(std::string keystr, CKeyChain* kc, const size_t pos = std::string::npos)
+static bool ParseKeyChain(std::string keystr, CKeyChain *kc, const size_t pos = std::string::npos)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	// recursive function to allow "," as separator-char & as shortcut
@@ -598,29 +612,31 @@ static bool ParseKeyChain(std::string keystr, CKeyChain* kc, const size_t pos = 
 	return ParseKeyChain(keystr, kc, cpos);
 }
 
-
-void CKeyBindings::AddActionToKeyMap(KeyMap& bindings, Action& action)
+void CKeyBindings::AddActionToKeyMap(KeyMap &bindings, Action &action)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	CKeySet& ks = action.keyChain.back();
+	CKeySet &ks = action.keyChain.back();
 
 	const auto it = bindings.find(ks);
 
-	if (it == bindings.end()) {
+	if (it == bindings.end())
+	{
 		// create new keyset entry and push it command
-		ActionList& al = bindings[ks];
+		ActionList &al = bindings[ks];
 		action.bindingIndex = ++bindingsCount;
 		al.push_back(action);
-	} else {
-		ActionList& al = it->second;
+	}
+	else
+	{
+		ActionList &al = it->second;
 		assert(it->first == ks);
 
-		auto it = std::find_if(al.begin(), al.end(), [&action](Action a) {
-			return action.line == a.line;
-		});
+		auto it = std::find_if(al.begin(), al.end(), [&action](Action a)
+							   { return action.line == a.line; });
 
 		// check if the command is already bound to the given keyset
-		if (it == std::end(al)) {
+		if (it == std::end(al))
+		{
 			// not yet bound, push it
 			action.bindingIndex = ++bindingsCount;
 			al.push_back(action);
@@ -628,8 +644,7 @@ void CKeyBindings::AddActionToKeyMap(KeyMap& bindings, Action& action)
 	}
 }
 
-
-bool CKeyBindings::Bind(const std::string& keystr, const std::string& line)
+bool CKeyBindings::Bind(const std::string &keystr, const std::string &line)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	if (debugEnabled)
@@ -637,33 +652,35 @@ bool CKeyBindings::Bind(const std::string& keystr, const std::string& line)
 
 	Action action(line);
 	action.boundWith = keystr;
-	if (action.command.empty()) {
+	if (action.command.empty())
+	{
 		LOG_L(L_WARNING, "Bind: empty action: %s", line.c_str());
 		return false;
 	}
 
-	if (!ParseKeyChain(keystr, &action.keyChain) || action.keyChain.empty()) {
+	if (!ParseKeyChain(keystr, &action.keyChain) || action.keyChain.empty())
+	{
 		LOG_L(L_WARNING, "Bind: could not parse key: %s", keystr.c_str());
 		return false;
 	}
-	CKeySet& ks = action.keyChain.back();
+	CKeySet &ks = action.keyChain.back();
 
 	// Try to be safe, force AnyMod mode for stateful commands
 	if (statefulCommands.find(action.command) != statefulCommands.end())
 		ks.SetAnyBit();
 
-	KeyMap& bindings = ks.IsKeyCode() ? codeBindings : scanBindings;
+	KeyMap &bindings = ks.IsKeyCode() ? codeBindings : scanBindings;
 	AddActionToKeyMap(bindings, action);
 
 	return true;
 }
 
-
-bool CKeyBindings::UnBind(const std::string& keystr, const std::string& command)
+bool CKeyBindings::UnBind(const std::string &keystr, const std::string &command)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	CKeySet ks;
-	if (!ks.Parse(keystr)) {
+	if (!ks.Parse(keystr))
+	{
 		LOG_L(L_WARNING, "UnBind: could not parse key: %s", keystr.c_str());
 		return false;
 	}
@@ -671,13 +688,13 @@ bool CKeyBindings::UnBind(const std::string& keystr, const std::string& command)
 	if (debugEnabled)
 		LOG("[CKeyBindings::%s] keystr=%s command=%s", __func__, keystr.c_str(), command.c_str());
 
-	KeyMap& bindings = ks.IsKeyCode() ? codeBindings : scanBindings;
+	KeyMap &bindings = ks.IsKeyCode() ? codeBindings : scanBindings;
 	const auto it = bindings.find(ks);
 
 	if (it == bindings.end())
 		return false;
 
-	ActionList& al = it->second;
+	ActionList &al = it->second;
 	const bool success = RemoveCommandFromList(al, command);
 
 	if (al.empty())
@@ -686,20 +703,20 @@ bool CKeyBindings::UnBind(const std::string& keystr, const std::string& command)
 	return success;
 }
 
-
-bool CKeyBindings::UnBindKeyset(const std::string& keystr)
+bool CKeyBindings::UnBindKeyset(const std::string &keystr)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	if (debugEnabled)
 		LOG("[CKeyBindings::%s] keystr=%s", __func__, keystr.c_str());
 
 	CKeySet ks;
-	if (!ks.Parse(keystr)) {
+	if (!ks.Parse(keystr))
+	{
 		LOG_L(L_WARNING, "UnBindKeyset: could not parse key: %s", keystr.c_str());
 		return false;
 	}
 
-	KeyMap& bindings = ks.IsKeyCode() ? codeBindings : scanBindings;
+	KeyMap &bindings = ks.IsKeyCode() ? codeBindings : scanBindings;
 
 	const auto it = bindings.find(ks);
 
@@ -710,23 +727,26 @@ bool CKeyBindings::UnBindKeyset(const std::string& keystr)
 	return true;
 }
 
-
-bool CKeyBindings::RemoveActionFromKeyMap(const std::string& command, KeyMap& bindings)
+bool CKeyBindings::RemoveActionFromKeyMap(const std::string &command, KeyMap &bindings)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	bool success = false;
 
 	auto it = bindings.begin();
 
-	while (it != bindings.end()) {
-		ActionList& al = it->second;
+	while (it != bindings.end())
+	{
+		ActionList &al = it->second;
 
 		if (RemoveCommandFromList(al, command))
 			success = true;
 
-		if (al.empty()) {
+		if (al.empty())
+		{
 			it = bindings.erase(it);
-		} else {
+		}
+		else
+		{
 			++it;
 		}
 	}
@@ -734,8 +754,7 @@ bool CKeyBindings::RemoveActionFromKeyMap(const std::string& command, KeyMap& bi
 	return success;
 }
 
-
-bool CKeyBindings::UnBindAction(const std::string& command)
+bool CKeyBindings::UnBindAction(const std::string &command)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	if (debugEnabled)
@@ -743,20 +762,22 @@ bool CKeyBindings::UnBindAction(const std::string& command)
 	return RemoveActionFromKeyMap(command, codeBindings) || RemoveActionFromKeyMap(command, scanBindings);
 }
 
-
-bool CKeyBindings::SetFakeMetaKey(const std::string& keystr)
+bool CKeyBindings::SetFakeMetaKey(const std::string &keystr)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	CKeySet ks;
-	if (StringToLower(keystr) == "none") {
+	if (StringToLower(keystr) == "none")
+	{
 		fakeMetaKey = -1;
 		return true;
 	}
-	if (!ks.Parse(keystr)) {
+	if (!ks.Parse(keystr))
+	{
 		LOG_L(L_WARNING, "SetFakeMetaKey: could not parse key: %s", keystr.c_str());
 		return false;
 	}
-	if (!ks.IsKeyCode()) {
+	if (!ks.IsKeyCode())
+	{
 		LOG_L(L_WARNING, "SetFakeMetaKey: can't assign to scancode: %s", keystr.c_str());
 		return false;
 	}
@@ -764,35 +785,39 @@ bool CKeyBindings::SetFakeMetaKey(const std::string& keystr)
 	return true;
 }
 
-
-bool CKeyBindings::AddKeySymbol(const std::string& keysym, const std::string& code)
+bool CKeyBindings::AddKeySymbol(const std::string &keysym, const std::string &code)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	CKeySet ks;
-	if (!ks.Parse(code)) {
+	if (!ks.Parse(code))
+	{
 		LOG_L(L_WARNING, "AddKeySymbol: could not parse key: %s", code.c_str());
 		return false;
 	}
-	if (!(ks.GetKeys()->AddKeySymbol(keysym, ks.Key()))) {
+	if (!(ks.GetKeys()->AddKeySymbol(keysym, ks.Key())))
+	{
 		LOG_L(L_WARNING, "AddKeySymbol: could not add: %s", keysym.c_str());
 		return false;
 	}
 	return true;
 }
 
-
-bool CKeyBindings::RemoveCommandFromList(ActionList& al, const std::string& command)
+bool CKeyBindings::RemoveCommandFromList(ActionList &al, const std::string &command)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	bool success = false;
 
 	auto it = al.begin();
 
-	while (it != al.end()) {
-		if (it->command == command) {
+	while (it != al.end())
+	{
+		if (it->command == command)
+		{
 			it = al.erase(it);
 			success = true;
-		} else {
+		}
+		else
+		{
 			++it;
 		}
 	}
@@ -800,13 +825,11 @@ bool CKeyBindings::RemoveCommandFromList(ActionList& al, const std::string& comm
 	return success;
 }
 
-
-void CKeyBindings::ConfigNotify(const std::string& key, const std::string& value)
+void CKeyBindings::ConfigNotify(const std::string &key, const std::string &value)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	keyChainTimeout = configHandler->GetInt("KeyChainTimeout");
 }
-
 
 void CKeyBindings::LoadDefaults()
 {
@@ -819,46 +842,54 @@ void CKeyBindings::LoadDefaults()
 
 	SetFakeMetaKey("space");
 
-	for (const auto& b: defaultBindings) {
+	for (const auto &b : defaultBindings)
+	{
 		Bind(b.key, b.action);
 	}
 
 	buildHotkeyMap = tmpBuildHotkeyMap;
 }
 
-
 /******************************************************************************/
 
-void CKeyBindings::PushAction(const Action& action)
+void CKeyBindings::PushAction(const Action &action)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	if (action.command == "keysave") {
+	if (action.command == "keysave")
+	{
 		static const std::string defaultOutFilename = "uikeys.tmp"; // tmp, not txt
 
 		const std::vector<std::string> args = CSimpleParser::Tokenize(action.extra, 2);
-		const std::string& filename = args.empty() ? defaultOutFilename : args[0];
+		const std::string &filename = args.empty() ? defaultOutFilename : args[0];
 
-		if (Save(filename)) {
+		if (Save(filename))
+		{
 			LOG("Saved active keybindings at %s", filename.c_str());
-		} else {
+		}
+		else
+		{
 			LOG_L(L_WARNING, "Could not save %s", filename.c_str());
 		}
 	}
-	else if (action.command == "keyprint") {
+	else if (action.command == "keyprint")
+	{
 		Print();
 	}
-	else if (action.command == "keysyms") {
-		keyCodes.PrintNameToCode(); //TODO move to CKeyCodes?
+	else if (action.command == "keysyms")
+	{
+		keyCodes.PrintNameToCode(); // TODO move to CKeyCodes?
 	}
-	else if (action.command == "keycodes") {
-		keyCodes.PrintCodeToName(); //TODO move to CKeyCodes?
+	else if (action.command == "keycodes")
+	{
+		keyCodes.PrintCodeToName(); // TODO move to CKeyCodes?
 	}
-	else {
+	else
+	{
 		ExecuteCommand(action.rawline);
 	}
 }
 
-bool CKeyBindings::ExecuteCommand(const std::string& line)
+bool CKeyBindings::ExecuteCommand(const std::string &line)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	const std::vector<std::string> words = CSimpleParser::Tokenize(line, 2);
@@ -868,17 +899,22 @@ bool CKeyBindings::ExecuteCommand(const std::string& line)
 
 	const std::string command = StringToLower(words[0]);
 
-	if (command == "keydebug") {
-		if (words.size() == 1) {
+	if (command == "keydebug")
+	{
+		if (words.size() == 1)
+		{
 			// toggle
 			debugEnabled = !debugEnabled;
-		} else if (words.size() >= 2) {
+		}
+		else if (words.size() >= 2)
+		{
 			// set
 			debugEnabled = atoi(words[1].c_str());
 		}
 	}
-	else if (command == "keyload") {
-		const std::string& filename = words.size() > 1 ? words[1] : DEFAULT_FILENAME;
+	else if (command == "keyload")
+	{
+		const std::string &filename = words.size() > 1 ? words[1] : DEFAULT_FILENAME;
 
 		if (debugEnabled)
 			LOG("[CKeyBindings::%s] line=%s", __func__, line.c_str());
@@ -889,8 +925,9 @@ bool CKeyBindings::ExecuteCommand(const std::string& line)
 
 		Load(filename);
 	}
-	else if (command == "keyreload") {
-		const std::string& filename = words.size() > 1 ? words[1] : DEFAULT_FILENAME;
+	else if (command == "keyreload")
+	{
+		const std::string &filename = words.size() > 1 ? words[1] : DEFAULT_FILENAME;
 
 		if (debugEnabled)
 			LOG("[CKeyBindings::%s] line=%s", __func__, line.c_str());
@@ -903,28 +940,54 @@ bool CKeyBindings::ExecuteCommand(const std::string& line)
 
 		Load(filename);
 	}
-	else if (command == "keydefaults") {
+	else if (command == "keydefaults")
+	{
 		LoadDefaults();
 	}
-	else if ((command == "fakemeta") && (words.size() > 1)) {
-		if (!SetFakeMetaKey(words[1])) { return false; }
+	else if ((command == "fakemeta") && (words.size() > 1))
+	{
+		if (!SetFakeMetaKey(words[1]))
+		{
+			return false;
+		}
 	}
-	else if ((command == "keysym") && (words.size() > 2)) {
-		if (!AddKeySymbol(words[1], words[2])) { return false; }
+	else if ((command == "keysym") && (words.size() > 2))
+	{
+		if (!AddKeySymbol(words[1], words[2]))
+		{
+			return false;
+		}
 	}
-	else if ((command == "bind") && (words.size() > 2)) {
-		if (!Bind(words[1], words[2])) { return false; }
+	else if ((command == "bind") && (words.size() > 2))
+	{
+		if (!Bind(words[1], words[2]))
+		{
+			return false;
+		}
 	}
-	else if ((command == "unbind") && (words.size() > 2)) {
-		if (!UnBind(words[1], words[2])) { return false; }
+	else if ((command == "unbind") && (words.size() > 2))
+	{
+		if (!UnBind(words[1], words[2]))
+		{
+			return false;
+		}
 	}
-	else if ((command == "unbindaction") && (words.size() > 1)) {
-		if (!UnBindAction(words[1])) { return false; }
+	else if ((command == "unbindaction") && (words.size() > 1))
+	{
+		if (!UnBindAction(words[1]))
+		{
+			return false;
+		}
 	}
-	else if ((command == "unbindkeyset") && (words.size() > 1)) {
-		if (!UnBindKeyset(words[1])) { return false; }
+	else if ((command == "unbindkeyset") && (words.size() > 1))
+	{
+		if (!UnBindKeyset(words[1]))
+		{
+			return false;
+		}
 	}
-	else if (command == "unbindall") {
+	else if (command == "unbindall")
+	{
 		codeBindings.clear();
 		scanBindings.clear();
 		keyCodes.Reset();
@@ -935,7 +998,8 @@ bool CKeyBindings::ExecuteCommand(const std::string& line)
 		if (debugEnabled)
 			LOG("[CKeyBindings::%s] line=%s", __func__, line.c_str());
 	}
-	else {
+	else
+	{
 		return false;
 	}
 
@@ -945,11 +1009,11 @@ bool CKeyBindings::ExecuteCommand(const std::string& line)
 	return false;
 }
 
-
-bool CKeyBindings::Load(const std::string& filename)
+bool CKeyBindings::Load(const std::string &filename)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	if (std::find(loadStack.begin(), loadStack.end(), filename) != loadStack.end()) {
+	if (std::find(loadStack.begin(), loadStack.end(), filename) != loadStack.end())
+	{
 		LOG_L(L_WARNING, "[CKeyBindings::%s] Cyclic keys file inclusion: %s, load stack:", __func__, filename.c_str());
 		LOG_L(L_WARNING, " !-> %s", filename.c_str());
 		for (auto it = loadStack.rbegin(); it != loadStack.rend(); ++it)
@@ -961,7 +1025,8 @@ bool CKeyBindings::Load(const std::string& filename)
 	const bool tmpBuildHotkeyMap = buildHotkeyMap;
 	buildHotkeyMap = false;
 
-	if (debugEnabled) {
+	if (debugEnabled)
+	{
 		LOG("[CKeyBindings::%s] filename=%s%s", __func__, filename.c_str(), loadStack.empty() ? "" : ", load stack:");
 		for (auto it = loadStack.rbegin(); it != loadStack.rend(); ++it)
 			LOG("  -> %s", (*it).c_str());
@@ -972,7 +1037,8 @@ bool CKeyBindings::Load(const std::string& filename)
 	CFileHandler ifs(filename);
 	CSimpleParser parser(ifs);
 
-	while (!parser.Eof()) {
+	while (!parser.Eof())
+	{
 		ExecuteCommand(parser.GetCleanLine());
 	}
 
@@ -983,7 +1049,6 @@ bool CKeyBindings::Load(const std::string& filename)
 	return true;
 }
 
-
 void CKeyBindings::BuildHotkeyMap()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
@@ -993,12 +1058,12 @@ void CKeyBindings::BuildHotkeyMap()
 	// create reverse map of bindings ([action] -> key shortcuts)
 	hotkeys.clear();
 
-	for (const auto& action: GetActionList()) {
-		HotkeyList& hl = hotkeys[action.command + (action.extra.empty() ? "" : " " + action.extra)];
+	for (const auto &action : GetActionList())
+	{
+		HotkeyList &hl = hotkeys[action.command + (action.extra.empty() ? "" : " " + action.extra)];
 		hl.push_back(action.boundWith);
 	}
 }
-
 
 /******************************************************************************/
 
@@ -1008,11 +1073,10 @@ void CKeyBindings::Print() const
 	FileSave(stdout);
 }
 
-
-bool CKeyBindings::Save(const std::string& filename) const
+bool CKeyBindings::Save(const std::string &filename) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	FILE* out = nowide::fopen(filename.c_str(), "wt");
+	FILE *out = nowide::fopen(filename.c_str(), "wt");
 	if (out == nullptr)
 		return false;
 
@@ -1021,8 +1085,7 @@ bool CKeyBindings::Save(const std::string& filename) const
 	return success;
 }
 
-
-bool CKeyBindings::FileSave(FILE* out) const
+bool CKeyBindings::FileSave(FILE *out) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	if (out == nullptr)
@@ -1042,26 +1105,30 @@ bool CKeyBindings::FileSave(FILE* out) const
 	if (fakeMetaKey >= 0)
 		fprintf(out, "fakemeta  %s\n\n", keyCodes.GetName(fakeMetaKey).c_str());
 
-	for (const Action& action: GetActionList()) {
+	for (const Action &action : GetActionList())
+	{
 		std::string comment;
 
-		if (unitDefHandler && (action.command.find("buildunit_") == 0)) {
+		if (unitDefHandler && (action.command.find("buildunit_") == 0))
+		{
 			const std::string unitName = action.command.substr(10);
-			const UnitDef* unitDef = unitDefHandler->GetUnitDefByName(unitName);
+			const UnitDef *unitDef = unitDefHandler->GetUnitDefByName(unitName);
 
 			if (unitDef != nullptr)
 				comment = "  // " + unitDef->humanName + " - " + unitDef->tooltip;
 		}
 
-		if (comment.empty()) {
+		if (comment.empty())
+		{
 			fprintf(out, "bind %18s  %s\n", action.boundWith.c_str(), action.rawline.c_str());
-		} else {
+		}
+		else
+		{
 			fprintf(out, "bind %18s  %-20s%s\n", action.boundWith.c_str(), action.rawline.c_str(), comment.c_str());
 		}
 	}
 
 	return true;
 }
-
 
 /******************************************************************************/

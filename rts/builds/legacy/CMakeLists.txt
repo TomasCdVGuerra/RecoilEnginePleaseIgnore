@@ -31,7 +31,7 @@ find_package(SDL2 MODULE REQUIRED)
 set(engineLibraries SDL2::SDL2)
 
 if (APPLE)
-	list(APPEND engineLibraries ${ENGINE_GRAPHICS_LIBS})
+	#list(APPEND engineLibraries ${ENGINE_GRAPHICS_LIBS})
 else()
 	set(OpenGL_GL_PREFERENCE LEGACY)
 	find_package_static(OpenGL 3.0 REQUIRED)
@@ -60,8 +60,8 @@ if    (UNIX)
 endif (UNIX)
 
 if (APPLE)
-	find_library(COREFOUNDATION_LIBRARY Foundation)
-	list(APPEND engineLibraries ${COREFOUNDATION_LIBRARY})
+    # find_library(COREFOUNDATION_LIBRARY Foundation)
+    # list(APPEND engineLibraries ${COREFOUNDATION_LIBRARY})
 endif (APPLE)
 
 list(APPEND engineLibraries squish rgetc1)
@@ -86,7 +86,24 @@ include_directories(${engineIncludes})
 
 ### Build the executable
 add_executable(engine-legacy ${EXE_FLAGS} ${engineSources} ${ENGINE_ICON} ${engineHeaders})
+
+set_target_properties(engine-legacy PROPERTIES LINK_FLAGS "-Wl,-undefined,dynamic_lookup")
+
 target_link_libraries(engine-legacy ${engineLibraries} Game)
+
+if(APPLE)
+    target_link_options(engine-legacy PRIVATE 
+        "LINKER:-framework,AppKit"
+        "LINKER:-framework,CoreFoundation"
+        "LINKER:-framework,Foundation"
+        "LINKER:-framework,Metal"
+        "LINKER:-framework,MetalKit"
+        "LINKER:-framework,QuartzCore"
+        "LINKER:-framework,OpenGL"
+        "LINKER:-framework,Cocoa"
+        "LINKER:-framework,IOKit"
+    )
+endif()
 
 # Export symbols for plugin access (replaces CMP0065 OLD behavior)
 set_target_properties(engine-legacy PROPERTIES ENABLE_EXPORTS TRUE)

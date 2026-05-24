@@ -37,8 +37,8 @@ find_path(LIBUNWIND_PKGCONFIG_DIR libunwind.pc
 
 if (APPLE AND LIBUNWIND_INCLUDE_DIR)
   # FIXME: OS X 10.10 doesn't have static libunwind.a only dynamic libunwind.dylib;
-  #        link with "-framework Cocoa"
-  set(LIBUNWIND_LIBRARY "-framework Cocoa")
+  #        link with "-framework" "Cocoa"
+  set(LIBUNWIND_LIBRARY "-framework" "Cocoa")
 else ()
   find_library(LIBUNWIND_LIBRARY NAMES unwind ${LIB_STD_ARGS})
 endif ()
@@ -48,14 +48,27 @@ if (LIBUNWIND_INCLUDE_DIR AND LIBUNWIND_LIBRARY)
   set(LIBUNWIND_DEFINITIONS "LIBUNWIND")
   set(LIBUNWIND_INCLUDE_DIRS ${LIBUNWIND_INCLUDE_DIR})
   set(LIBUNWIND_LIBRARIES ${LIBUNWIND_LIBRARY})
-  
+
   if (NOT TARGET libunwind::libunwind)
-    add_library(libunwind::libunwind UNKNOWN IMPORTED)
+    list(LENGTH LIBUNWIND_LIBRARY LIBUNWIND_LIBRARY_LENGTH)
+    list(GET LIBUNWIND_LIBRARY 0 LIBUNWIND_LIBRARY_FIRST)
+    if (LIBUNWIND_LIBRARY_LENGTH EQUAL 2 AND LIBUNWIND_LIBRARY_FIRST STREQUAL "-framework")
+      add_library(libunwind::libunwind INTERFACE IMPORTED)
+    else()
+      add_library(libunwind::libunwind UNKNOWN IMPORTED)
+    endif()
+
     set_target_properties(libunwind::libunwind PROPERTIES
                           INTERFACE_COMPILE_DEFINITIONS ${LIBUNWIND_DEFINITIONS}
                           INTERFACE_INCLUDE_DIRECTORIES ${LIBUNWIND_INCLUDE_DIR}
-                          IMPORTED_LOCATION ${LIBUNWIND_LIBRARY}
     )
+    # If the library was specified as a raw framework flag (e.g. "-framework Cocoa"),
+    # attach it as a link option so generators don't treat it as a file dependency.
+    if (LIBUNWIND_LIBRARY_LENGTH EQUAL 2 AND LIBUNWIND_LIBRARY_FIRST STREQUAL "-framework")
+      target_link_options(libunwind::libunwind INTERFACE ${LIBUNWIND_LIBRARY})
+    else()
+      set_target_properties(libunwind::libunwind PROPERTIES IMPORTED_LOCATION ${LIBUNWIND_LIBRARY})
+    endif()
   endif()
 endif()
 
