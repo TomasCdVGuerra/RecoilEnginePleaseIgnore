@@ -86,22 +86,18 @@ include_directories(${engineIncludes})
 
 ### Build the executable
 add_executable(engine-legacy ${EXE_FLAGS} ${engineSources} ${ENGINE_ICON} ${engineHeaders})
+if(APPLE)
+    # Force the compiler to build our new Mac file directly into the engine
+    target_sources(engine-legacy PRIVATE "${ENGINE_SRC_ROOT_DIR}/System/Platform/Mac/MacTopology.cpp")
+endif()
 
-set_target_properties(engine-legacy PROPERTIES LINK_FLAGS "-Wl,-undefined,dynamic_lookup")
+#set_target_properties(engine-legacy PROPERTIES LINK_FLAGS "-Wl,-undefined,dynamic_lookup")
 
-target_link_libraries(engine-legacy ${engineLibraries} Game)
+target_link_libraries(engine-legacy ${engineLibraries} Game MGL)
 
 if(APPLE)
     target_link_options(engine-legacy PRIVATE 
         "LINKER:-framework,AppKit"
-        "LINKER:-framework,CoreFoundation"
-        "LINKER:-framework,Foundation"
-        "LINKER:-framework,Metal"
-        "LINKER:-framework,MetalKit"
-        "LINKER:-framework,QuartzCore"
-        "LINKER:-framework,OpenGL"
-        "LINKER:-framework,Cocoa"
-        "LINKER:-framework,IOKit"
     )
 endif()
 

@@ -183,6 +183,7 @@ if(CMAKE_VERSION VERSION_GREATER 3.1.2)
 			${sources_engine_System_Threading_Windows}
 			${sources_engine_System_Threading_Linux}
 			${sources_engine_System_Threading_Mac}
+			Platform/Mac/MacTopology.cpp
 		)
 endif()
 
