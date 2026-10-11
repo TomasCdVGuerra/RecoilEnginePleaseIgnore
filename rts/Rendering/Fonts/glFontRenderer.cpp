@@ -10,34 +10,6 @@
 
 #include "System/Misc/TracyDefs.h"
 
-namespace
-{
-	void UploadCoreMvpMatrix(Shader::IProgramObject *program)
-	{
-		GLfloat modelView[16] = {0.0f};
-		GLfloat projection[16] = {0.0f};
-		GLfloat mvp[16] = {0.0f};
-
-		glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
-		glGetFloatv(GL_PROJECTION_MATRIX, projection);
-
-		// mvp = projection * modelView (column-major)
-		for (int row = 0; row < 4; ++row)
-		{
-			for (int col = 0; col < 4; ++col)
-			{
-				float sum = 0.0f;
-				for (int k = 0; k < 4; ++k)
-				{
-					sum += projection[row + k * 4] * modelView[k + col * 4];
-				}
-				mvp[row + col * 4] = sum;
-			}
-		}
-
-		program->SetUniformMatrix4x4("u_mvpMatrix", false, mvp);
-	}
-}
 
 ////////////////////////////////////////
 // can't be put in VFS due to initialization order
@@ -312,13 +284,13 @@ void CglShaderFontRenderer::PushGLState(const CglFont &fnt)
 	{
 		fontShaderColor->Enable();
 		if (PlatformShaderProfile::RequiresCoreShaderHeader())
-			UploadCoreMvpMatrix(fontShaderColor.get());
+			PlatformShaderProfile::UploadCoreMvpMatrix(fontShaderColor.get());
 	}
 	else
 	{
 		fontShader->Enable();
 		if (PlatformShaderProfile::RequiresCoreShaderHeader())
-			UploadCoreMvpMatrix(fontShader.get());
+			PlatformShaderProfile::UploadCoreMvpMatrix(fontShader.get());
 	}
 }
 

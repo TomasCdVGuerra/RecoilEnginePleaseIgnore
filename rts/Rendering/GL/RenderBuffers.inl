@@ -1,4 +1,4 @@
-static constexpr const char* vsRenderBufferSrc = R"(
+static constexpr const char* vsRenderBufferSrcCompat = R"(
 // Version and extensions
 %s
 
@@ -15,6 +15,27 @@ void main() {
 	gl_Position = gl_ModelViewProjectionMatrix * %s;
 }
 )";
+
+static constexpr const char* vsRenderBufferSrcCore = R"(
+// Version and extensions
+%s
+
+// VS input attributes
+%s
+
+// INJECTED FOR MGL CORE EMULATION
+uniform mat4 u_mvpMatrix;
+
+// VS output attributes
+%s
+
+void main() {
+%s
+	gl_Position = u_mvpMatrix * %s;
+}
+)";
+
+static constexpr const char* vsRenderBufferSrc = vsRenderBufferSrcCompat;
 
 static constexpr const char* fsRenderBufferSrc = R"(
 // Version and extensions

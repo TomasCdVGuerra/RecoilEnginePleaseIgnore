@@ -38,6 +38,35 @@ namespace PlatformShaderProfile
 		return false;
 #endif
 	}
+
+	inline void UploadCoreMvpMatrix(Shader::IProgramObject *program)
+	{
+		if (program == nullptr)
+			return;
+
+		GLfloat modelView[16] = {0.0f};
+		GLfloat projection[16] = {0.0f};
+		GLfloat mvp[16] = {0.0f};
+
+		glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
+		glGetFloatv(GL_PROJECTION_MATRIX, projection);
+
+		// mvp = projection * modelView (column-major)
+		for (int row = 0; row < 4; ++row)
+		{
+			for (int col = 0; col < 4; ++col)
+			{
+				float sum = 0.0f;
+				for (int k = 0; k < 4; ++k)
+				{
+					sum += projection[row + k * 4] * modelView[k + col * 4];
+				}
+				mvp[row + col * 4] = sum;
+			}
+		}
+
+		program->SetUniformMatrix4x4("u_mvpMatrix", false, mvp);
+	}
 }
 
 class RenderBuffer
@@ -134,7 +163,8 @@ public:
 		assert(shader);
 #endif
 
-		std::string vertSrc = std::string(vsRenderBufferSrc);
+		const bool coreHeader = PlatformShaderProfile::RequiresCoreShaderHeader();
+		std::string vertSrc = std::string(coreHeader ? vsRenderBufferSrcCore : vsRenderBufferSrcCompat);
 		std::string fragSrc = std::string(fsRenderBufferSrc);
 
 		std::string vsInputs;
@@ -179,6 +209,10 @@ public:
 		shader->Link();
 
 		shader->Enable();
+		if (coreHeader)
+		{
+			PlatformShaderProfile::UploadCoreMvpMatrix(shader);
+		}
 		shader->Disable();
 
 		shader->Validate();
@@ -943,6 +977,11 @@ inline void TypedRenderBuffer<T>::DrawArrays(uint32_t mode, bool rewind)
 	assert((indcs.size() - eboStartIndex) == 0); // otherwise DrawArrays is an invalid submission type
 	AssertBoundShader();
 
+	if (PlatformShaderProfile::RequiresCoreShaderHeader())
+	{
+		PlatformShaderProfile::UploadCoreMvpMatrix(shaderHandler->GetCurrentlyBoundProgram());
+	}
+
 	UploadVBO();
 
 	size_t vertsCount = (verts.size() - vboStartIndex);
@@ -965,6 +1004,11 @@ template <typename T>
 inline void TypedRenderBuffer<T>::DrawElements(uint32_t mode, bool rewind)
 {
 	AssertBoundShader();
+
+	if (PlatformShaderProfile::RequiresCoreShaderHeader())
+	{
+		PlatformShaderProfile::UploadCoreMvpMatrix(shaderHandler->GetCurrentlyBoundProgram());
+	}
 
 	UploadVBO();
 	UploadEBO();

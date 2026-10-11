@@ -4,7 +4,12 @@
 
 #include <cstdlib>
 #include <cmath>
+#if defined(__APPLE__)
+#include <al.h>
+#include <alc.h>
+#else
 #include <alext.h>
+#endif
 
 #ifdef ALC_SOFT_loopback
 #include <SDL.h>
@@ -486,8 +491,6 @@ static const char* TypeName(ALCenum type)
 	return "Unknown Type";
 }
 
-#endif
-
 bool CSound::OpenSdlDevice(const std::string& deviceName, SDL_AudioSpec& obtainedSpec)
 {
 	if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
@@ -562,6 +565,15 @@ bool CSound::OpenSdlDevice(const std::string& deviceName, SDL_AudioSpec& obtaine
 
 	return true;
 }
+
+#else
+
+bool CSound::OpenSdlDevice(const std::string& /*deviceName*/, SDL_AudioSpec& /*obtainedSpec*/)
+{
+	return false;
+}
+
+#endif
 
 void CSound::OpenLoopbackDevice(const std::string& deviceName)
 {
