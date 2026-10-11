@@ -694,7 +694,15 @@ public:
 	void AssertBoundShader() const;
 	void DrawArrays(uint32_t mode, bool rewind = true);
 	void DrawElements(uint32_t mode, bool rewind = true);
+	void DrawElementsRange(uint32_t mode, size_t eboRangeStart, size_t eboRangeCount);
 	void DropCurrent();
+
+	// the index range the next DrawElements() call would submit; capture before
+	// submitting to later re-draw the same geometry via DrawElementsRange()
+	// (valid until the next SwapBuffer(), i.e. within the current draw frame)
+	std::pair<size_t, size_t> GetPendingElemsRange() const {
+		return { eboStartIndex, indcs.size() - eboStartIndex };
+	}
 
 	TypedRenderBuffer<T> CopyCurrent(bool readOnly) const;
 
@@ -1040,7 +1048,31 @@ inline void TypedRenderBuffer<T>::DrawElements(uint32_t mode, bool rewind)
 	numSubmits[1] += 1;
 }
 
-template <typename T>
+// re-draws an already uploaded and submitted index range of the current frame,
+// without touching the consume/rewind bookkeeping. The range must come from
+// GetPendingElemsRange() captured earlier in the same draw frame.
+template<typename T>
+inline void TypedRenderBuffer<T>::DrawElementsRange(uint32_t mode, size_t eboRangeStart, size_t eboRangeCount)
+{
+	AssertBoundShader();
+
+	if (eboRangeCount == 0)
+		return;
+
+	assert(eboRangeStart + eboRangeCount <= indcs.size());
+	assert(eboRangeStart + eboRangeCount <= eboUploadIndex);
+#ifndef HEADLESS
+	assert(vao.GetIdRaw() > 0);
+#endif
+	PlatformShaderProfile::UploadCoreMvpMatrix(shader);
+	vao.Bind();
+	glDrawElements(mode, static_cast<GLsizei>(eboRangeCount), GL_UNSIGNED_INT, reinterpret_cast<void*>(sizeof(uint32_t) * (ebo->BufferElemOffset() + eboRangeStart)));
+	vao.Unbind();
+
+	numSubmits[1] += 1;
+}
+
+template<typename T>
 inline void TypedRenderBuffer<T>::DropCurrent()
 {
 	if (readOnly)

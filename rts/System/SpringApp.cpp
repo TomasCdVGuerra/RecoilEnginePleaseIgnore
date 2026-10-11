@@ -13,7 +13,9 @@
 #undef KeyRelease
 #else
 #include <unistd.h> // isatty
+#ifndef __APPLE__
 #include <X11/Xlib.h> // XInitThreads
+#endif
 
 #undef KeyPress
 #undef KeyRelease
@@ -41,6 +43,7 @@
 #include "Game/UI/InfoConsole.h"
 #include "Game/UI/MouseHandler.h"
 #include "Lua/LuaOpenGL.h"
+#include "Lua/LuaDebugExtra.h"
 #include "Lua/LuaVFSDownload.h"
 #include "Menu/LuaMenuController.h"
 #include "Menu/SelectMenu.h"
@@ -97,6 +100,7 @@
 #include "System/Sound/ISound.h"
 #include "System/Sync/FPUCheck.h"
 #include "System/Threading/ThreadPool.h"
+#include "System/LoadSave/DemoFileExtension.h"
 
 #include "Game/UnsyncedGameCommands.h"
 #include "Game/SyncedGameCommands.h"
@@ -683,6 +687,14 @@ void SpringApp::LoadSpringMenu()
 	}
 }
 
+static bool IsReplay(const std::string& path)
+{
+	if (IsDemoExtension(FileSystem::GetExtensionLowerCase(path)))
+		return true;
+
+	return ContentsLookLikeAReplay(path);
+}
+
 /**
  * Initializes instance of GameSetup
  */
@@ -729,7 +741,7 @@ void SpringApp::Startup()
 		pregame = new CPreGame(clientSetup);
 		return;
 	}
-	if (extension == "sdfz") {
+	if (IsReplay(inputFile)) {
 		LoadDemoFile(inputFile);
 		return;
 	}
@@ -1060,6 +1072,26 @@ void SpringApp::Kill(bool fromRun)
 }
 
 
+// close button, Alt+F4, SDL_QUIT; quitforce and Spring.Quit set globalQuit directly and skip this
+static void RequestQuit()
+{
+	if (gu->globalQuit)
+		return;
+
+	// don't call into Lua while loading, events are pumped from the load thread and handles are still registering
+	if (game != nullptr && !game->IsDoneLoading()) {
+		gu->globalQuit = true;
+		return;
+	}
+
+	if (!eventHandler.AllowQuit()) {
+		LOG("[SpringApp::%s] quit vetoed by Lua (AllowQuit), use /quitforce to override", __func__);
+		return;
+	}
+
+	gu->globalQuit = true;
+}
+
 bool SpringApp::MainEventHandler(const SDL_Event& event)
 {
 	switch (event.type) {
@@ -1176,6 +1208,10 @@ bool SpringApp::MainEventHandler(const SDL_Event& event)
 					//FIXME check if still happens with SDL2 (2013)
 					SDL_SetModState((SDL_Keymod)(SDL_GetModState() & (KMOD_NUM | KMOD_CAPS | KMOD_MODE)));
 
+					// drop emulated input first: it fires its own releases directly,
+					// since the pushed SDL releases below get eaten by the emulation gate
+					LuaDebugExtra::ClearEmulatedInput();
+
 					// release all keyboard keys
 					KeyInput::ReleaseAllKeys();
 
@@ -1211,20 +1247,20 @@ bool SpringApp::MainEventHandler(const SDL_Event& event)
 				} break;
 
 				case SDL_WINDOWEVENT_CLOSE: {
-					gu->globalQuit = true;
+					RequestQuit();
 				} break;
 			};
 		} break;
 		case SDL_AUDIODEVICEREMOVED: {
 			LOG("[SpringApp::%s][SDL_AUDIODEVICEREMOVED][1] type=%u, which=%u, iscapture=%u", __func__, event.adevice.type, event.adevice.which, static_cast<uint32_t>(event.adevice.iscapture));
-			sound->DeviceChanged(event.adevice.which);
+			sound->DeviceChanged(event.adevice.which, false);
 		} break;
 		case SDL_AUDIODEVICEADDED: {
 			LOG("[SpringApp::%s][SDL_AUDIODEVICEADDED][1] type=%u, which=%u, iscapture=%u", __func__, event.adevice.type, event.adevice.which, static_cast<uint32_t>(event.adevice.iscapture));
-			sound->DeviceChanged(event.adevice.which);
+			sound->DeviceChanged(event.adevice.which, true);
 		} break;
 		case SDL_QUIT: {
-			gu->globalQuit = true;
+			RequestQuit();
 		} break;
 		case SDL_TEXTEDITING: {
 			if (activeController != nullptr)
@@ -1242,7 +1278,12 @@ bool SpringApp::MainEventHandler(const SDL_Event& event)
 			if (activeController != nullptr) {
 				int keyCode = CKeyCodes::GetNormalizedSymbol(event.key.keysym.sym);
 				int scanCode = CScanCodes::GetNormalizedSymbol(event.key.keysym.scancode);
-				activeController->KeyPressed(keyCode, scanCode, event.key.repeat);
+
+				// if the key is already held via input emulation the effective
+				// state is already down, so the real press is not a new edge
+				// (the emulated store is keyed by raw SDL2 keycode, like keyVec)
+				if (!KeyInput::IsKeyEmulated(event.key.keysym.sym))
+					activeController->KeyPressed(keyCode, scanCode, event.key.repeat);
 			}
 
 		} break;
@@ -1253,7 +1294,10 @@ bool SpringApp::MainEventHandler(const SDL_Event& event)
 				gameTextInput.ignoreNextChar = false;
 				int keyCode = CKeyCodes::GetNormalizedSymbol(event.key.keysym.sym);
 				int scanCode = CScanCodes::GetNormalizedSymbol(event.key.keysym.scancode);
-				activeController->KeyReleased(keyCode, scanCode);
+
+				// emulation still holds it down, so the real release is not an edge
+				if (!KeyInput::IsKeyEmulated(event.key.keysym.sym))
+					activeController->KeyReleased(keyCode, scanCode);
 			}
 		} break;
 		case SDL_KEYMAPCHANGED: {

@@ -1,5 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 #include <array>
+#include <format>
 #include <functional>
 #include <tuple>
 
@@ -253,6 +254,22 @@ public:
 
 
 
+class CancelCommandActionExecutor : public IUnsyncedActionExecutor {
+public:
+	CancelCommandActionExecutor() : IUnsyncedActionExecutor("CancelCommand", "Cancels the active command (build/order mode)") {
+	}
+
+	bool Execute(const UnsyncedAction& action) const final {
+		if (guihandler == nullptr)
+			return false;
+
+		guihandler->CancelActiveCommand();
+		return true;
+	}
+};
+
+
+
 class MapMeshDrawerActionExecutor : public IUnsyncedActionExecutor {
 public:
 	MapMeshDrawerActionExecutor() : IUnsyncedActionExecutor("mapmeshdrawer", "Switch map-mesh rendering modes: 0=GCM, 1=HLOD, 2=ROAM") {
@@ -270,7 +287,7 @@ public:
 		}
 
 		auto args = CSimpleParser::Tokenize(action.GetArgs());
-		bool parseFailure;
+		bool parseFailure = false;
 
 		int smfMeshDrawerArg = (!args.empty()) ? StringToInt(args[0], &parseFailure) : -1.0;
 		if (parseFailure) smfMeshDrawerArg = -1.0;
@@ -4037,6 +4054,7 @@ void UnsyncedGameCommands::AddDefaultActionExecutors()
 	AddActionExecutor(AllocActionExecutor<SelectUnitsActionExecutor>());
 	AddActionExecutor(AllocActionExecutor<SelectCycleActionExecutor>());
 	AddActionExecutor(AllocActionExecutor<DeselectActionExecutor>());
+	AddActionExecutor(AllocActionExecutor<CancelCommandActionExecutor>());
 	AddActionExecutor(AllocActionExecutor<ShadowsActionExecutor>());
 	AddActionExecutor(AllocActionExecutor<DumpShadowsActionExecutor>());
 	AddActionExecutor(AllocActionExecutor<MapShadowPolyOffsetActionExecutor>());

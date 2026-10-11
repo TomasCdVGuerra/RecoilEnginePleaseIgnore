@@ -611,6 +611,9 @@ void CBuilderCAI::ExecuteBuildCmd(Command& c)
 
 		// <build> is never parsed (except in PostLoad) so just copy it
 		build = bi;
+		// snap to the position the build will actually use, so the early check
+		// below tests the same footprint the rest of this function does
+		build.pos = CGameHelper::Pos2BuildPos(build, true);
 		inCommand = c.GetID();
 
 		// One-time early check: if repeating the order (or first run), skip immediately if now blocked
@@ -891,13 +894,13 @@ void CBuilderCAI::ExecuteGuard(Command& c)
 				StopSlowGuard();
 			}
 			return;
-		} else if (b->curReclaim && owner->unitDef->canReclaim) {
+		} else if (b->curReclaim && !b->curReclaim->detached && owner->unitDef->canReclaim) {
 			StopSlowGuard();
 			if (!ReclaimObject(b->curReclaim)) {
 				StopMove();
 			}
 			return;
-		} else if (b->curResurrect && owner->unitDef->canResurrect) {
+		} else if (b->curResurrect && !b->curResurrect->detached && owner->unitDef->canResurrect) {
 			StopSlowGuard();
 			if (!ResurrectObject(b->curResurrect)) {
 				StopMove();

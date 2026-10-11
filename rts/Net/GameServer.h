@@ -162,6 +162,7 @@ private:
 	void ProcessPacket(const unsigned playerNum, std::shared_ptr<const netcode::RawPacket> packet);
 	void CheckSync();
 	void HandleConnectionAttempts();
+	bool ValidateAICommandTeam(uint8_t aiID, int cmdID, const netcode::RawPacket& packet, const GameParticipant& player);
 	void ServerReadNet();
 
 	void LagProtection();
@@ -202,6 +203,9 @@ private:
 	std::shared_ptr<const ClientSetup> myClientSetup;
 	std::shared_ptr<const    GameData> myGameData;
 	std::shared_ptr<const  CGameSetup> myGameSetup;
+
+	// nullptr if myGameData does not fit into one packet
+	std::shared_ptr<const netcode::RawPacket> myGameDataPacket;
 
 
 	std::vector< std::pair<bool, GameSkirmishAI> > skirmishAIs;

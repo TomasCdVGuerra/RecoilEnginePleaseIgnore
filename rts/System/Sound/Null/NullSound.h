@@ -35,14 +35,14 @@ public:
 	bool Mute() override { return true; }
 	bool IsMuted() const override { return true; }
 
-	void DeviceChanged(uint32_t sdlDeviceIndex) override {}
+	void DeviceChanged(uint32_t sdlDeviceIndex, bool added) override {}
 
 	void Iconified(bool state) override {}
 
 	void PrintDebugInfo() override;
 	bool SoundThreadQuit() const override { return false; }
 	bool CanLoadSoundDefs() const override { return true; }
-	bool LoadSoundDefsImpl(LuaParser* defsParser) { return false; }
+	bool LoadSoundDefsImpl(LuaParser* defsParser) override { return false; }
 
 	const float3& GetListenerPos() const override { return ZeroVector; }
 

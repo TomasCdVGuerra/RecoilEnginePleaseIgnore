@@ -75,6 +75,9 @@ public:
 
 	void AttachTextures(const GLuint* ids, const GLenum* attachments, const GLenum texTarget, const unsigned int texCount, const int mipLevel = 0, const int zSlice = 0) {
 		for (unsigned int i = 0; i < texCount; i++) {
+			if (ids[i] == 0)
+				continue;
+
 			AttachTexture(ids[i], texTarget, attachments[i], mipLevel, zSlice);
 		}
 	}
@@ -188,9 +191,9 @@ private:
 		}
 
 	public:
-		GLuint id;
-		GLsizei xsize, ysize, zsize;
-		GLenum target, format, type;
+		GLuint id = 0;
+		GLsizei xsize = 0, ysize = 0, zsize = 0;
+		GLenum target = 0, format = 0, type = 0;
 		std::vector<unsigned char> pixels;
 	};
 

@@ -51,7 +51,7 @@ CR_REG_METADATA(MoveDef, (
 
 	CR_MEMBER(followGround),
 	CR_MEMBER(isSubmarine),
-	CR_MEMBER(isSubmersible),
+	CR_MEMBER(hasUnderwaterCollision),
 
 	CR_MEMBER(overrideUnitWaterline),
 
@@ -336,11 +336,14 @@ MoveDef::MoveDef(const LuaTable& moveDefTable): MoveDef() {
 		waterline = std::abs(moveDefTable.GetInt("waterline", defaultWaterline));
 		overrideUnitWaterline = moveDefTable.GetBool("overrideUnitWaterline", overrideUnitWaterline);
 	} else {
-		waterline = std::numeric_limits<int>::max();
+		// we read as int from configuration but used as float...
+		// this should probably be changed to float everywhere
+		// github issue: https://github.com/beyond-all-reason/RecoilEngine/issues/2996
+		waterline = static_cast<float>(std::numeric_limits<int>::max());
 	}
 
 	height = std::max(1, moveDefTable.GetInt("height", defaultHeight));
-	isSubmersible = (isSubmarine || (followGround && depth > height));
+	hasUnderwaterCollision = (isSubmarine || (followGround && depth > height) || (waterline > 0 && maxWaterDepth > waterline));
 	allowDirectionalPathing = moveDefTable.GetBool("allowDirectionalPathing", allowDirectionalPathing);
 	preferShortestPath = moveDefTable.GetBool("preferShortestPath", preferShortestPath);
 }

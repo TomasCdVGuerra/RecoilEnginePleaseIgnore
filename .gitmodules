@@ -55,3 +55,7 @@
 [submodule "rts/lib/MGL"]
 	path = rts/lib/MGL
 	url = https://github.com/TomasCdVGuerra/MGLPleaseIgnore.git
+[submodule "rts/lib/monocypher"]
+	path = rts/lib/monocypher
+	url = https://github.com/LoupVaillant/Monocypher.git
+

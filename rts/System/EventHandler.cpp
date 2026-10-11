@@ -581,6 +581,12 @@ void CEventHandler::TeamDied(int teamID)
 	ITERATE_EVENTCLIENTLIST(TeamDied, teamID);
 }
 
+bool CEventHandler::ResourceExcess(const std::map <int, SResourcePack> &excess)
+{
+	ZoneScoped;
+	return ControlIterateDefFalse(listResourceExcess, &CEventClient::ResourceExcess, excess);
+}
+
 void CEventHandler::TeamChanged(int teamID)
 {
 	ZoneScoped;
@@ -648,6 +654,12 @@ void CEventHandler::Update()
 {
 	ZoneScoped;
 	ITERATE_EVENTCLIENTLIST_NA(Update);
+}
+
+void CEventHandler::NanoParticleUpdate(const std::vector<NanoParticles::Event>& events)
+{
+	ZoneScopedN("NanoParticles::LuaUpdate");
+	ITERATE_EVENTCLIENTLIST(NanoParticleUpdate, events);
 }
 
 
@@ -803,6 +815,18 @@ bool CEventHandler::CommandNotify(const Command& cmd)
 {
 	ZoneScoped;
 	return ControlReverseIterateDefTrue(listCommandNotify, &CEventClient::CommandNotify, cmd);
+}
+
+bool CEventHandler::AllowQuit()
+{
+	ZoneScoped;
+	return ControlIterateDefTrue(listAllowQuit, &CEventClient::AllowQuit);
+}
+
+void CEventHandler::KeyBindingsChanged()
+{
+	ZoneScoped;
+	ITERATE_EVENTCLIENTLIST_NA(KeyBindingsChanged);
 }
 
 bool CEventHandler::KeyMapChanged()
