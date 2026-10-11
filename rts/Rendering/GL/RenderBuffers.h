@@ -1064,7 +1064,10 @@ inline void TypedRenderBuffer<T>::DrawElementsRange(uint32_t mode, size_t eboRan
 #ifndef HEADLESS
 	assert(vao.GetIdRaw() > 0);
 #endif
-	PlatformShaderProfile::UploadCoreMvpMatrix(shader);
+	if (PlatformShaderProfile::RequiresCoreShaderHeader())
+	{
+		PlatformShaderProfile::UploadCoreMvpMatrix(shaderHandler->GetCurrentlyBoundProgram());
+	}
 	vao.Bind();
 	glDrawElements(mode, static_cast<GLsizei>(eboRangeCount), GL_UNSIGNED_INT, reinterpret_cast<void*>(sizeof(uint32_t) * (ebo->BufferElemOffset() + eboRangeStart)));
 	vao.Unbind();
