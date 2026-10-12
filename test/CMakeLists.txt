@@ -647,6 +647,26 @@ endif()
 	add_spring_test(${test_name} "${test_src}" "${test_libs}" "${test_flags}")
 
 ################################################################################
+### MouseInput
+	set(test_name MouseInput)
+	set(test_src
+			"${CMAKE_CURRENT_SOURCE_DIR}/engine/System/Input/TestMouseInput.cpp"
+			"${ENGINE_SOURCE_DIR}/System/Input/MouseInput.cpp"
+			"${ENGINE_SOURCE_DIR}/System/Input/InputHandler.cpp"
+			"${ENGINE_SOURCE_DIR}/System/Misc/SpringTime.cpp"
+			"${ENGINE_SOURCE_DIR}/System/TimeProfiler.cpp"
+			${sources_engine_System_Threading}
+			${test_Common_sources}
+		)
+	set(test_libs
+			SDL2::SDL2
+			streflop
+			${WINMM_LIBRARY}
+		)
+	set(test_flags "-DNOT_USING_CREG -DBUILDING_AI")
+	add_spring_test(${test_name} "${test_src}" "${test_libs}" "${test_flags}")
+
+################################################################################
 
 
 add_subdirectory(headercheck)

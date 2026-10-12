@@ -294,6 +294,8 @@ CGlobalRendering::CGlobalRendering()
 	  // window geometry
 	  ,
 	  winPosX(configHandler->GetInt("WindowPosX")), winPosY(configHandler->GetInt("WindowPosY")), winSizeX(1), winSizeY(1)
+	  ,
+	  drawableSizeX(1), drawableSizeY(1), pixelScaleX(1.0f), pixelScaleY(1.0f)
 
 	  // viewport geometry
 	  ,
@@ -431,7 +433,7 @@ SDL_Window *CGlobalRendering::CreateSDLWindow(const char *title) const
 	//   SDL_WINDOW_FULLSCREEN_DESKTOP for "fake" fullscreen that takes the size of the desktop;
 	//   and 0 for windowed mode.
 
-	uint32_t sdlFlags = (SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+	uint32_t sdlFlags = (SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
 	sdlFlags |= (borderless_ ? SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_WINDOW_FULLSCREEN) * fullScreen_;
 	sdlFlags |= (SDL_WINDOW_BORDERLESS * borderless_);
 
@@ -1522,13 +1524,13 @@ static const auto compareSDLRectPosX = [](const SDL_Rect &a, const SDL_Rect &b)
 void CGlobalRendering::UpdateViewPortGeometry()
 {
 	viewPosY = 0;
-	viewSizeY = winSizeY;
+	viewSizeY = (drawableSizeY > 0) ? drawableSizeY : winSizeY;
 	viewWindowOffsetY = 0;
 
 	if (!dualScreenMode)
 	{
 		viewPosX = 0;
-		viewSizeX = winSizeX;
+		viewSizeX = (drawableSizeX > 0) ? drawableSizeX : winSizeX;
 
 		return;
 	}
@@ -1540,7 +1542,8 @@ void CGlobalRendering::UpdateViewPortGeometry()
 	// Use halfscreen dual and view if only 1 display or fullscreen
 	if (numDisplays == 1 || fullScreen)
 	{
-		const int halfWinSize = winSizeX >> 1;
+		const int targetWinSize = (drawableSizeX > 0) ? drawableSizeX : winSizeX;
+		const int halfWinSize = targetWinSize >> 1;
 
 		viewPosX = halfWinSize * dualScreenMiniMapOnLeft;
 		viewSizeX = halfWinSize;
@@ -1610,21 +1613,22 @@ void CGlobalRendering::UpdateViewPortGeometry()
 	const SDL_Rect first = screenRects.front();
 	const SDL_Rect last = screenRects.back();
 
-	viewPosX = first.x;
-	viewSizeX = last.x + last.w - first.x;
-	viewSizeY = first.h;
+	viewPosX = std::round(first.x * pixelScaleX);
+	viewSizeX = std::round((last.x + last.w - first.x) * pixelScaleX);
+	viewSizeY = std::round(first.h * pixelScaleY);
 
-	dualViewPosX = dualScreenRect.x;
-	dualViewSizeX = dualScreenRect.w;
-	dualViewSizeY = dualScreenRect.h;
+	dualViewPosX = std::round(dualScreenRect.x * pixelScaleX);
+	dualViewSizeX = std::round(dualScreenRect.w * pixelScaleX);
+	dualViewSizeY = std::round(dualScreenRect.h * pixelScaleY);
 
 	// We store the offset in relation to window top border for sdl mouse translation
-	viewWindowOffsetY = first.y;
-	dualWindowOffsetY = dualScreenRect.y;
+	viewWindowOffsetY = std::round(first.y * pixelScaleY);
+	dualWindowOffsetY = std::round(dualScreenRect.y * pixelScaleY);
 
 	// In-game and GL coords y orientation is inverse of SDL screen coords
-	viewPosY = winSizeY - (viewSizeY + viewWindowOffsetY);
-	dualViewPosY = winSizeY - (dualViewSizeY + dualWindowOffsetY);
+	const int targetWinSizeY = (drawableSizeY > 0) ? drawableSizeY : winSizeY;
+	viewPosY = targetWinSizeY - (viewSizeY + viewWindowOffsetY);
+	dualViewPosY = targetWinSizeY - (dualViewSizeY + dualWindowOffsetY);
 
 	LOG("[GR::%s] Wind: pos %dx%d | size %dx%d", __func__, winPosX, winPosY, winSizeX, winSizeY);
 	LOG("[GR::%s] View: pos %dx%d | size %dx%d | yoff %d", __func__, viewPosX, viewPosY, viewSizeX, viewSizeY, viewWindowOffsetY);
@@ -1649,6 +1653,10 @@ void CGlobalRendering::ReadWindowPosAndSize()
 	winPosX = 0;
 	winPosY = 0;
 	winBorder = {0};
+	drawableSizeX = 8;
+	drawableSizeY = 8;
+	pixelScaleX = 1.0f;
+	pixelScaleY = 1.0f;
 #else
 
 	SDL_Rect screenSize;
@@ -1666,6 +1674,15 @@ void CGlobalRendering::ReadWindowPosAndSize()
 
 	SDL_GetWindowSize(sdlWindow, &winSizeX, &winSizeY);
 	SDL_GetWindowPosition(sdlWindow, &winPosX, &winPosY);
+
+	SDL_GL_GetDrawableSize(sdlWindow, &drawableSizeX, &drawableSizeY);
+	if (winSizeX > 0 && winSizeY > 0 && drawableSizeX > 0 && drawableSizeY > 0) {
+		pixelScaleX = float(drawableSizeX) / float(winSizeX);
+		pixelScaleY = float(drawableSizeY) / float(winSizeY);
+	} else {
+		pixelScaleX = 1.0f;
+		pixelScaleY = 1.0f;
+	}
 
 	// enforce >=0 https://github.com/beyond-all-reason/spring/issues/23
 	// winPosX = std::max(winPosX, 0);

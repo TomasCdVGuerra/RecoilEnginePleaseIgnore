@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#ifndef MOUSE_INPUT_H
-#define MOUSE_INPUT_H
+#pragma once
 
 #include <SDL_events.h>
 #include "System/Input/InputHandler.h"
@@ -30,11 +29,17 @@ public:
 
 	virtual void SetWMMouseCursor(void* wmcursor) {}
 
+	// High-DPI coordinate translation helpers
+	static int2 WindowToPixelCoords(int winX, int winY);
+	static int2 WindowToPixelCoords(int winX, int winY, float scaleX, float scaleY);
+	static int2 WindowToPixelDelta(int dx, int dy);
+	static int2 WindowToPixelDelta(int dx, int dy, float scaleX, float scaleY);
+	static int2 PixelToWindowCoords(int pixX, int pixY);
+	static int2 PixelToWindowCoords(int pixX, int pixY, float scaleX, float scaleY);
+
 protected:
 	int2 mousepos;
 	InputHandler::HandlerTokenT inputCon;
 };
 
 extern IMouseInput* mouseInput;
-
-#endif

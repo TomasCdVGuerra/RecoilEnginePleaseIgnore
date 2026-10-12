@@ -22,6 +22,8 @@
 #include "MouseInput.h"
 #include "InputHandler.h"
 
+#include <cmath>
+
 #include "Game/UI/MouseHandler.h"
 #include "Rendering/GlobalRendering.h"
 #include "System/MainDefines.h"
@@ -66,14 +68,17 @@ bool IMouseInput::HandleSDLMouseEvent(const SDL_Event& event)
 {
 	switch (event.type) {
 		case SDL_MOUSEMOTION: {
-			mousepos = int2(event.motion.x, event.motion.y);
+			const int2 pixelPos = WindowToPixelCoords(event.motion.x, event.motion.y);
+			const int2 pixelRel = WindowToPixelDelta(event.motion.xrel, event.motion.yrel);
+			mousepos = pixelPos;
 
 			if (mouse != nullptr)
-				mouse->MouseMove(mousepos.x, mousepos.y, event.motion.xrel, event.motion.yrel);
+				mouse->MouseMove(mousepos.x, mousepos.y, pixelRel.x, pixelRel.y);
 
 		} break;
 		case SDL_MOUSEBUTTONDOWN: {
-			mousepos = int2(event.button.x, event.button.y);
+			const int2 pixelPos = WindowToPixelCoords(event.button.x, event.button.y);
+			mousepos = pixelPos;
 
 			// suppress if the button is already held via input emulation
 			if (mouse != nullptr && !mouse->IsButtonEmulated(event.button.button))
@@ -81,7 +86,8 @@ bool IMouseInput::HandleSDLMouseEvent(const SDL_Event& event)
 
 		} break;
 		case SDL_MOUSEBUTTONUP: {
-			mousepos = int2(event.button.x, event.button.y);
+			const int2 pixelPos = WindowToPixelCoords(event.button.x, event.button.y);
+			mousepos = pixelPos;
 
 			if (mouse != nullptr && !mouse->IsButtonEmulated(event.button.button))
 				mouse->MouseRelease(mousepos.x, mousepos.y, event.button.button);
@@ -113,6 +119,69 @@ bool IMouseInput::HandleSDLMouseEvent(const SDL_Event& event)
 	}
 
 	return false;
+}
+
+int2 IMouseInput::WindowToPixelCoords(int winX, int winY)
+{
+	float sx = 1.0f;
+	float sy = 1.0f;
+	if (globalRendering != nullptr) {
+		sx = globalRendering->pixelScaleX;
+		sy = globalRendering->pixelScaleY;
+	}
+	return WindowToPixelCoords(winX, winY, sx, sy);
+}
+
+int2 IMouseInput::WindowToPixelCoords(int winX, int winY, float scaleX, float scaleY)
+{
+	const float sx = (scaleX > 0.0f) ? scaleX : 1.0f;
+	const float sy = (scaleY > 0.0f) ? scaleY : 1.0f;
+	return int2(
+		static_cast<int>(std::round(winX * sx)),
+		static_cast<int>(std::round(winY * sy))
+	);
+}
+
+int2 IMouseInput::WindowToPixelDelta(int dx, int dy)
+{
+	float sx = 1.0f;
+	float sy = 1.0f;
+	if (globalRendering != nullptr) {
+		sx = globalRendering->pixelScaleX;
+		sy = globalRendering->pixelScaleY;
+	}
+	return WindowToPixelDelta(dx, dy, sx, sy);
+}
+
+int2 IMouseInput::WindowToPixelDelta(int dx, int dy, float scaleX, float scaleY)
+{
+	const float sx = (scaleX > 0.0f) ? scaleX : 1.0f;
+	const float sy = (scaleY > 0.0f) ? scaleY : 1.0f;
+	return int2(
+		static_cast<int>(std::round(dx * sx)),
+		static_cast<int>(std::round(dy * sy))
+	);
+}
+
+int2 IMouseInput::PixelToWindowCoords(int pixX, int pixY)
+{
+	float sx = 1.0f;
+	float sy = 1.0f;
+	if (globalRendering != nullptr) {
+		sx = globalRendering->pixelScaleX;
+		sy = globalRendering->pixelScaleY;
+	}
+	return PixelToWindowCoords(pixX, pixY, sx, sy);
+}
+
+int2 IMouseInput::PixelToWindowCoords(int pixX, int pixY, float scaleX, float scaleY)
+{
+	const float sx = (scaleX > 0.0f) ? scaleX : 1.0f;
+	const float sy = (scaleY > 0.0f) ? scaleY : 1.0f;
+	return int2(
+		static_cast<int>(std::round(pixX / sx)),
+		static_cast<int>(std::round(pixY / sy))
+	);
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -218,7 +287,8 @@ bool IMouseInput::WarpPos(int2 pos)
 		SDL_ShowCursor(SDL_DISABLE);
 	#endif
 
-	SDL_WarpMouseInWindow(globalRendering->GetWindow(), pos.x, pos.y);
+	const int2 winCoords = PixelToWindowCoords(pos.x, pos.y);
+	SDL_WarpMouseInWindow(globalRendering->GetWindow(), winCoords.x, winCoords.y);
 
 	// SDL_WarpMouse generates SDL_MOUSEMOTION events
 	// in `middle click scrolling` those SDL generated ones would point into

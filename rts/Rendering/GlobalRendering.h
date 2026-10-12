@@ -174,9 +174,17 @@ public:
 	int winPosX;
 	int winPosY;
 
-	/// the window size in pixels
+	/// the window size in points
 	int winSizeX;
 	int winSizeY;
+
+	/// the physical drawable/framebuffer size (can differ from winSize on High-DPI/Retina)
+	int drawableSizeX;
+	int drawableSizeY;
+
+	/// High-DPI scaling ratio: drawableSize / winSize
+	float pixelScaleX;
+	float pixelScaleY;
 
 	/// the viewport position relative to the window's top-left corner
 	int viewPosX;

@@ -42,9 +42,10 @@ The test suite uses Catch2 (amalgamated single-header in `test/lib/catch2/`) wit
 | **Rendering** | `test_GlobalRendering` | `testGlobalRendering` | `test/engine/Rendering/TestGlobalRendering.cpp` | CLI windowed precedence (`ResolveFullScreenMode`) & config sync |
 | | `test_RenderBuffers` | `testRenderBuffers` | `test/engine/Rendering/TestRenderBuffers.cpp` | Core profile detection, column-major MVP upload, shader templates |
 | **System / Platform** | `test_MacTopology` | `testMacTopology` | `test/engine/System/Platform/TestMacTopology.cpp` | macOS GCD thread pin policy defaults & ThreadAffinityGuard no-op |
+| **System / Input** | `test_MouseInput` | `testMouseInput` | `test/engine/System/Input/TestMouseInput.cpp` | SDL mouse High-DPI scaling (1.0x, 2.0x, fractional), delta translation, inverse mapping, safe fallbacks |
 | **Negative Compile Tests** | `testBitwiseEnum_fail1..3` | `testBitwiseEnum_fail1..3` | `test/engine/System/Misc/TestBitwiseEnum.cpp` | Verifies invalid bitwise enum conversions fail to compile |
 
-*Total registered CTest test cases: 32.*
+*Total registered CTest test cases: 33.*
 
 ---
 
@@ -72,7 +73,7 @@ This audit evaluates the major engine subsystems across `rts/Sim`, `rts/System`,
 - **[System/Platform - Thread Topology & Hardware Core Detection]**: 🟢 Tested for macOS (`testMacTopology` verifies that Apple platforms default to `THREAD_PIN_POLICY_NONE`, expose generic performance masks for Grand Central Dispatch, and that `ThreadAffinityGuard` safely no-ops); 🔴 Untested for Linux/Windows (`Linux/CpuTopology.cpp` `/proc/cpuinfo` parsing, Windows `GetLogicalProcessorInformationEx`, and NUMA core pinning remain unverified).
 - **[System/Platform - Crash Handling & Watchdog]**: 🔴 Untested (`Watchdog.cpp` heartbeat monitors, thread freeze detection, signal trapping across OSes, and stack unwinding/symbolication have no automated tests).
 - **[System/Platform - OS Windowing & Shared Libraries]**: 🔴 Untested (`WindowManagerHelper`, `ScopedFileLock`, `SharedLib` dynamic symbol resolution, and clipboard integration lack test coverage).
-- **[System/Input - Keyboard & Mouse Event Pipeline]**: 🔴 Untested (`InputHandler.cpp`, `KeyInput.cpp`, `MouseInput.cpp` SDL event translation, key modifier bitmasks, mouse coordinate warping, and cursor clip rectangles are entirely untested).
+- **[System/Input - Mouse Event Pipeline & High-DPI Scaling]**: 🟢 Tested for SDL Mouse Input (`testMouseInput` verifies SDL mouse coordinate translation, macOS Retina 2.0x scaling, fractional scaling factors, delta translation, inverse mapping, and safe zero/negative DPI fallbacks); 🔴 Untested for keyboard mapping (`KeyInput.cpp` key modifier bitmasks, hotkey bindings, and text input events remain unverified).
 - **[System/Sync - Deterministic Primitives & SyncCheck]**: 🟢 Tested (`testSyncedPrimitive` covers `CSyncChecker` hashing and checksum generation for synced numeric types).
 - **[System/Sync - Multiplayer Simulation Boundaries & Desync Diagnostics]**: 🔴 Untested (`SyncDebugger`, `DumpState.cpp`, `DumpHistory.cpp`, `FPUCheck.cpp`, and cross-client state snapshot serialization on desync lack automated tests).
 - **[System/FileSystem - Virtual File System & Archives]**: 🟢 Tested (`testFileSystem` covers VFS directory mapping, 7zip archive reading, CRC calculations, and file resolution).
@@ -170,29 +171,42 @@ Before our work, **zero rendering tests existed in `test/`** (the `test/engine/R
     - `GetProcessorCache()` returning empty cache descriptors.
     - `ThreadAffinityGuard` RAII constructors and destructors safely no-opping on macOS without errors or exceptions.
 
+- [x] **`test_MouseInput`**: Catch2 test suite covering SDL mouse coordinate translation under Retina High-DPI:
+  - **Status**: PASSED (72 assertions across 6 test cases in 0.01s).
+  - **Covered**:
+    - Direct scaling for 1.0x (standard), 2.0x (Retina), fractional scales (1.25x, 1.5x) with subpixel rounding, and multi-monitor negative coordinates.
+    - Delta movement scaling (`xrel, yrel`) for 1.0x, 2.0x, fractional, and zero deltas.
+    - Inverse window coordinate transformation (`PixelToWindowCoords`) for SDL mouse warping and round-trip fidelity.
+    - Zero/negative scaling safety fallbacks (gracefully defaulting to 1.0f without divide-by-zero).
+    - Null `globalRendering` pointer safety fallback.
+    - Dynamic synchronization with `CGlobalRendering::pixelScaleX/Y`.
+    - SDL event translation pipeline (`SDL_MOUSEMOTION`, `SDL_MOUSEBUTTONDOWN`, `SDL_MOUSEBUTTONUP`) with mock `CMouseHandler` receiving scaled physical pixel coordinates and deltas.
+
 ---
 
 ## 6. Verification Commands & Results
 
 ```bash
 # Build specific test binaries
-/opt/homebrew/bin/cmake --build build-arm64 --target test_GlobalRendering test_RenderBuffers test_MacTopology
+/opt/homebrew/bin/cmake --build build-arm64 --target test_GlobalRendering test_RenderBuffers test_MacTopology test_MouseInput
 
 # Run via CTest
-ctest --test-dir build-arm64 -R "(GlobalRendering|RenderBuffers|MacTopology)" --output-on-failure -V
+ctest --test-dir build-arm64 -R "(GlobalRendering|RenderBuffers|MacTopology|MouseInput)" --output-on-failure -V
 
 # Run binaries directly with Catch2 verbose output
 ./build-arm64/test/test_GlobalRendering -s
 ./build-arm64/test/test_RenderBuffers -s
 ./build-arm64/test/test_MacTopology -s
+./build-arm64/test/test_MouseInput -s
 ```
 
 ### Verified CTest Execution Output
 ```
-1/3 Test #30: testGlobalRendering ..............   Passed    0.00 sec (23 assertions in 2 test cases)
-2/3 Test #31: testRenderBuffers ................   Passed    0.00 sec (46 assertions in 5 test cases)
-3/3 Test #32: testMacTopology ..................   Passed    0.00 sec (10 assertions in 2 test cases)
+1/4 Test #30: testGlobalRendering ..............   Passed    0.01 sec (23 assertions in 2 test cases)
+2/4 Test #31: testRenderBuffers ................   Passed    0.00 sec (46 assertions in 5 test cases)
+3/4 Test #32: testMacTopology ..................   Passed    0.00 sec (10 assertions in 2 test cases)
+4/4 Test #33: testMouseInput ...................   Passed    0.01 sec (72 assertions in 6 test cases)
 
-100% tests passed, 0 tests failed out of 3
-Total Test time (real) = 0.01 sec
+100% tests passed, 0 tests failed out of 4
+Total Test time (real) = 0.03 sec
 ```
