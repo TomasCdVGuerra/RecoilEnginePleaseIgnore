@@ -180,3 +180,4 @@ build-*
 mgl_error.txt
 build_log.txt
 /.i-understand-git-submodules.txt
+CopilotHelper/TEST_COVERAGE_TRACKER.md
