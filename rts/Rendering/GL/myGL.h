@@ -61,7 +61,7 @@ static inline void __spring_glOrtho     (GLdouble l, GLdouble r,  GLdouble b, GL
 	glScalef(1.0f, 1.0f, 0.5f);
 	glOrtho(l, r,  b, t,  n, f);
 	#else
-	#error myGL.h included in unit-test?
+	__spring_glOrtho_noCC(l, r, b, t, n, f);
 	#endif
 }
 

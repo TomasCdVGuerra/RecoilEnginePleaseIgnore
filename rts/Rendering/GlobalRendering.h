@@ -86,6 +86,15 @@ public:
 	bool SetWindowMaximized() const { return SetWindowMinMaximized(true ); };
 	bool SetWindowMinimized() const { return SetWindowMinMaximized(false); };
 
+	static constexpr bool ResolveFullScreenMode(bool cfgFullScreen, bool cliWindowed, bool cliFullScreen) noexcept
+	{
+		if (cliWindowed)
+			return false;
+		if (cliFullScreen)
+			return true;
+		return cfgFullScreen;
+	}
+
 	void SetFullScreen(bool cliWindowed, bool cliFullScreen);
 	void SetDualScreenParams();
 	void UpdateViewPortGeometry();

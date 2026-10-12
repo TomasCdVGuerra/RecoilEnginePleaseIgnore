@@ -1504,15 +1504,7 @@ bool CGlobalRendering::IsExtensionSupported(const char *ext) const
 void CGlobalRendering::SetFullScreen(bool cliWindowed, bool cliFullScreen)
 {
 	const bool cfgFullScreen = configHandler->GetBool("Fullscreen");
-
-	if (cliWindowed) {
-		fullScreen = false;
-	} else if (cliFullScreen) {
-		fullScreen = true;
-	} else {
-		fullScreen = cfgFullScreen;
-	}
-
+	fullScreen = ResolveFullScreenMode(cfgFullScreen, cliWindowed, cliFullScreen);
 	configHandler->Set("Fullscreen", fullScreen);
 }
 

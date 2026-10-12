@@ -425,9 +425,11 @@ endif()
 		)
 	if (WIN32)
 		list(APPEND test_src "${ENGINE_SOURCE_DIR}/System/Platform/Win/CpuTopology.cpp")
-	else (WIN32)
+	elseif (APPLE)
+		list(APPEND test_src "${ENGINE_SOURCE_DIR}/System/Platform/Mac/MacTopology.cpp")
+	else ()
 		list(APPEND test_src "${ENGINE_SOURCE_DIR}/System/Platform/Linux/CpuTopology.cpp")
-	endif (WIN32)
+	endif ()
 	set(test_libs
 			${WINMM_LIBRARY}
 		)
@@ -600,6 +602,33 @@ endif()
 	if (USE_MIMALLOC)
 		target_compile_definitions(test_${test_name} PRIVATE USE_MIMALLOC)
 	endif()
+
+################################################################################
+### GlobalRendering
+	set(test_name GlobalRendering)
+	set(test_src
+			"${CMAKE_CURRENT_SOURCE_DIR}/engine/Rendering/TestGlobalRendering.cpp"
+			${test_Common_sources}
+		)
+	set(test_libs
+			""
+		)
+	set(test_flags "-DNOT_USING_CREG -DBUILDING_AI")
+	add_spring_test(${test_name} "${test_src}" "${test_libs}" "${test_flags}")
+
+################################################################################
+### RenderBuffers
+	set(test_name RenderBuffers)
+	set(test_src
+			"${CMAKE_CURRENT_SOURCE_DIR}/engine/Rendering/TestRenderBuffers.cpp"
+			${test_Common_sources}
+		)
+	set(test_libs
+			headlessStubs
+		)
+	set(test_flags "-DNOT_USING_CREG -DBUILDING_AI")
+	add_spring_test(${test_name} "${test_src}" "${test_libs}" "${test_flags}")
+	target_include_directories(test_${test_name} PRIVATE ${ENGINE_SOURCE_DIR}/lib/)
 
 ################################################################################
 
