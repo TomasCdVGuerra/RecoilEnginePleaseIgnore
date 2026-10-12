@@ -5,6 +5,7 @@
 class ThreadAffinityGuard
 {
 public:
+	ThreadAffinityGuard() {}
 	ThreadAffinityGuard(int core) {}
 	~ThreadAffinityGuard() {}
 

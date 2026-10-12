@@ -631,6 +631,22 @@ endif()
 	target_include_directories(test_${test_name} PRIVATE ${ENGINE_SOURCE_DIR}/lib/)
 
 ################################################################################
+### MacTopology
+	set(test_name MacTopology)
+	set(test_src
+			"${CMAKE_CURRENT_SOURCE_DIR}/engine/System/Platform/TestMacTopology.cpp"
+			${test_Common_sources}
+		)
+	if (APPLE)
+		list(APPEND test_src "${ENGINE_SOURCE_DIR}/System/Platform/Mac/MacTopology.cpp")
+	endif ()
+	set(test_libs
+			""
+		)
+	set(test_flags "-DNOT_USING_CREG -DBUILDING_AI")
+	add_spring_test(${test_name} "${test_src}" "${test_libs}" "${test_flags}")
+
+################################################################################
 
 
 add_subdirectory(headercheck)
